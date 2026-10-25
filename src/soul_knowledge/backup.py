@@ -48,8 +48,10 @@ __all__ = [
     "backup_store",
     "diagnose_projection",
     "inspect_backup",
+    "recover_backup_activation",
     "recover_projection",
     "restore_store",
+    "sweep_orphaned_write_temps",
 ]
 
 
@@ -96,6 +98,7 @@ class RecoveryReport:
 
     receipt: ProjectionReceipt
     audit_receipts: tuple[AuditReceipt, ...] = field(default_factory=tuple)
+    swept_temps: tuple[str, ...] = ()  # orphaned writer temps removed during recovery
 
 
 def _sha256(path: Path) -> str:
@@ -112,6 +115,22 @@ def _fsync_dir(directory: Path) -> None:
         os.fsync(fd)
     finally:
         os.close(fd)
+
+
+def _fsync_file(path: Path) -> None:
+    """Flush one file's contents to stable storage (fsync on a read fd)."""
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _fsync_tree(root: Path) -> None:
+    """Fsync every file under *root* (a directory fsync persists names only)."""
+    for path in sorted(root.rglob("*")):
+        if path.is_file():
+            _fsync_file(path)
 
 
 def _anchor(conn: sqlite3.Connection) -> tuple[int, str | None]:
@@ -241,6 +260,66 @@ def _sha256_of(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _activate_backup_dir(stage: Path, dest: Path) -> None:
+    """Swap the staged backup into place without ever destroying the old one.
+
+    ``os.replace`` cannot atomically supersede a non-empty directory, so the
+    previous backup is first renamed aside (a same-directory rename — the old
+    backup stays whole and recoverable), the stage is renamed in, and only
+    then is the old tree removed. A crash leaves either the intact old backup
+    (as a ``.<name>.old-<pid>`` sibling, restorable via
+    :func:`recover_backup_activation`) or the intact new one — never an empty
+    or half-copied destination.
+    """
+    trash = dest.with_name(f".{dest.name}.old-{os.getpid()}")
+    if trash.exists():
+        shutil.rmtree(trash)
+    moved = dest.exists()
+    if moved:
+        os.rename(dest, trash)
+        _fsync_dir(dest.parent)
+    try:
+        os.replace(stage, dest)  # one atomic rename activates the backup
+    except BaseException:
+        if moved and not dest.exists():
+            os.rename(trash, dest)  # roll the old backup back into place
+            _fsync_dir(dest.parent)
+        raise
+    _fsync_dir(dest.parent)
+    if moved:
+        shutil.rmtree(trash)
+        _fsync_dir(dest.parent)
+
+
+def recover_backup_activation(dest_dir: str | Path) -> str:
+    """Converge a backup destination after a crash inside the activation swap.
+
+    Returns ``"restored"`` when the destination was missing and the previous
+    backup was rolled back into place from its trash sibling, ``"cleaned"``
+    when the activation had completed and only trash residue remained,
+    ``"intact"`` when nothing was interrupted, and ``"absent"`` when neither a
+    destination nor any trash exists (a crash before the first backup). Raises
+    :class:`BackupError` when more than one trash sibling makes the state
+    ambiguous — the operator must choose.
+    """
+    dest = Path(dest_dir)
+    trashes = sorted(dest.parent.glob(f".{dest.name}.old-*"))
+    if dest.exists():
+        for trash in trashes:
+            shutil.rmtree(trash)
+        if trashes:
+            _fsync_dir(dest.parent)
+            return "cleaned"
+        return "intact"
+    if not trashes:
+        return "absent"
+    if len(trashes) > 1:
+        raise BackupError(f"multiple interrupted activations for {str(dest)!r}: {', '.join(str(t) for t in trashes)}")
+    os.rename(trashes[0], dest)
+    _fsync_dir(dest.parent)
+    return "restored"
+
+
 def backup_protected_artifacts(
     store: EventStore, *, projection_root: str | Path, dest_dir: str | Path
 ) -> ProtectedBackupReceipt:
@@ -259,6 +338,10 @@ def backup_protected_artifacts(
     root = Path(projection_root)
     dest = Path(dest_dir)
     stage = dest.with_name(f".{dest.name}.tmp-{os.getpid()}")
+    for residue in sorted(dest.parent.glob(f".{dest.name}.tmp-*")) if dest.parent.is_dir() else []:
+        pid = _temp_owner_pid(residue.name)
+        if pid is None or not _pid_alive(pid):
+            shutil.rmtree(residue, ignore_errors=True)  # a dead writer's unfinished stage
     if stage.exists():
         shutil.rmtree(stage)
     stage.mkdir(parents=True)
@@ -308,13 +391,9 @@ def backup_protected_artifacts(
                         (generation_copy / "manifest.json").stat().st_size,
                     )
                 )
+        _fsync_tree(stage)  # file contents; the directory fsync below persists names only
         _fsync_dir(stage)
-        if dest.is_dir():
-            shutil.rmtree(dest)
-        elif dest.exists():
-            dest.unlink()
-        os.replace(stage, dest)  # one atomic rename activates the backup
-        _fsync_dir(dest.parent)
+        _activate_backup_dir(stage, dest)
     except BaseException:
         shutil.rmtree(stage, ignore_errors=True)
         raise
@@ -357,6 +436,59 @@ def restore_store(backup_path: str | Path, dest_path: str | Path, *, overwrite: 
 
 
 # ----------------------------------------------------- projection recovery
+
+
+def _temp_owner_pid(name: str) -> int | None:
+    marker = ".tmp-"
+    index = name.rfind(marker)
+    if index == -1:
+        return None
+    try:
+        return int(name[index + len(marker) :])
+    except ValueError:
+        return None
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # owned by another user: alive
+    return True
+
+
+def sweep_orphaned_write_temps(output_root: str | Path) -> tuple[Path, ...]:
+    """Remove writer temp files (``*.tmp-<pid>``) left behind by a dead writer.
+
+    The projection writer publishes via same-directory temp + ``os.replace``;
+    a crash between the temp write and the rename leaves residue that no
+    reader can ever serve (temps are never named by the manifest) but that
+    must not accumulate or be mistaken for artifacts. A temp whose pid is
+    still alive belongs to a writer in flight and is never touched. Runs under
+    the single-writer recovery window (startup / ``recover_projection``).
+    """
+    root = Path(output_root)
+    candidates = sorted(root.glob("*.tmp-*"))
+    generations = root / "generations"
+    if generations.is_dir():
+        for generation in sorted(generations.iterdir()):
+            if generation.is_dir():
+                candidates.extend(sorted(generation.glob("*.tmp-*")))
+    removed: list[Path] = []
+    for candidate in candidates:
+        pid = _temp_owner_pid(candidate.name)
+        if pid is not None and _pid_alive(pid):
+            continue  # a live writer owns this temp
+        try:
+            candidate.unlink()
+        except FileNotFoundError:
+            continue
+        removed.append(candidate)
+    return tuple(removed)
 
 
 def diagnose_projection(store: EventStore, projector: GraphProjector) -> ProjectionDiagnosis:
@@ -436,9 +568,12 @@ def recover_projection(
     Drives :meth:`GraphProjector.repair_if_stale` — a no-op when the
     projection is already current — then, when an :class:`AuditLog` is given,
     runs crash recovery with the repair hook so stale journals are closed
-    after the projection is consistent (spec 7.8). Raises :class:`BackupError`
-    if the projection is not CURRENT after the repair.
+    after the projection is consistent (spec 7.8). Orphaned writer temp files
+    (``*.tmp-<pid>`` residue of a killed writer) are swept first and reported
+    on the receipt. Raises :class:`BackupError` if the projection is not
+    CURRENT after the repair.
     """
+    swept = sweep_orphaned_write_temps(Path(projector._output_root))
     receipt = projector.repair_if_stale()
     audit_receipts: tuple[AuditReceipt, ...] = ()
     if audit_log is not None:
@@ -455,4 +590,8 @@ def recover_projection(
     diagnosis = diagnose_projection(store, projector)
     if diagnosis.state is not ProjectionState.CURRENT:
         raise BackupError(f"projection recovery left the generation {diagnosis.state}: {diagnosis.detail}")
-    return RecoveryReport(receipt=receipt, audit_receipts=audit_receipts)
+    return RecoveryReport(
+        receipt=receipt,
+        audit_receipts=audit_receipts,
+        swept_temps=tuple(str(path) for path in swept),
+    )
