@@ -45,6 +45,7 @@ __all__ = [
     "ScoreVector",
     "canonical_json",
     "quantize_score",
+    "storage_payload",
 ]
 
 DECIMAL_PRECISION: int = 34
@@ -84,6 +85,27 @@ def quantize_score(value: Decimal) -> Decimal:
 def canonical_json(value: object) -> str:
     """Deterministic one-line JSON used for hashing and storage."""
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def storage_payload(value: Any) -> Any:
+    """Prepare a Python-mode model dump for canonical storage and hashing.
+
+    The store serialization boundary owns score quantization (spec section 9):
+    every :class:`~decimal.Decimal` is quantized to 12 decimal places with
+    ``ROUND_HALF_EVEN`` and rendered as a string, and datetimes become ISO
+    strings. Values with more than 12 decimal places are quantized, never
+    rejected. Applied before any payload is persisted or hashed, so the stored
+    representation is always the quantized one.
+    """
+    if isinstance(value, Decimal):
+        return str(quantize_score(value))
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Mapping):
+        return {str(key): storage_payload(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [storage_payload(item) for item in value]
+    return value
 
 
 def new_id() -> str:

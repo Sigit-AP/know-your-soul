@@ -31,7 +31,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from soul_knowledge.domain import (
     Event,
@@ -42,10 +42,15 @@ from soul_knowledge.domain import (
     Relation,
     RelationKind,
     canonical_json,
+    storage_payload,
 )
 from soul_knowledge.events import ChainReport, DomainReceipt, Invocation, InvocationOutcome, WriteReceipt
 
+if TYPE_CHECKING:
+    from soul_knowledge.audit import AuditLog
+
 __all__ = [
+    "AuditOutcomeMismatch",
     "EventRow",
     "EventStore",
     "InvalidRelation",
@@ -72,6 +77,10 @@ class InvalidRelation(StoreError):
     """A relation references a node that does not exist."""
 
 
+class AuditOutcomeMismatch(StoreError):
+    """The final audit receipt does not record the outcome the caller requested."""
+
+
 @dataclass(frozen=True)
 class EventRow:
     """The store-assigned identity of one appended event."""
@@ -90,6 +99,7 @@ def _now_iso() -> str:
 
 def _hash_input(
     *,
+    event_seq: int,
     event_id: str,
     kind: str,
     event_type: str,
@@ -101,11 +111,13 @@ def _hash_input(
     node_version: int | None,
     actor: str,
     occurred_at: str,
+    recorded_at: str,
     payload_json: str,
     idempotency_key: str | None,
     prev_event_hash: str | None,
 ) -> dict[str, Any]:
     return {
+        "event_seq": event_seq,
         "event_id": event_id,
         "kind": kind,
         "event_type": event_type,
@@ -117,6 +129,7 @@ def _hash_input(
         "node_version": node_version,
         "actor": actor,
         "occurred_at": occurred_at,
+        "recorded_at": recorded_at,
         "payload_json": payload_json,
         "idempotency_key": idempotency_key,
         "prev_event_hash": prev_event_hash,
@@ -233,16 +246,27 @@ class EventStore:
         node_version: int | None = None,
         idempotency_key: str | None = None,
     ) -> EventRow:
-        """Append one event inside an open transaction and return its identity."""
-        previous = conn.execute("SELECT event_hash FROM event_log ORDER BY event_seq DESC LIMIT 1").fetchone()
+        """Append one event inside an open transaction and return its identity.
+
+        The payload is quantized at this serialization boundary (every Decimal
+        score to 12 dp, ``ROUND_HALF_EVEN``) before it is persisted or hashed.
+        The chain anchor in ``system_state`` (expected head hash and event
+        count) is updated in the same transaction.
+        """
+        previous = conn.execute(
+            "SELECT event_seq, event_hash FROM event_log ORDER BY event_seq DESC LIMIT 1"
+        ).fetchone()
+        event_seq = int(previous["event_seq"]) + 1 if previous is not None else 1
         prev_event_hash = str(previous["event_hash"]) if previous is not None else None
         knowledge_seq: int | None = None
         if knowledge_affecting:
             current = conn.execute("SELECT MAX(knowledge_seq) AS maximum FROM event_log").fetchone()
             knowledge_seq = int(current["maximum"] or 0) + 1
-        payload_json = canonical_json(payload)
+        payload_json = canonical_json(storage_payload(payload))
+        recorded_at = _now_iso()
         event_hash = _digest(
             _hash_input(
+                event_seq=event_seq,
                 event_id=event_id,
                 kind=kind,
                 event_type=event_type,
@@ -254,17 +278,19 @@ class EventStore:
                 node_version=node_version,
                 actor=actor,
                 occurred_at=occurred_at,
+                recorded_at=recorded_at,
                 payload_json=payload_json,
                 idempotency_key=idempotency_key,
                 prev_event_hash=prev_event_hash,
             )
         )
-        cursor = conn.execute(
-            "INSERT INTO event_log (event_id, kind, event_type, knowledge_affecting, knowledge_seq, node_id, "
-            "domain, source_version_id, node_version, actor, occurred_at, recorded_at, payload_json, "
+        conn.execute(
+            "INSERT INTO event_log (event_seq, event_id, kind, event_type, knowledge_affecting, knowledge_seq, "
+            "node_id, domain, source_version_id, node_version, actor, occurred_at, recorded_at, payload_json, "
             "prev_event_hash, event_hash, idempotency_key) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
+                event_seq,
                 event_id,
                 kind,
                 event_type,
@@ -276,15 +302,22 @@ class EventStore:
                 node_version,
                 actor,
                 occurred_at,
-                _now_iso(),
+                recorded_at,
                 payload_json,
                 prev_event_hash,
                 event_hash,
                 idempotency_key,
             ),
         )
+        count = conn.execute("SELECT COUNT(*) AS total FROM event_log").fetchone()
+        for key, value in (("chain_head_hash", event_hash), ("chain_event_count", str(int(count["total"])))):
+            conn.execute(
+                "INSERT INTO system_state (key, value, updated_at) VALUES (?, ?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+                (key, value, recorded_at),
+            )
         return EventRow(
-            event_seq=int(cursor.lastrowid or 0),
+            event_seq=event_seq,
             event_id=event_id,
             knowledge_seq=knowledge_seq,
             node_version=node_version,
@@ -295,6 +328,7 @@ class EventStore:
     def _row_hash(self, row: sqlite3.Row) -> str:
         return _digest(
             _hash_input(
+                event_seq=int(row["event_seq"]),
                 event_id=str(row["event_id"]),
                 kind=str(row["kind"]),
                 event_type=str(row["event_type"]),
@@ -306,6 +340,7 @@ class EventStore:
                 node_version=row["node_version"],
                 actor=str(row["actor"]),
                 occurred_at=str(row["occurred_at"]),
+                recorded_at=str(row["recorded_at"]),
                 payload_json=str(row["payload_json"]),
                 idempotency_key=row["idempotency_key"],
                 prev_event_hash=row["prev_event_hash"],
@@ -313,16 +348,52 @@ class EventStore:
         )
 
     def verify_chain(self) -> ChainReport:
-        """Re-derive the whole hash chain and report the first broken link."""
+        """Re-derive the whole hash chain and report the first broken link.
+
+        Beyond the per-event links, the persisted anchor (``chain_head_hash``
+        and ``chain_event_count`` in ``system_state``) is cross-checked so a
+        truncated tail is detected, and every completed journal's
+        ``audit_event_seq`` must resolve to that audit event in the log.
+        """
         with self.read() as conn:
             rows = conn.execute("SELECT * FROM event_log ORDER BY event_seq").fetchall()
+            anchor = {
+                str(row["key"]): str(row["value"])
+                for row in conn.execute(
+                    "SELECT key, value FROM system_state WHERE key IN ('chain_head_hash', 'chain_event_count')"
+                )
+            }
+            journals = conn.execute(
+                "SELECT audit_event_id, audit_event_seq FROM invocation_journal "
+                "WHERE status = 'complete' AND audit_event_seq IS NOT NULL"
+            ).fetchall()
+            audit_events = {
+                int(row["event_seq"]): str(row["event_id"])
+                for row in conn.execute("SELECT event_seq, event_id FROM event_log WHERE kind = 'audit'")
+            }
         prev_event_hash: str | None = None
+        head_hash: str | None = None
         checked = 0
         for row in rows:
             if row["prev_event_hash"] != prev_event_hash or self._row_hash(row) != row["event_hash"]:
                 return ChainReport(ok=False, checked=checked, first_bad_seq=int(row["event_seq"]))
             prev_event_hash = str(row["event_hash"])
+            head_hash = prev_event_hash
             checked += 1
+        expected_count = anchor.get("chain_event_count")
+        if expected_count is not None and int(expected_count) != checked:
+            return ChainReport(ok=False, checked=checked, first_bad_seq=checked + 1)
+        expected_head = anchor.get("chain_head_hash")
+        if expected_head is not None and expected_head != head_hash:
+            last_seq = int(rows[-1]["event_seq"]) if rows else None
+            return ChainReport(ok=False, checked=checked, first_bad_seq=last_seq)
+        if rows and not anchor:
+            # Events exist but the anchor is missing entirely: fail closed.
+            return ChainReport(ok=False, checked=checked, first_bad_seq=None)
+        for journal in journals:
+            audit_event_seq = int(journal["audit_event_seq"])
+            if audit_events.get(audit_event_seq) != str(journal["audit_event_id"]):
+                return ChainReport(ok=False, checked=checked, first_bad_seq=audit_event_seq)
         return ChainReport(ok=True, checked=checked, first_bad_seq=None)
 
     # ------------------------------------------------------- domain mutations
@@ -377,7 +448,7 @@ class EventStore:
                 knowledge_affecting=event.knowledge_affecting,
                 actor=event.actor,
                 occurred_at=event.occurred_at.isoformat(),
-                payload=event.model_dump(mode="json"),
+                payload=event.model_dump(mode="python"),
                 node_id=event.node_id,
                 domain=event.domain.value,
                 source_version_id=event.source_version_id,
@@ -413,7 +484,7 @@ class EventStore:
                     evidence.source_uri,
                     evidence.observed_at.isoformat(),
                     event_seq,
-                    canonical_json(evidence.model_dump(mode="json")),
+                    canonical_json(storage_payload(evidence.model_dump(mode="python"))),
                 ),
             )
         elif event.kind is EventKind.RELATION_ADD and event.relation is not None:
@@ -446,7 +517,7 @@ class EventStore:
                 revision.source_version_id,
                 revision.created_at.isoformat(),
                 event_seq,
-                canonical_json(revision.model_dump(mode="json")),
+                canonical_json(storage_payload(revision.model_dump(mode="python"))),
             ),
         )
 
@@ -538,7 +609,8 @@ class EventStore:
     def insert_journal(self, conn: sqlite3.Connection, invocation: Invocation) -> None:
         conn.execute(
             "INSERT INTO invocation_journal (invocation_id, audit_event_id, operation, request_hash, actor, "
-            "idempotency_key, started_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'in_progress')",
+            "idempotency_key, effective_idempotency_key, started_at, heartbeat_at, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'in_progress')",
             (
                 invocation.invocation_id,
                 invocation.audit_event_id,
@@ -546,6 +618,8 @@ class EventStore:
                 invocation.request_hash,
                 invocation.actor,
                 invocation.idempotency_key,
+                invocation.idempotency_key or invocation.invocation_id,
+                invocation.started_at.isoformat(),
                 invocation.started_at.isoformat(),
             ),
         )
@@ -564,8 +638,16 @@ class EventStore:
         conn.execute(
             "UPDATE invocation_journal SET status = 'complete', completed_at = ?, outcome_json = ?, "
             "audit_event_seq = ? WHERE invocation_id = ? AND status = 'in_progress'",
-            (_now_iso(), canonical_json(outcome), audit_event_seq, invocation_id),
+            (_now_iso(), canonical_json(storage_payload(outcome)), audit_event_seq, invocation_id),
         )
+
+    def refresh_journal_heartbeat(self, invocation_id: str) -> None:
+        """Refresh the liveness heartbeat of an in-progress journal (finding I1)."""
+        with self.transaction() as conn:
+            conn.execute(
+                "UPDATE invocation_journal SET heartbeat_at = ? WHERE invocation_id = ? AND status = 'in_progress'",
+                (_now_iso(), invocation_id),
+            )
 
     def journal_status(self, invocation_id: str) -> str | None:
         with self.read() as conn:
@@ -579,11 +661,26 @@ class EventStore:
             return None
         return str(row["outcome_json"])
 
-    def incomplete_journals(self) -> list[sqlite3.Row]:
+    def incomplete_journals(self, stale_after_seconds: float | None = None) -> list[sqlite3.Row]:
+        """In-progress journals; with a threshold, only those stale beyond it.
+
+        Staleness is measured from the last heartbeat (falling back to
+        ``started_at``), so a live invocation whose writer refreshes its
+        heartbeat is never treated as crashed.
+        """
         with self.read() as conn:
-            return list(
+            rows = list(
                 conn.execute("SELECT * FROM invocation_journal WHERE status = 'in_progress' ORDER BY started_at")
             )
+        if stale_after_seconds is None:
+            return rows
+        now = datetime.now(UTC)
+        stale: list[sqlite3.Row] = []
+        for row in rows:
+            last_seen = datetime.fromisoformat(str(row["heartbeat_at"] or row["started_at"]))
+            if (now - last_seen).total_seconds() > stale_after_seconds:
+                stale.append(row)
+        return stale
 
     def domain_event_by_idempotency(self, idempotency_key: str) -> sqlite3.Row | None:
         with self.read() as conn:
@@ -616,32 +713,58 @@ class EventStore:
         *,
         invocation: Invocation,
         expected_version: int | None = None,
+        audit_log: AuditLog | None = None,
     ) -> WriteReceipt:
         """Journal, append one domain event, then close with exactly one final audit.
 
         ``WriteReceipt`` returns the original domain fields plus the new
         per-invocation ``audit_event_id``/final audit ``event_seq``, the active
         projection version and the source knowledge high-water mark (spec 7.9).
+
+        The journal heartbeat is refreshed around the domain write so a
+        concurrent recovery pass never closes a live invocation (finding I1).
+        The final audit receipt is asserted against the requested outcome; on a
+        mismatch a typed :class:`AuditOutcomeMismatch` is raised carrying both
+        outcomes, chained to the original error (ruling C1).
         """
         from soul_knowledge.audit import AuditLog
 
-        audit = AuditLog(self)
+        audit = audit_log if audit_log is not None else AuditLog(self)
         audit.begin(invocation)
         idempotency_key = invocation.idempotency_key or invocation.invocation_id
         try:
+            self.refresh_journal_heartbeat(invocation.invocation_id)
             domain = self.append_domain(event, idempotency_key=idempotency_key, expected_version=expected_version)
+            self.refresh_journal_heartbeat(invocation.invocation_id)
         except Exception as error:
             # A rejected domain write is still a valid invocation: it receives
             # exactly one final failure audit before the error propagates.
-            audit.complete(
-                invocation.invocation_id,
-                InvocationOutcome(status="failure", error=f"{type(error).__name__}: {error}"),
-            )
+            try:
+                failure_receipt = audit.complete(
+                    invocation.invocation_id,
+                    InvocationOutcome(status="failure", error=f"{type(error).__name__}: {error}"),
+                )
+            except Exception as audit_error:
+                raise StoreError(
+                    f"domain write for invocation {invocation.invocation_id!r} failed "
+                    f"({type(error).__name__}: {error}) and the failure audit could not be recorded "
+                    f"({type(audit_error).__name__}: {audit_error})"
+                ) from error
+            if failure_receipt.status != "failure":
+                raise AuditOutcomeMismatch(
+                    f"commit requested audit status 'failure' for invocation {invocation.invocation_id!r} "
+                    f"but the final audit records {failure_receipt.status!r}"
+                ) from error
             raise
         receipt = audit.complete(
             invocation.invocation_id,
             InvocationOutcome(status="success", duration_ms=0, linked_domain_event_id=domain.domain_event_id),
         )
+        if receipt.status != "success":
+            raise AuditOutcomeMismatch(
+                f"commit requested audit status 'success' for invocation {invocation.invocation_id!r} "
+                f"but the final audit records {receipt.status!r}"
+            ) from StoreError(f"recorded audit outcome: {dict(receipt.outcome)}")
         return WriteReceipt(
             domain_event_id=domain.domain_event_id,
             event_seq=domain.event_seq,

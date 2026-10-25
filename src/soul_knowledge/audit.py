@@ -12,18 +12,28 @@ Flow (spec 7.1, 7.7, 7.8):
    marks the journal complete, in one transaction. It is idempotent, so calling
    it twice can never write a second audit event.
 3. ``recover_incomplete`` finds journals left ``in_progress`` by a crash,
-   repairs the projection once, reconciles the domain record by idempotency key,
-   and completes each journal exactly once — never duplicating a domain or audit
+   repairs the projection once, reconciles the domain record by the effective
+   idempotency key (the caller's key, falling back to the invocation id), and
+   completes each journal exactly once — never duplicating a domain or audit
    event.
+
+Liveness contract (spec 7.8, finding I1): ``EventStore.commit`` refreshes the
+journal heartbeat around the domain write, and ``recover_incomplete`` only
+closes journals whose last heartbeat (or ``started_at``) is older than
+``stale_after_seconds`` (default 300 s). Recovery must run *before* a process
+accepts traffic, so a live invocation in another process is never audited as
+``INTERRUPTED_BEFORE_COMMIT``.
 """
 
 from __future__ import annotations
 
 import json
+import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Literal
 
+from soul_knowledge.domain import storage_payload
 from soul_knowledge.events import AuditReceipt, Invocation, InvocationJournal, InvocationOutcome
 from soul_knowledge.store import EventStore, StoreError
 
@@ -46,8 +56,11 @@ class AuditLog:
 
     def begin(self, invocation: Invocation) -> InvocationJournal:
         """Create the durable journal for *invocation*."""
-        with self._store.transaction() as conn:
-            self._store.insert_journal(conn, invocation)
+        try:
+            with self._store.transaction() as conn:
+                self._store.insert_journal(conn, invocation)
+        except sqlite3.IntegrityError as error:
+            raise StoreError(f"invocation {invocation.invocation_id!r} already has a journal") from error
         return InvocationJournal(
             invocation_id=invocation.invocation_id,
             audit_event_id=invocation.audit_event_id,
@@ -61,7 +74,8 @@ class AuditLog:
 
     def complete(self, invocation_id: str, outcome: InvocationOutcome) -> AuditReceipt:
         """Append exactly one final audit event for *invocation_id*."""
-        payload = outcome.model_dump(mode="json")
+        payload = outcome.model_dump(mode="python")
+        stored_payload = storage_payload(payload)
         with self._store.transaction() as conn:
             row = self._store.fetch_journal(conn, invocation_id)
             if row is None:
@@ -95,7 +109,7 @@ class AuditLog:
                 audit_event_id=audit_event_id,
                 event_seq=event.event_seq,
                 status=outcome.status,
-                outcome=payload,
+                outcome=stored_payload,
             )
 
     def journal_outcome(self, invocation_id: str) -> dict[str, Any] | None:
@@ -125,9 +139,15 @@ class AuditLog:
         self,
         *,
         projection_repair: Callable[[], None] | None = None,
+        stale_after_seconds: float = 300.0,
     ) -> list[AuditReceipt]:
-        """Reconcile crashed invocations, appending exactly one audit event each."""
-        rows = self._store.incomplete_journals()
+        """Reconcile crashed invocations, appending exactly one audit event each.
+
+        Only journals whose last heartbeat (or ``started_at``) is older than
+        ``stale_after_seconds`` are closed; a fresh journal belongs to a live
+        invocation and is left alone. Run recovery before accepting traffic.
+        """
+        rows = self._store.incomplete_journals(stale_after_seconds)
         if not rows:
             return []
 
@@ -141,12 +161,13 @@ class AuditLog:
         receipts: list[AuditReceipt] = []
         for row in rows:
             invocation_id = str(row["invocation_id"])
-            idempotency_key = row["idempotency_key"]
+            # The effective key is the one the domain write actually used: the
+            # caller's idempotency key, falling back to the invocation id.
+            effective_key = row["effective_idempotency_key"] or row["idempotency_key"] or invocation_id
             linked_domain_event_id: str | None = None
-            if idempotency_key is not None:
-                domain = self._store.domain_event_by_idempotency(str(idempotency_key))
-                if domain is not None:
-                    linked_domain_event_id = str(domain["event_id"])
+            domain = self._store.domain_event_by_idempotency(str(effective_key))
+            if domain is not None:
+                linked_domain_event_id = str(domain["event_id"])
 
             if projection_error is not None:
                 outcome = InvocationOutcome(

@@ -295,18 +295,47 @@ class SourceRegistry:
     # ------------------------------------------------------------- retention
 
     def active(self, source_id: SourceKind | None = None) -> SourceVersion | None:
-        """The latest ``CURRENT`` version, optionally scoped to one source kind."""
+        """The newest operator-approved ``CURRENT`` version.
+
+        A version with an outstanding ``RELEARN_PENDING`` offer targeting it is
+        never returned (spec 13.3: no operator decision means no change), so the
+        result is always the operator-approved baseline. Returns ``None`` when
+        every ``CURRENT`` version carries a pending offer.
+        """
         with self._store.read() as conn:
-            if source_id is None:
-                row = conn.execute(
-                    "SELECT * FROM source_version WHERE source_state = 'CURRENT' ORDER BY rowid DESC LIMIT 1"
-                ).fetchone()
-            else:
-                row = conn.execute(
-                    "SELECT * FROM source_version WHERE source_state = 'CURRENT' AND source_id = ? "
-                    "ORDER BY rowid DESC LIMIT 1",
-                    (source_id.value,),
-                ).fetchone()
+            row = self._active_row(conn, source_id)
+        return None if row is None else _row_to_source_version(row)
+
+    def _active_row(self, conn: sqlite3.Connection, source_id: SourceKind | None) -> sqlite3.Row | None:
+        pending_exclusion = (
+            "NOT EXISTS (SELECT 1 FROM relearn_offer ro "
+            "WHERE ro.current_source_version_id = sv.source_version_id "
+            "AND (SELECT value FROM system_state WHERE key = 'relearn_state') = 'RELEARN_PENDING')"
+        )
+        if source_id is None:
+            return conn.execute(
+                f"SELECT sv.* FROM source_version sv WHERE sv.source_state = 'CURRENT' AND {pending_exclusion} "
+                "ORDER BY sv.rowid DESC LIMIT 1"
+            ).fetchone()
+        return conn.execute(
+            f"SELECT sv.* FROM source_version sv WHERE sv.source_state = 'CURRENT' AND sv.source_id = ? "
+            f"AND {pending_exclusion} ORDER BY sv.rowid DESC LIMIT 1",
+            (source_id.value,),
+        ).fetchone()
+
+    def _latest(self, kind: SourceKind) -> SourceVersion | None:
+        """The newest observed ``CURRENT`` version, pending offers included.
+
+        Internal change-detection baseline: ``detect_change`` compares against
+        the latest observed fingerprint so re-detecting unchanged content is a
+        no-op, while ``active`` stays the operator-approved baseline.
+        """
+        with self._store.read() as conn:
+            row = conn.execute(
+                "SELECT * FROM source_version WHERE source_state = 'CURRENT' AND source_id = ? "
+                "ORDER BY rowid DESC LIMIT 1",
+                (kind.value,),
+            ).fetchone()
         return None if row is None else _row_to_source_version(row)
 
     def supersede(self, source_version_id: str, superseded_by: str) -> SourceVersion:
@@ -360,7 +389,7 @@ class SourceRegistry:
     ) -> RelearnOffer | None:
         """Emit a deterministic relearn offer when the source fingerprint changed."""
         candidate = self._build(Path(path), kind, parser_versions)
-        previous = self.active(kind)
+        previous = self._latest(kind)
         if previous is None:
             with self._store.transaction() as conn:
                 self._insert_version(conn, candidate)

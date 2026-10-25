@@ -172,11 +172,11 @@ def test_migration_creates_the_immutable_tables(store: EventStore) -> None:
 
 
 def test_migration_is_idempotent_and_recorded(store: EventStore) -> None:
-    assert store.applied_migrations() == [1]
+    assert store.applied_migrations() == [1, 2]
     # Re-running the migration on a new store over the same file is a no-op.
     reopened = EventStore(store.db_path)
     try:
-        assert reopened.applied_migrations() == [1]
+        assert reopened.applied_migrations() == [1, 2]
         assert reopened.event_count() == 0
     finally:
         reopened.close()
@@ -527,7 +527,7 @@ def test_incomplete_journal_is_recovered_exactly_once(store: EventStore) -> None
     audit.begin(orphan)
 
     repaired: list[str] = []
-    receipts = audit.recover_incomplete(projection_repair=lambda: repaired.append("ran"))
+    receipts = audit.recover_incomplete(projection_repair=lambda: repaired.append("ran"), stale_after_seconds=0)
 
     assert repaired == ["ran"]
     assert len(receipts) == 2
@@ -543,7 +543,7 @@ def test_incomplete_journal_is_recovered_exactly_once(store: EventStore) -> None
     assert outcome_of(audit, orphan.invocation_id)["error"] == "INTERRUPTED_BEFORE_COMMIT"
 
     # Recovery is idempotent: nothing new is appended on a second pass.
-    assert audit.recover_incomplete() == []
+    assert audit.recover_incomplete(stale_after_seconds=0) == []
     assert store.audit_event_count() == 2
     assert store.domain_event_count() == 1
 
@@ -553,7 +553,7 @@ def test_crash_recovery_never_duplicates_domain_events(store: EventStore) -> Non
     invocation = make_invocation("k1")
     audit.begin(invocation)
     original = store.append_domain(node_event(build_node("n-1")), idempotency_key="k1", expected_version=None)
-    audit.recover_incomplete()
+    audit.recover_incomplete(stale_after_seconds=0)
     replay = store.append_domain(node_event(build_node("n-1")), idempotency_key="k1", expected_version=None)
     assert replay.idempotent_replay is True
     assert replay.domain_event_id == original.domain_event_id
@@ -568,7 +568,7 @@ def test_projection_repair_failure_is_recorded_as_a_failure(store: EventStore) -
     def failing_repair() -> None:
         raise RuntimeError("projection offline")
 
-    receipts = audit.recover_incomplete(projection_repair=failing_repair)
+    receipts = audit.recover_incomplete(projection_repair=failing_repair, stale_after_seconds=0)
     assert len(receipts) == 1
     assert receipts[0].status == "failure"
     assert store.audit_event_count() == 1
