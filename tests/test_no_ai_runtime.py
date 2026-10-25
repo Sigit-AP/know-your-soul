@@ -22,6 +22,7 @@ import sys
 import textwrap
 import urllib.request
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 from packaging.requirements import Requirement
@@ -34,6 +35,46 @@ SRC = REPO_ROOT / "src"
 
 # RFC 5737 TEST-NET-1: never routed, so a probe can only fail by being denied.
 TEST_NET = ("192.0.2.1", 9)
+
+
+def _clean_mcp_server():
+    """A real MCP SDK server registering exactly ``tools`` + ``resources``.
+
+    This is the capability evidence ``verify_runtime`` observes: the families are
+    read from the handlers the server actually registers, not from the guard's
+    own allowlist.
+    """
+    from mcp.server.lowlevel import Server
+
+    async def _handler(context: Any, params: Any) -> Any:  # pragma: no cover - never invoked
+        return None
+
+    handler = cast(Any, _handler)
+    return Server("soul-knowledge", on_list_tools=handler, on_list_resources=handler)
+
+
+def _unix_roundtrip(name: str = "roundtrip") -> None:
+    """Prove AF_UNIX sockets still work while a socket guard may be active."""
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    listener = os.path.join(os.environ.get("TMPDIR", "/tmp"), f"soul-guard-{name}-{os.getpid()}.sock")
+    try:
+        server.bind(listener)
+        server.listen(1)
+        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            client.connect(listener)
+            connection, _ = server.accept()
+            try:
+                connection.sendall(b"ok")
+                assert client.recv(2) == b"ok"
+            finally:
+                connection.close()
+        finally:
+            client.close()
+    finally:
+        server.close()
+        if os.path.exists(listener):
+            os.unlink(listener)
 
 
 # ------------------------------------------------------------------ python
@@ -282,6 +323,56 @@ def test_socket_guard_restores_the_original_api() -> None:
     assert socket.socket.connect is original_connect
 
 
+def test_socket_guard_install_is_reference_counted_and_reentrant() -> None:
+    """A nested install must not overwrite the real originals (task-1 fix)."""
+    original_connect = socket.socket.connect
+    outer = runtime_guard.install_socket_guard()
+    inner = runtime_guard.install_socket_guard()
+    try:
+        assert socket.socket.connect is not original_connect
+        with pytest.raises(runtime_guard.OutboundSocketDenied):
+            socket.create_connection(TEST_NET, timeout=0.05)
+        inner.uninstall()
+        # The outer install still holds the patch and the true originals.
+        assert socket.socket.connect is not original_connect
+        assert runtime_guard._SOCKET_ORIGINALS, "nested uninstall emptied the originals map"
+        _unix_roundtrip("nested")
+        with pytest.raises(runtime_guard.OutboundSocketDenied):
+            socket.create_connection(TEST_NET, timeout=0.05)
+    finally:
+        inner.uninstall()
+        outer.uninstall()
+    assert socket.socket.connect is original_connect
+    assert runtime_guard._SOCKET_ORIGINALS == {}
+
+
+def test_verify_runtime_is_safe_inside_an_active_socket_guard() -> None:
+    """verify_runtime's nested probe must not corrupt an active guard (task-1 fix)."""
+    original_connect = socket.socket.connect
+    with runtime_guard.deny_outbound_sockets():
+        report = runtime_guard.verify_runtime(mcp_server=_clean_mcp_server())
+        assert report["outbound_sockets_denied"] is True
+        assert socket.socket.connect is not original_connect
+        assert runtime_guard._SOCKET_ORIGINALS, "verify_runtime emptied the originals map"
+        # AF_UNIX must still work after verify_runtime.
+        _unix_roundtrip("after-verify")
+    assert socket.socket.connect is original_connect
+    assert runtime_guard._SOCKET_ORIGINALS == {}
+
+
+def test_af_unix_sockets_still_work_after_install_verify_uninstall() -> None:
+    """Explicit regression: install -> verify_runtime -> AF_UNIX -> uninstall."""
+    original_connect = socket.socket.connect
+    guard = runtime_guard.install_socket_guard()
+    try:
+        runtime_guard.verify_runtime(mcp_server=_clean_mcp_server())
+        _unix_roundtrip("install-verify")
+    finally:
+        guard.uninstall()
+    assert socket.socket.connect is original_connect
+    assert runtime_guard._SOCKET_ORIGINALS == {}
+
+
 # ---------------------------------------------------------------- sampling
 
 
@@ -324,6 +415,27 @@ def test_a_verifiable_handler_registry_is_required() -> None:
 
     with pytest.raises(runtime_guard.CapabilityViolation):
         runtime_guard.assert_no_sampling_handler(Opaque())
+
+
+def test_observed_capabilities_come_from_the_server_registry_not_the_allowlist() -> None:
+    assert runtime_guard.observed_mcp_capabilities(_clean_mcp_server()) == {"tools": {}, "resources": {}}
+
+    class SamplingServer:
+        _request_handlers = {"tools/list": object(), "resources/list": object(), "sampling/createMessage": object()}
+
+    observed = runtime_guard.observed_mcp_capabilities(SamplingServer())
+    assert set(observed) == {"resources", "sampling", "tools"}
+    with pytest.raises(runtime_guard.CapabilityViolation):
+        runtime_guard.assert_mcp_capabilities(observed)
+
+
+def test_empty_server_advertises_no_allowed_capability() -> None:
+    from mcp.server.lowlevel import Server
+
+    observed = runtime_guard.observed_mcp_capabilities(Server("soul-knowledge"))
+    assert observed == {}
+    with pytest.raises(runtime_guard.CapabilityViolation):
+        runtime_guard.assert_mcp_capabilities(observed)
 
 
 # --------------------------------------------------------- static surface
@@ -401,7 +513,13 @@ def test_guards_hold_inside_a_scrubbed_child_process(tmp_path: Path) -> None:
                     report["import_denied"] = False
                 except guard.ForbiddenImportError:
                     report["import_denied"] = True
-            report["report"] = guard.verify_runtime()
+            from mcp.server.lowlevel import Server
+
+            async def _handler(context, params):
+                return None
+
+            _server = Server("soul-knowledge", on_list_tools=_handler, on_list_resources=_handler)
+            report["report"] = guard.verify_runtime(mcp_server=_server)
             print(json.dumps(report))
             """
         ),
@@ -432,7 +550,7 @@ def test_guards_hold_inside_a_scrubbed_child_process(tmp_path: Path) -> None:
 
 
 def test_verify_runtime_reports_a_clean_boundary() -> None:
-    report = runtime_guard.verify_runtime()
+    report = runtime_guard.verify_runtime(mcp_server=_clean_mcp_server())
     assert report["status"] == "ok"
     assert report["python"] == "3.14"
     assert report["forbidden_distributions"] == []
@@ -440,21 +558,63 @@ def test_verify_runtime_reports_a_clean_boundary() -> None:
     assert report["outbound_sockets_denied"] is True
     assert report["forbidden_imports_blocked"] is True
     assert report["mcp_capabilities"] == ["resources", "tools"]
+    assert report["mcp_capability_evidence"] == "server_registry"
+    assert report["pinned_entry_point_boundary"] == ["graphifyy:console_scripts:graphify-mcp=graphify.serve:_main"]
     assert report["graphify_pin"] == "graphifyy[mcp]==0.9.95"
     json.dumps(report)
+
+
+def test_verify_runtime_accepts_an_explicit_capability_snapshot() -> None:
+    report = runtime_guard.verify_runtime(mcp_capabilities={"tools": {}, "resources": {}})
+    assert report["mcp_capabilities"] == ["resources", "tools"]
+    assert report["mcp_capability_evidence"] == "capability_snapshot"
+
+
+def test_verify_runtime_fails_closed_without_capability_evidence() -> None:
+    with pytest.raises(runtime_guard.CapabilityViolation):
+        runtime_guard.verify_runtime()
+
+
+def test_verify_runtime_fails_closed_when_a_server_exposes_sampling() -> None:
+    class HostileServer:
+        _request_handlers = {
+            "tools/list": object(),
+            "resources/list": object(),
+            "sampling/createMessage": object(),
+        }
+
+    with pytest.raises(runtime_guard.CapabilityViolation):
+        runtime_guard.verify_runtime(mcp_server=HostileServer())
+
+
+def test_verify_runtime_fails_closed_on_a_capability_snapshot_with_extras() -> None:
+    with pytest.raises(runtime_guard.CapabilityViolation):
+        runtime_guard.verify_runtime(mcp_capabilities={"tools": {}, "resources": {}, "prompts": {}})
+    with pytest.raises(runtime_guard.CapabilityViolation):
+        runtime_guard.verify_runtime(mcp_server=_clean_mcp_server(), mcp_capabilities={"tools": {}, "logging": {}})
 
 
 def test_verify_runtime_fails_closed_on_a_dirty_environment() -> None:
     dirty = {"PATH": "/usr/bin", "OPENAI_API_KEY": "sk-test"}
     with pytest.raises(runtime_guard.ProviderCredentialError):
-        runtime_guard.verify_runtime(env=dirty, strict_env=True)
+        runtime_guard.verify_runtime(env=dirty, strict_env=True, mcp_server=_clean_mcp_server())
     with pytest.raises(runtime_guard.ForbiddenDependencyError):
-        runtime_guard.verify_runtime(dirty_distributions={"openai": "2.0.0"})
+        runtime_guard.verify_runtime(dirty_distributions={"openai": "2.0.0"}, mcp_server=_clean_mcp_server())
 
 
-def test_assert_no_forbidden_entry_points_and_distributions_pass_on_this_environment() -> None:
-    runtime_guard.assert_no_forbidden_entry_points()
+def test_entry_point_policy_fails_closed_on_the_pinned_wheel_script() -> None:
+    """The pinned wheel's dormant `graphify-mcp` is rejected by policy (task-1 fix)."""
+    offenders = runtime_guard.forbidden_entry_points()
+    assert offenders == ["graphifyy:console_scripts:graphify-mcp=graphify.serve:_main"], offenders
+    with pytest.raises(runtime_guard.ForbiddenDependencyError):
+        runtime_guard.assert_no_forbidden_entry_points()
+    # Only the recorded pinned-wheel boundary is tolerated by the relaxed view.
+    assert runtime_guard.blocking_forbidden_entry_points() == []
+
+
+def test_assert_no_forbidden_distributions_pass_on_this_environment() -> None:
     runtime_guard.assert_no_forbidden_distributions()
+    runtime_guard.assert_no_forbidden_entry_points(allow_pinned_boundary=True)
 
 
 def importlib_import(name: str):  # noqa: ANN201 - small local helper

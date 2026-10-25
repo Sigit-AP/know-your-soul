@@ -33,7 +33,9 @@ from typing import Any
 __all__ = [
     "ALLOWED_MCP_CAPABILITIES",
     "CapabilityViolation",
+    "DORMANT_PINNED_ENTRY_POINTS",
     "FORBIDDEN_DISTRIBUTIONS",
+    "FORBIDDEN_ENTRY_POINT_SCRIPTS",
     "FORBIDDEN_IMPORT_ROOTS",
     "FORBIDDEN_MCP_METHODS",
     "ForbiddenDependencyError",
@@ -58,6 +60,7 @@ __all__ = [
     "assert_no_provider_credentials",
     "assert_no_sampling_handler",
     "assert_supported_python",
+    "blocking_forbidden_entry_points",
     "deny_outbound_sockets",
     "deterministic_env",
     "forbidden_entry_points",
@@ -66,8 +69,10 @@ __all__ = [
     "install_import_guard",
     "install_socket_guard",
     "installed_distributions",
+    "is_forbidden_distribution",
     "is_forbidden_module",
     "model_asset_env",
+    "observed_mcp_capabilities",
     "provider_credentials",
     "removed_credential_names",
     "scrubbed_env",
@@ -184,6 +189,18 @@ FORBIDDEN_DISTRIBUTIONS: frozenset[str] = frozenset(
         "psycopg-binary",
         "jieba",
         "jieba-py",
+        # Document/media/site tooling that pulls model assets or writes files the
+        # deterministic runtime must not touch. Kept in one shared set so the
+        # runtime guard and the packaging tests cannot drift apart.
+        "google-cloud-aiplatform",
+        "watchdog",
+        "pypdf",
+        "markdownify",
+        "python-docx",
+        "openpyxl",
+        "pillow",
+        "matplotlib",
+        "robotframework",
     }
 )
 
@@ -394,14 +411,22 @@ def installed_distributions() -> dict[str, str]:
     }
 
 
-def _is_forbidden_distribution(name: str) -> bool:
-    return _canonical(name) in FORBIDDEN_DISTRIBUTIONS
+def is_forbidden_distribution(name: str) -> bool:
+    """True when *name* is a forbidden distribution or one of its variants.
+
+    The single source of truth for both the runtime guard and the packaging
+    tests (``tests/test_dependency_policy.py``). Matches the canonical name
+    exactly and by prefix, so a variant such as ``torchaudio`` is caught by the
+    ``torch`` entry without a second hand-maintained list drifting out of sync.
+    """
+    normalized = _canonical(name)
+    return any(normalized == entry or normalized.startswith(entry) for entry in FORBIDDEN_DISTRIBUTIONS)
 
 
 def forbidden_distributions(installed: Mapping[str, str] | None = None) -> list[str]:
     """Names of forbidden distributions present in the environment, sorted."""
     available = installed_distributions() if installed is None else dict(installed)
-    return sorted(name for name in available if _is_forbidden_distribution(name))
+    return sorted(name for name in available if is_forbidden_distribution(name))
 
 
 def assert_no_forbidden_distributions(installed: Mapping[str, str] | None = None) -> None:
@@ -420,34 +445,78 @@ def is_forbidden_module(fullname: str) -> bool:
     return False
 
 
-def forbidden_entry_points(distributions: Iterable[Any] | None = None) -> list[str]:
-    """Provider entry points exposed by the environment, as ``dist:group:name=value``.
+# Console-script names the product must never expose. ``graphify-mcp`` targets
+# ``graphify.serve:_main`` and is therefore already caught by the forbidden
+# import-root rule; the name is listed explicitly so a future retarget cannot
+# slip past unnoticed.
+FORBIDDEN_ENTRY_POINT_SCRIPTS: frozenset[str] = frozenset({"graphify-mcp"})
 
-    Only provider/model targets are rejected here. A dormant entry point inside
-    the pinned Graphify distribution (its own ``graphify-mcp`` console script) is
-    not part of the product surface and is rejected separately by
-    :func:`assert_no_forbidden_imports` and by the product's static source scan.
+# The pinned Graphify wheel unavoidably ships
+# ``graphify-mcp = graphify.serve:_main``. The entry-point policy fails closed on
+# it, but the wheel cannot be changed without forking upstream, so this exact
+# entry point is a *recorded boundary* rather than a rule silently dropped. ADR
+# 0001 section 3 (no-model boundary) and
+# ``docs/research/graphify-feature-matrix.md`` §5 record the residual and its
+# owner; ``verify_runtime`` reports it explicitly.
+DORMANT_PINNED_ENTRY_POINTS: frozenset[str] = frozenset({"graphifyy:console_scripts:graphify-mcp=graphify.serve:_main"})
+
+
+def _is_forbidden_entry_point(entry_point: Any) -> bool:
+    module = str(entry_point.value).split(":")[0]
+    if is_forbidden_module(module):
+        return True
+    if entry_point.group == "console_scripts" and (
+        str(entry_point.name) in FORBIDDEN_ENTRY_POINT_SCRIPTS or is_forbidden_distribution(str(entry_point.name))
+    ):
+        return True
+    return False
+
+
+def forbidden_entry_points(distributions: Iterable[Any] | None = None) -> list[str]:
+    """Every forbidden entry point exposed by the environment, sorted.
+
+    Fails closed on (a) any entry point whose target module is a forbidden import
+    root — this includes the pinned wheel's ``graphify-mcp = graphify.serve:_main``
+    — and (b) provider console-script names or the explicit
+    :data:`FORBIDDEN_ENTRY_POINT_SCRIPTS` names. Output is
+    ``dist:group:name=value``.
     """
     sources = importlib_metadata.distributions() if distributions is None else distributions
     offenders: list[str] = []
     for distribution in sources:
         name = distribution.metadata["Name"]
         for entry_point in distribution.entry_points:
-            module = str(entry_point.value).split(":")[0]
-            if (
-                module.startswith(tuple(root + "." for root in PROVIDER_IMPORT_ROOTS))
-                or module in PROVIDER_IMPORT_ROOTS
-            ):
-                offenders.append(f"{name}:{entry_point.group}:{entry_point.name}={entry_point.value}")
-            elif _is_forbidden_distribution(str(entry_point.name)) and entry_point.group == "console_scripts":
+            if _is_forbidden_entry_point(entry_point):
                 offenders.append(f"{name}:{entry_point.group}:{entry_point.name}={entry_point.value}")
     return sorted(offenders)
 
 
-def assert_no_forbidden_entry_points(distributions: Iterable[Any] | None = None) -> None:
-    offenders = forbidden_entry_points(distributions)
+def blocking_forbidden_entry_points(distributions: Iterable[Any] | None = None) -> list[str]:
+    """Forbidden entry points that are not the recorded pinned-wheel boundary."""
+    return [
+        offender for offender in forbidden_entry_points(distributions) if offender not in DORMANT_PINNED_ENTRY_POINTS
+    ]
+
+
+def assert_no_forbidden_entry_points(
+    distributions: Iterable[Any] | None = None,
+    *,
+    allow_pinned_boundary: bool = False,
+) -> None:
+    """Fail closed on forbidden entry points.
+
+    The default is strict: even the pinned-wheel ``graphify-mcp`` boundary raises.
+    :func:`verify_runtime` passes ``allow_pinned_boundary=True`` so it can run in
+    an environment that still ships the pinned wheel, and reports that boundary
+    explicitly instead of hiding it.
+    """
+    offenders = (
+        blocking_forbidden_entry_points(distributions)
+        if allow_pinned_boundary
+        else forbidden_entry_points(distributions)
+    )
     if offenders:
-        raise ForbiddenDependencyError("forbidden provider entry points exposed: " + ", ".join(offenders))
+        raise ForbiddenDependencyError("forbidden entry points exposed: " + ", ".join(offenders))
 
 
 # ---------------------------------------------------------------------------
@@ -640,45 +709,57 @@ class SocketGuard:
     Local IPC is the product's default transport (Unix socket), so AF_UNIX stays
     allowed; every AF_INET/AF_INET6 connect, connect-ex, sendto and
     ``create_connection`` call raises :class:`OutboundSocketDenied`.
+
+    The guard is re-entrant and **reference counted**. Only the first
+    ``install()`` captures the real originals and patches the class; nested
+    installs (for example the probe :func:`verify_runtime` runs inside an
+    already-active guard) merely bump the count, and the patch is restored when
+    the last guard uninstalls. Without the count, a nested guard captures the
+    already-denied functions as its own "originals": uninstalling it would leave
+    ``socket.socket.connect`` patched while ``_SOCKET_ORIGINALS`` was emptied, so
+    an *allowed* AF_UNIX connect would raise ``KeyError``.
     """
 
     _LOCAL_FAMILIES = frozenset({socket.AF_UNIX})
 
     def __init__(self) -> None:
         self._installed = False
-        self._previous: dict[str, Any] = {}
 
     def install(self) -> SocketGuard:
+        global _SOCKET_GUARD_DEPTH
         if self._installed:
             return self
-        global _SOCKET_ORIGINALS
-        _SOCKET_ORIGINALS = {
-            "connect": socket.socket.connect,
-            "connect_ex": socket.socket.connect_ex,
-            "sendto": socket.socket.sendto,
-            "sendmsg": socket.socket.sendmsg,
-            "create_connection": socket.create_connection,
-        }
-        self._previous = dict(_SOCKET_ORIGINALS)
-        socket.socket.connect = _denied_connect  # type: ignore[method-assign]
-        socket.socket.connect_ex = _denied_connect_ex  # type: ignore[method-assign]
-        socket.socket.sendto = _denied_sendto  # type: ignore[method-assign]
-        socket.socket.sendmsg = _denied_sendmsg  # type: ignore[method-assign]
-        socket.create_connection = _denied_create_connection  # type: ignore[assignment]
+        if _SOCKET_GUARD_DEPTH == 0:
+            _SOCKET_ORIGINALS.update(
+                {
+                    "connect": socket.socket.connect,
+                    "connect_ex": socket.socket.connect_ex,
+                    "sendto": socket.socket.sendto,
+                    "sendmsg": socket.socket.sendmsg,
+                    "create_connection": socket.create_connection,
+                }
+            )
+            socket.socket.connect = _denied_connect  # type: ignore[method-assign]
+            socket.socket.connect_ex = _denied_connect_ex  # type: ignore[method-assign]
+            socket.socket.sendto = _denied_sendto  # type: ignore[method-assign]
+            socket.socket.sendmsg = _denied_sendmsg  # type: ignore[method-assign]
+            socket.create_connection = _denied_create_connection  # type: ignore[assignment]
+        _SOCKET_GUARD_DEPTH += 1
         self._installed = True
         return self
 
     def uninstall(self) -> None:
+        global _SOCKET_GUARD_DEPTH
         if not self._installed:
             return
-        global _SOCKET_ORIGINALS
-        socket.socket.connect = self._previous["connect"]  # type: ignore[method-assign]
-        socket.socket.connect_ex = self._previous["connect_ex"]  # type: ignore[method-assign]
-        socket.socket.sendto = self._previous["sendto"]  # type: ignore[method-assign]
-        socket.socket.sendmsg = self._previous["sendmsg"]  # type: ignore[method-assign]
-        socket.create_connection = self._previous["create_connection"]
-        self._previous = {}
-        _SOCKET_ORIGINALS = {}
+        _SOCKET_GUARD_DEPTH = max(_SOCKET_GUARD_DEPTH - 1, 0)
+        if _SOCKET_GUARD_DEPTH == 0 and _SOCKET_ORIGINALS:
+            socket.socket.connect = _SOCKET_ORIGINALS["connect"]  # type: ignore[method-assign]
+            socket.socket.connect_ex = _SOCKET_ORIGINALS["connect_ex"]  # type: ignore[method-assign]
+            socket.socket.sendto = _SOCKET_ORIGINALS["sendto"]  # type: ignore[method-assign]
+            socket.socket.sendmsg = _SOCKET_ORIGINALS["sendmsg"]  # type: ignore[method-assign]
+            socket.create_connection = _SOCKET_ORIGINALS["create_connection"]
+            _SOCKET_ORIGINALS.clear()
         self._installed = False
 
     def __enter__(self) -> SocketGuard:
@@ -688,11 +769,13 @@ class SocketGuard:
         self.uninstall()
 
 
-# Originals for the active SocketGuard. Module-level so the patched class
-# attributes are plain functions: a bound method assigned to a class attribute
-# would not receive the socket instance, and a signature mismatch would silently
-# call the wrong parameter.
+# Originals for the active SocketGuard plus the install depth. Module-level so
+# the patched class attributes are plain functions: a bound method assigned to a
+# class attribute would not receive the socket instance, and a signature
+# mismatch would silently call the wrong parameter. The depth makes the guard
+# re-entrant, so the real originals survive every nested install.
 _SOCKET_ORIGINALS: dict[str, Any] = {}
+_SOCKET_GUARD_DEPTH: int = 0
 
 
 def _deny(target: Any) -> OutboundSocketDenied:
@@ -790,6 +873,44 @@ def assert_mcp_capabilities(capabilities: Any) -> None:
         )
 
 
+# Capability families the guard can observe, in the MCP SDK's own naming. A
+# registered ``completion/complete`` handler advertises the ``completions``
+# capability, so the method family is aliased.
+_CAPABILITY_FAMILIES: tuple[str, ...] = (
+    "tools",
+    "resources",
+    "prompts",
+    "logging",
+    "completions",
+    "sampling",
+    "elicitation",
+)
+_METHOD_FAMILY_ALIASES: Mapping[str, str] = {"completion": "completions"}
+
+
+def _method_family(method: str) -> str | None:
+    family = method.split("/")[0].strip().lower()
+    family = _METHOD_FAMILY_ALIASES.get(family, family)
+    return family if family in _CAPABILITY_FAMILIES else None
+
+
+def observed_mcp_capabilities(server: Any) -> dict[str, dict[str, Any]]:
+    """Capability families observed from a server's real request-handler registry.
+
+    The families are derived from the handlers the server *actually* registers,
+    never from :data:`ALLOWED_MCP_CAPABILITIES`, so a server that exposes
+    sampling, prompts, logging or completions is caught instead of echoed back. A
+    server with no verifiable handler registry is refused (fail closed).
+    """
+    registry = _handler_registry(server)
+    observed: dict[str, dict[str, Any]] = {}
+    for method in registry:
+        family = _method_family(str(method))
+        if family is not None:
+            observed.setdefault(family, {})
+    return {family: observed[family] for family in sorted(observed)}
+
+
 # ---------------------------------------------------------------------------
 # Verification
 # ---------------------------------------------------------------------------
@@ -819,6 +940,8 @@ def verify_runtime(
     *,
     strict_env: bool = False,
     dirty_distributions: Mapping[str, str] | None = None,
+    mcp_server: Any = None,
+    mcp_capabilities: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run every guard and return a JSON-serializable report, or raise.
 
@@ -826,12 +949,23 @@ def verify_runtime(
     provider credentials; the default records them as removed from the messenger
     surface instead, because the Hermes host process may legitimately hold keys
     the product never receives.
+
+    MCP capability evidence is **required**: pass a live ``mcp_server`` (whose
+    registered handlers are observed directly) or an ``mcp_capabilities``
+    snapshot. With neither, verification fails closed rather than comparing the
+    guard's own allowlist against itself.
     """
     assert_supported_python()
 
     installed = installed_distributions() if dirty_distributions is None else dict(dirty_distributions)
     assert_no_forbidden_distributions(installed)
-    assert_no_forbidden_entry_points()
+    # The pinned wheel ships `graphify-mcp = graphify.serve:_main`; the entry-point
+    # policy rejects it, and this boundary is reported explicitly below instead of
+    # being silently dropped (ADR 0001 §3, feature matrix §5).
+    assert_no_forbidden_entry_points(allow_pinned_boundary=True)
+    pinned_entry_point_boundary = sorted(
+        offender for offender in forbidden_entry_points() if offender in DORMANT_PINNED_ENTRY_POINTS
+    )
 
     ambient = dict(os.environ if env is None else env)
     if strict_env:
@@ -849,7 +983,23 @@ def verify_runtime(
     if not imports_blocked:
         raise ForbiddenImportError("the import guard did not block a forbidden module")
 
-    assert_mcp_capabilities({capability: {} for capability in sorted(ALLOWED_MCP_CAPABILITIES)})
+    if mcp_server is None and mcp_capabilities is None:
+        raise CapabilityViolation(
+            "the MCP capability surface cannot be verified: no server or capability snapshot was supplied"
+        )
+    if mcp_server is not None:
+        assert_no_sampling_handler(mcp_server)
+    if mcp_capabilities is not None:
+        if not isinstance(mcp_capabilities, Mapping):
+            raise CapabilityViolation(
+                f"MCP capability snapshot must be a mapping, got {type(mcp_capabilities).__name__}"
+            )
+        observed_capabilities: Mapping[str, Any] = {str(key): value for key, value in mcp_capabilities.items()}
+        capability_evidence = "capability_snapshot"
+    else:
+        observed_capabilities = observed_mcp_capabilities(mcp_server)
+        capability_evidence = "server_registry"
+    assert_mcp_capabilities(observed_capabilities)
 
     return {
         "status": "ok",
@@ -859,11 +1009,13 @@ def verify_runtime(
         "graphify_pin": GRAPHIFY_PIN,
         "installed_distributions": len(installed),
         "forbidden_distributions": [],
-        "forbidden_entry_points": [],
+        "forbidden_entry_points": blocking_forbidden_entry_points(),
+        "pinned_entry_point_boundary": pinned_entry_point_boundary,
         "ambient_credentials_removed": list(removed_credential_names(ambient)),
         "scrubbed_credentials_removed": len(removed_credential_names(ambient)),
         "outbound_sockets_denied": outbound_denied,
         "forbidden_imports_blocked": imports_blocked,
-        "mcp_capabilities": sorted(ALLOWED_MCP_CAPABILITIES),
+        "mcp_capabilities": sorted(observed_capabilities),
+        "mcp_capability_evidence": capability_evidence,
         "forbidden_import_roots": sorted(FORBIDDEN_IMPORT_ROOTS),
     }

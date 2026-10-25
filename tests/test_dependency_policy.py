@@ -27,6 +27,8 @@ from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 from packaging.version import Version
 
+from soul_knowledge import runtime_guard
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 UV_LOCK = REPO_ROOT / "uv.lock"
@@ -46,59 +48,12 @@ ENABLED_EXTRAS = (("graphifyy", "mcp"),)
 # Provider, vector, model-runtime, outbound-sink and model-asset distributions.
 # Any of these installed *or* transitively reachable from the enabled extras
 # breaks the no-model boundary in spec section 4.2 / plan Global Constraints.
-FORBIDDEN_DISTRIBUTION_PREFIXES = (
-    "openai",
-    "anthropic",
-    "google-genai",
-    "google-generativeai",
-    "vertexai",
-    "google-cloud-aiplatform",
-    "boto3",
-    "botocore",
-    "tiktoken",
-    "transformers",
-    "sentence-transformers",
-    "torch",
-    "torchvision",
-    "tensorflow",
-    "onnxruntime",
-    "llama-cpp-python",
-    "ollama",
-    "mistralai",
-    "cohere",
-    "groq",
-    "together",
-    "voyageai",
-    "faiss-cpu",
-    "faiss-gpu",
-    "chromadb",
-    "pinecone-client",
-    "weaviate-client",
-    "qdrant-client",
-    "lancedb",
-    "langchain",
-    "langchain-core",
-    "litellm",
-    "vllm",
-    "faster-whisper",
-    "yt-dlp",
-    "graspologic",
-    "graspologic-native",
-    "neo4j",
-    "falkordb",
-    "psycopg",
-    "psycopg-binary",
-    "jieba",
-    "jieba-py",
-    "watchdog",
-    "pypdf",
-    "markdownify",
-    "python-docx",
-    "openpyxl",
-    "pillow",
-    "matplotlib",
-    "robotframework",
-)
+#
+# There is exactly one source of truth for this list:
+# ``soul_knowledge.runtime_guard.FORBIDDEN_DISTRIBUTIONS`` plus its
+# ``is_forbidden_distribution`` matcher (exact name or prefix variant). This test
+# imports that shared rule instead of restating it, so the packaging policy and
+# the runtime guard cannot drift apart.
 
 # Nothing else may be reachable: the walk follows dependency edges and evaluates
 # their environment markers, so Windows/emscripten-only packages are skipped
@@ -110,11 +65,7 @@ def _normalized(name: str) -> str:
 
 
 def _is_forbidden_distribution(name: str) -> bool:
-    normalized = _normalized(name)
-    return any(
-        normalized == prefix or normalized.startswith(f"{prefix}-") or normalized.startswith(prefix)
-        for prefix in FORBIDDEN_DISTRIBUTION_PREFIXES
-    )
+    return runtime_guard.is_forbidden_distribution(name)
 
 
 @pytest.fixture(scope="module")
@@ -323,6 +274,22 @@ def test_no_entry_point_points_at_a_forbidden_module() -> None:
             if _is_forbidden_distribution(module) or _is_forbidden_distribution(entry_point.name):
                 offenders.append(f"{dist.metadata['Name']}:{entry_point.group}:{entry_point.name}={value}")
     assert offenders == [], offenders
+    # The only entry point the guard policy rejects is the recorded pinned-wheel
+    # boundary (graphifyy's dormant `graphify-mcp`), asserted next.
+    assert runtime_guard.blocking_forbidden_entry_points() == []
+
+
+def test_forbidden_distribution_policy_has_one_shared_source_of_truth() -> None:
+    """The packaging test and the runtime guard must not keep separate lists."""
+    declared = runtime_guard.FORBIDDEN_DISTRIBUTIONS
+    assert declared, "the shared forbidden-distribution set must not be empty"
+    for name in declared:
+        assert _is_forbidden_distribution(name), name
+    # The matcher catches prefix variants the exact list cannot enumerate.
+    assert _is_forbidden_distribution("torchaudio")
+    assert _is_forbidden_distribution("openai")
+    assert not _is_forbidden_distribution("graphifyy")
+    assert not _is_forbidden_distribution("networkx")
 
 
 def test_project_entry_points_are_declared_and_deterministic(pyproject: dict) -> None:
@@ -331,9 +298,21 @@ def test_project_entry_points_are_declared_and_deterministic(pyproject: dict) ->
     assert pyproject["project"]["name"] == PROJECT_NAME
 
 
-def test_graphify_console_scripts_are_the_only_graphify_commands() -> None:
+def test_graphify_mcp_console_script_is_rejected_by_the_entry_point_policy() -> None:
+    """Policy now fails closed on the pinned wheel's dormant `graphify-mcp` script.
+
+    Upstream ships `graphify-mcp = graphify.serve:_main`; it is not on the product
+    surface, but the policy rejects it rather than excluding it. See ADR 0001 §3
+    and `docs/research/graphify-feature-matrix.md` §5 for the recorded boundary.
+    """
     distribution = importlib_metadata.distribution("graphifyy")
     names = sorted(
         entry_point.name for entry_point in distribution.entry_points if entry_point.group == "console_scripts"
     )
     assert names == ["graphify", "graphify-mcp"], names
+    offenders = runtime_guard.forbidden_entry_points([distribution])
+    assert offenders == ["graphifyy:console_scripts:graphify-mcp=graphify.serve:_main"], offenders
+    with pytest.raises(runtime_guard.ForbiddenDependencyError):
+        runtime_guard.assert_no_forbidden_entry_points([distribution])
+    assert offenders[0] in runtime_guard.DORMANT_PINNED_ENTRY_POINTS
+    assert runtime_guard.blocking_forbidden_entry_points([distribution]) == []
