@@ -268,9 +268,7 @@ class RelearnEngine:
         if self._registry.relearn_state() != RELEARN_PENDING:
             raise NoPendingRelearn("no RELEARN_PENDING offer: relearn is never selected automatically")
         with self._store.read() as conn:
-            row = conn.execute(
-                "SELECT payload_json FROM relearn_offer ORDER BY rowid DESC LIMIT 1"
-            ).fetchone()
+            row = conn.execute("SELECT payload_json FROM relearn_offer ORDER BY rowid DESC LIMIT 1").fetchone()
         if row is None:  # pragma: no cover - state without an offer row is inconsistent
             raise NoPendingRelearn("RELEARN_PENDING is set but no offer row exists")
         return RelearnOffer.model_validate(json.loads(str(row["payload_json"])))
@@ -294,9 +292,7 @@ class RelearnEngine:
 
     # ---------------------------------------------------------------- offer
 
-    def offer(
-        self, path: str | Path, kind: SourceKind, parser_versions: ParserVersions
-    ) -> RelearnOffer | None:
+    def offer(self, path: str | Path, kind: SourceKind, parser_versions: ParserVersions) -> RelearnOffer | None:
         """Emit a deterministic offer on change; never selects a mode."""
         return self._registry.detect_change(path, kind, parser_versions)
 
@@ -544,9 +540,7 @@ class RelearnEngine:
         stored = json.loads(str(row["payload_json"]))
         record = stored.get("relearn") or (stored.get("payload") or {}).get("relearn")
         if not isinstance(record, dict) or "relearn_id" not in record:
-            raise IdempotencyConflict(
-                f"idempotency key {idempotency_key!r} is already bound to a non-relearn write"
-            )
+            raise IdempotencyConflict(f"idempotency key {idempotency_key!r} is already bound to a non-relearn write")
         if str(record.get("mode")) != mode:
             raise IdempotencyConflict(
                 f"idempotency key {idempotency_key!r} replayed with mode {mode} "

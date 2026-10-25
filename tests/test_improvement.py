@@ -280,9 +280,7 @@ def test_regression_gate_failure_blocks_apply() -> None:
         return ["p-would-regress"]
 
     with pytest.raises(RegressionGateFailure):
-        apply_improvement(
-            store, record.proposal, gate=_combine(default_regression_gate, failing_gate), at=LATER
-        )
+        apply_improvement(store, record.proposal, gate=_combine(default_regression_gate, failing_gate), at=LATER)
     assert store.node_version("n-1") == 1  # no new revision
 
 

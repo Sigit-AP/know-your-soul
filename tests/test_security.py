@@ -50,7 +50,7 @@ NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 SECRET_KEY = "sk-live0123456789abcdef0123"
 SECRET_AWS = "AKIA0123456789ABCDEF"
 SECRET_GH = "ghp_abcdefghijklmnopqrstuvwxyz012345"
-SECRET_ASSIGNMENT = "password = \"hunter2hunter2\""
+SECRET_ASSIGNMENT = 'password = "hunter2hunter2"'
 EMAIL = "jane.doe@example.com"
 
 

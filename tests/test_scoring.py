@@ -129,7 +129,7 @@ def _item_to_domain_evidence(item: dict[str, Any]) -> Evidence:
         reproducibility=item["reproducibility"],
         scope_fit=item["scope_fit"],
         successful_use=item["successful_use"],
-        task_coverage=item["task_coverage"] if item["task_coverage"] is not None else "0",
+        task_coverage=item["task_coverage"] if item["task_coverage"] is not None else Decimal("0"),
         quality_at_use=item["quality_at_use"],
         contradiction=item["contradiction"],
         utilization_u=item["utilization_u"],

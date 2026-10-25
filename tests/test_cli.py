@@ -213,9 +213,7 @@ def test_cli_log_event_and_record_outcome(tmp_path: Path, capsys: pytest.Capture
         "compute_ms": 5,
         "output_chars": 10,
     }
-    code, out, err = _invoke(
-        _base(db_path, out_path) + ["record-outcome", json.dumps(evidence_payload)], capsys
-    )
+    code, out, err = _invoke(_base(db_path, out_path) + ["record-outcome", json.dumps(evidence_payload)], capsys)
     assert code == 0, err
     assert out is not None
     assert out["audit_event_id"]
@@ -224,9 +222,7 @@ def test_cli_log_event_and_record_outcome(tmp_path: Path, capsys: pytest.Capture
 
 def test_cli_evaluate_returns_score_contract(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     db_path, out_path = _seeded_paths(tmp_path)
-    code, out, err = _invoke(
-        _base(db_path, out_path) + ["evaluate", json.dumps({"node_id": "n-gates"})], capsys
-    )
+    code, out, err = _invoke(_base(db_path, out_path) + ["evaluate", json.dumps({"node_id": "n-gates"})], capsys)
     assert code == 0, err
     assert out is not None
     assert out["node_id"] == "n-gates"
@@ -253,9 +249,7 @@ def test_cli_propose_apply_rollback_chain(tmp_path: Path, capsys: pytest.Capture
         "diff": [{"op": "set_summary", "value": "Run every gate before each commit"}],
         "rationale": "sharpen the summary",
     }
-    code, out, err = _invoke(
-        _base(db_path, out_path) + ["propose-improvement", json.dumps(propose_payload)], capsys
-    )
+    code, out, err = _invoke(_base(db_path, out_path) + ["propose-improvement", json.dumps(propose_payload)], capsys)
     assert code == 0, err
     assert out is not None
     assert out["audit_event_id"]
@@ -296,9 +290,7 @@ def test_cli_rebuild_backup_restore_health(tmp_path: Path, capsys: pytest.Captur
     assert str(out["projection_version"]).startswith("gen-")
 
     backup_path = tmp_path / "backup.sqlite3"
-    code, out, err = _invoke(
-        _base(db_path, out_path) + ["backup", json.dumps({"dest_path": str(backup_path)})], capsys
-    )
+    code, out, err = _invoke(_base(db_path, out_path) + ["backup", json.dumps({"dest_path": str(backup_path)})], capsys)
     assert code == 0, err
     assert out is not None
     assert backup_path.exists()

@@ -1,6 +1,12 @@
 """Runtime boundary tests: no model, no provider, no socket, no sampling.
 
-Task 1 of ``docs/superpowers/plans/2026-10-24-superpower-knowledge-soul.md``.
+Task 1 of ``docs/superpowers/plans/2026-10-24-superpower-knowledge-soul.md``,
+extended at Task 10 to cover the full post-integration runtime surface
+(``mcp_server``, ``cli``, ``http_api``, ``scoring``, ``review``,
+``improvement``, ``scheduler``, ``relearn``, ``security``, ``observability``
+and ``backup``) in both the forbidden-import scan and the socket-denial
+guards, plus the two matrix contract tests owned by this gate (rows 36 and
+40).
 
 Every assertion here is about a *runtime surface*, not a document: the guard
 module (``soul_knowledge.runtime_guard``) fails closed, so a violation raises
@@ -615,6 +621,275 @@ def test_entry_point_policy_fails_closed_on_the_pinned_wheel_script() -> None:
 def test_assert_no_forbidden_distributions_pass_on_this_environment() -> None:
     runtime_guard.assert_no_forbidden_distributions()
     runtime_guard.assert_no_forbidden_entry_points(allow_pinned_boundary=True)
+
+
+# ================================================== Task 10: full runtime surface
+#
+# The Task 10 plan modifies this file to cover every post-integration runtime
+# module in the forbidden-import scan and under the socket-denial guard, and
+# to carry the two matrix contract tests owned by the security/operations
+# gate (rows 36 and 40 of docs/research/graphify-feature-matrix.md).
+
+RUNTIME_SURFACE_MODULES = (
+    "mcp_server",
+    "cli",
+    "http_api",
+    "scoring",
+    "review",
+    "improvement",
+    "scheduler",
+    "relearn",
+    "security",
+    "observability",
+    "backup",
+)
+
+
+def test_forbidden_import_scan_covers_the_full_runtime_surface() -> None:
+    """Every named runtime module exists and imports no forbidden module."""
+    offenders: list[str] = []
+    for module in RUNTIME_SURFACE_MODULES:
+        path = SRC / "soul_knowledge" / f"{module}.py"
+        assert path.is_file(), f"{module}.py missing — the runtime surface changed"
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                names = [node.module or ""]
+            else:
+                continue
+            for name in names:
+                if runtime_guard.is_forbidden_module(name):
+                    offenders.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno} imports {name}")
+    assert offenders == [], offenders
+
+
+def test_runtime_surface_runs_with_outbound_sockets_denied(tmp_path: Path) -> None:
+    """The whole post-integration surface works with the socket guard installed.
+
+    Every operation below is local: SQLite, files under tmp_path and in-process
+    calls. If any module secretly needed the network, the guard would turn it
+    into a hard failure instead of a silent leak.
+    """
+    from soul_knowledge import backup as backup_module
+    from soul_knowledge import cli, http_api, mcp_server, observability, scheduler, security
+    from soul_knowledge.contracts import (
+        ApplyImprovementRequest,
+        EvaluateRequest,
+        ProposeImprovementRequest,
+        QueryRequest,
+        ReviewRequest,
+    )
+    from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, Relation, RelationKind
+    from soul_knowledge.improvement import DiffOp, DiffOperation
+    from soul_knowledge.projection import GraphProjector
+    from soul_knowledge.relearn import RelearnEngine
+    from soul_knowledge.service import KnowledgeService
+    from soul_knowledge.store import EventStore
+
+    assert scheduler.DueReviewScheduler is not None  # exercised below via review(include_due=True)
+    store = EventStore(tmp_path / "soul.sqlite3")
+    projector = GraphProjector(store, output_root=tmp_path / "out")
+    store.append_domain(
+        Event(
+            kind=EventKind.NODE_UPSERT,
+            node_id="KROOT",
+            domain=PrimaryDomain.P1,
+            node=Node(
+                node_id="KROOT",
+                kind=NodeKind.ROOT,
+                domain=PrimaryDomain.P1,
+                summary="Knowledge Root",
+                provenance=("soul://roots",),
+                source_version_id="sv-guard",
+            ),
+        ),
+        idempotency_key="guard:upsert:KROOT",
+    )
+    for domain in PrimaryDomain:
+        store.append_domain(
+            Event(
+                kind=EventKind.NODE_UPSERT,
+                node_id=domain.value,
+                domain=domain,
+                node=Node(
+                    node_id=domain.value,
+                    parent_id="KROOT",
+                    kind=NodeKind.PRIMARY,
+                    domain=domain,
+                    summary=domain.title,
+                    provenance=("soul://roots",),
+                    source_version_id="sv-guard",
+                ),
+            ),
+            idempotency_key=f"guard:upsert:{domain.value}",
+        )
+    store.append_domain(
+        Event(
+            kind=EventKind.NODE_UPSERT,
+            node_id="n-gates",
+            domain=PrimaryDomain.P1,
+            node=Node(
+                node_id="n-gates",
+                parent_id="P1",
+                kind=NodeKind.CHILD,
+                domain=PrimaryDomain.P1,
+                summary="Run the gates before commit",
+                context_tags=("gates",),
+                provenance=("soul://corpus/lesson.md",),
+                source_version_id="sv-guard",
+            ),
+        ),
+        idempotency_key="guard:upsert:n-gates",
+    )
+    store.append_domain(
+        Event(
+            kind=EventKind.RELATION_ADD,
+            node_id="P1",
+            domain=PrimaryDomain.P1,
+            relation=Relation(kind=RelationKind.PARENT_OF, source_node_id="P1", target_node_id="n-gates"),
+        ),
+        idempotency_key="guard:rel:p1:n-gates",
+    )
+
+    with runtime_guard.deny_outbound_sockets():
+        projector.rebuild()
+        service = KnowledgeService(store, projector)
+        # retrieval + service
+        service.query(QueryRequest(purpose="run the gates", domain="P1", token_budget=512))
+        # scoring
+        service.evaluate(EvaluateRequest(node_id="n-gates", include_descendants=False))
+        # review (+ the due-review scheduler through include_due)
+        service.review(ReviewRequest(node_id="n-gates", include_due=True))
+        # improvement
+        proposal = service.propose_improvement(
+            ProposeImprovementRequest(
+                node_id="n-gates",
+                diff=(DiffOperation(op=DiffOp.SET_SUMMARY, value="Guarded"),),
+                rationale="socket guard probe",
+            )
+        )
+        service.apply_improvement(ApplyImprovementRequest(proposal_id=proposal.proposal.proposal_id))
+        # relearn (read-side scope)
+        engine = RelearnEngine(store)
+        assert engine.quarantined_evidence_ids() == frozenset()
+        # security
+        sanitized = security.sanitize_text("\x1b[31mEVIL\x1b[0m\u202e\u200bclean")
+        assert "\x1b" not in sanitized and "\u202e" not in sanitized and "\u200b" not in sanitized
+        security.resolve_within_root(tmp_path, "out")
+        # observability
+        health = observability.check_health(store)
+        assert health.ok, health
+        observability.collect_store_metrics(store, observability.MetricsRegistry())
+        # backup
+        backup_receipt = backup_module.backup_store(store, tmp_path / "backup.sqlite3")
+        assert (tmp_path / "backup.sqlite3").is_file(), backup_receipt
+        # cli
+        cli.build_parser()
+        # http_api (the local API dispatch on the same store)
+        stack = http_api.build_stack(tmp_path / "soul.sqlite3", tmp_path / "out")
+        try:
+            http_api.dispatch_text(
+                stack, "query", json.dumps({"purpose": "run the gates", "domain": "P1", "token_budget": 512})
+            )
+        finally:
+            stack.close()
+        # mcp_server
+        server = mcp_server.build_server(service, graph_root=tmp_path / "out")
+        runtime_guard.assert_no_sampling_handler(server)
+        # …while the guard still denies any outbound connection mid-flight.
+        with pytest.raises(runtime_guard.OutboundSocketDenied):
+            socket.create_connection(TEST_NET, timeout=0.05)
+
+
+def test_no_db_sink_and_no_credentials_on_argv() -> None:
+    """Matrix row 36: DB push sinks and credential-on-argv paths stay excluded.
+
+    Graphify's GraphML/SVG exports may be published into a generation, but the
+    database push sinks and every path that could place credentials on a
+    command line are excluded and asserted absent.
+    """
+    # The Graphify DB-push exporter is a forbidden import root…
+    assert runtime_guard.is_forbidden_module("graphify.exporters.graphdb")
+    # …and the sink driver distributions are forbidden in the locked environment.
+    for distribution in ("neo4j", "falkordb", "psycopg", "psycopg2"):
+        assert runtime_guard.is_forbidden_distribution(distribution), distribution
+    # The product never spawns a process, so no credential can ride an argv,
+    # and no source references a DB sink endpoint.
+    offenders: list[str] = []
+    for path in _product_sources():
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                names = [node.module or ""]
+            else:
+                continue
+            if any(name.split(".")[0] == "subprocess" for name in names):
+                offenders.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno} imports subprocess")
+        for sink in ("neo4j://", "bolt://", "falkor://", "postgresql://"):
+            if sink in source:
+                offenders.append(f"{path.relative_to(REPO_ROOT)} references {sink}")
+    assert offenders == [], offenders
+
+
+def test_containment_caps_and_generation_secret_scan(tmp_path: Path) -> None:
+    """Matrix row 40: containment, size caps, sanitization, generation secret scan."""
+    import hashlib
+
+    from soul_knowledge import security
+    from soul_knowledge.domain import PrimaryDomain, canonical_json
+    from soul_knowledge.importer import SeedImporter
+    from soul_knowledge.projection import GraphProjector
+    from soul_knowledge.read_model_validator import ReadModelValidator
+    from soul_knowledge.store import EventStore
+
+    store = EventStore(tmp_path / "soul.sqlite3")
+    importer = SeedImporter(store, state_dir=tmp_path / "import-state")
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    (corpus / "alpha.md").write_text("# Alpha\n\n## Lesson\n\nContainment matters.\n", encoding="utf-8")
+    importer.import_directory(corpus, domain=PrimaryDomain.P1)
+    projector = GraphProjector(store, output_root=tmp_path / "out")
+    receipt = projector.rebuild()
+    generation = Path(receipt.generation_dir)
+    manifest = json.loads((generation / "manifest.json").read_text(encoding="utf-8"))
+
+    # Containment: inside resolves, escapes fail closed.
+    security.resolve_within_root(tmp_path, "out")
+    with pytest.raises(security.PathEscapeError):
+        security.resolve_within_root(generation, "..")
+    with pytest.raises(security.PathEscapeError):
+        security.resolve_within_root(generation, "/etc/passwd")
+    # Size caps: per-payload/per-generation ceilings fail closed.
+    assert security.ensure_text_size("ok", max_bytes=16) <= 16
+    with pytest.raises(security.OversizedPayloadError):
+        security.ensure_text_size("x" * 64, max_bytes=16)
+    with pytest.raises(security.OversizedPayloadError):
+        security.ensure_payload_size({"blob": "y" * 8192}, max_bytes=128)
+    # Sanitization: control, bidi and zero-width never survive.
+    sanitized = security.sanitize_text("\x1b[31mEVIL\x1b[0m\u202e\u200bclean")
+    assert "\x1b" not in sanitized and "\u202e" not in sanitized and "\u200b" not in sanitized
+
+    # The published generation passes the validator…
+    validator = ReadModelValidator()
+    report = validator.validate(generation, manifest)
+    assert report.ok, report.errors
+    # …and a secret-shaped string in any artifact fails the generation closed.
+    graph_path = generation / "graph.json"
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    graph["nodes"][0]["summary"] = "api_key = 'sk-live-0123456789abcdef'"
+    graph_path.write_text(canonical_json(graph), encoding="utf-8")
+    tampered = dict(manifest)
+    tampered["artifacts"] = dict(manifest["artifacts"])
+    tampered["artifacts"]["graph.json"] = hashlib.sha256(graph_path.read_bytes()).hexdigest()
+    (generation / "manifest.json").write_text(canonical_json(tampered) + "\n", encoding="utf-8")
+    report = validator.validate(generation, tampered)
+    assert not report.ok
+    assert any("secret" in error.lower() for error in report.errors), report.errors
 
 
 def importlib_import(name: str):  # noqa: ANN201 - small local helper

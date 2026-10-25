@@ -124,6 +124,7 @@ _CONTENT_FIELDS = (
 
 class DiffOp(StrEnum):
     """Closed allowlist of diff operations a proposal may contain."""
+
     SET_SUMMARY = "set_summary"
     SET_SCOPE = "set_scope"
     SET_PAYLOAD_KEY = "set_payload_key"
@@ -354,9 +355,7 @@ def propose(
 def get_proposal(store: EventStore, proposal_id: str) -> ImprovementProposal | None:
     """Read back a persisted proposal from the immutable event log."""
     with store.read() as conn:
-        rows = conn.execute(
-            "SELECT payload_json FROM event_log WHERE kind = 'domain' ORDER BY event_seq"
-        ).fetchall()
+        rows = conn.execute("SELECT payload_json FROM event_log WHERE kind = 'domain' ORDER BY event_seq").fetchall()
     for row in rows:
         data = (json.loads(str(row["payload_json"])).get("payload") or {}).get("improvement_proposal")
         if isinstance(data, dict) and data.get("proposal_id") == proposal_id:
@@ -697,9 +696,7 @@ def rollback_improvement(
     restored_from = _revision_at(store, node_id, to_version)
     if restored_from is None:
         raise UnknownImprovement(f"node {node_id!r} has no revision {to_version}")
-    restored = restored_from.model_copy(
-        update={"updated_at": at, "lifecycle_status": LifecycleStatus.ROLLBACK}
-    )
+    restored = restored_from.model_copy(update={"updated_at": at, "lifecycle_status": LifecycleStatus.ROLLBACK})
     event = Event(
         kind=EventKind.NODE_UPSERT,
         node_id=node_id,

@@ -107,11 +107,7 @@ def sanitize_text(text: str, *, max_length: int = DEFAULT_MAX_TEXT_LENGTH) -> st
     """Strip control, bidi and zero-width characters; cap length, fail closed."""
     if len(text) > max_length:
         raise OversizedPayloadError(f"text of {len(text)} chars exceeds the {max_length}-char cap")
-    return "".join(
-        char
-        for char in text
-        if char in _KEEP_CONTROLS or unicodedata.category(char) not in ("Cc", "Cf")
-    )
+    return "".join(char for char in text if char in _KEEP_CONTROLS or unicodedata.category(char) not in ("Cc", "Cf"))
 
 
 # ---------------------------------------------------------------- redaction
@@ -326,9 +322,7 @@ def make_host_allowlist(allowlist: Sequence[str]) -> Callable[[str | None], bool
     return lambda host_header: host_allowed(host_header, pinned)
 
 
-def make_request_authorizer(
-    *, api_key: str | None, host_allowlist: Sequence[str]
-) -> Callable[[RequestView], None]:
+def make_request_authorizer(*, api_key: str | None, host_allowlist: Sequence[str]) -> Callable[[RequestView], None]:
     """Middleware factory: request -> allow, or raise a typed SecurityError."""
     pinned_key = api_key
     pinned_allowlist = tuple(host_allowlist)

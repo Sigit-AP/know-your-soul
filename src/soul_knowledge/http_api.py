@@ -303,9 +303,7 @@ _OPERATIONS: dict[str, _OpSpec] = {
 }
 
 
-def _journal_validation_failure(
-    stack: LocalStack, operation: str, raw: bytes, error: BaseException, actor: str
-) -> str:
+def _journal_validation_failure(stack: LocalStack, operation: str, raw: bytes, error: BaseException, actor: str) -> str:
     """Append the one completion audit record for adapter-rejected input."""
     invocation = Invocation.create(
         f"knowledge.{operation}",
@@ -548,17 +546,13 @@ def create_app(
         Route("/v1/ops/{operation}", ops, methods=["POST"]),
     ]
     app = Starlette(routes=routes)
-    return _BoundaryMiddleware(
-        app, api_key=api_key, host_allowlist=host_allowlist, max_body_bytes=max_body_bytes
-    )
+    return _BoundaryMiddleware(app, api_key=api_key, host_allowlist=host_allowlist, max_body_bytes=max_body_bytes)
 
 
 async def _handle(stack: LocalStack, operation: str, request: Request, max_body_bytes: int) -> Response:
     body = await request.body()
     if len(body) > max_body_bytes:
-        return _json_response(
-            error_envelope(PayloadTooLarge("request body exceeds the size cap")), status=413
-        )
+        return _json_response(error_envelope(PayloadTooLarge("request body exceeds the size cap")), status=413)
     actor = request.headers.get("x-actor", "operator")
     idempotency_key = request.headers.get("idempotency-key")
     try:

@@ -158,7 +158,12 @@ def test_zero_reliability_evidence_is_excluded() -> None:
 def test_context_relevance_scales_weight() -> None:
     good = make_item("e-a", correctness="1", outcome="1", context_tags=["python", "testing"])
     bad = make_item(
-        "e-b", correctness="0", outcome="-1", reproducibility="0", scope_fit="0", contradiction="1",
+        "e-b",
+        correctness="0",
+        outcome="-1",
+        reproducibility="0",
+        scope_fit="0",
+        contradiction="1",
         context_tags=["cooking"],
     )
     query = {"query_context_tags": ["python", "testing"]}
@@ -277,7 +282,12 @@ def test_depth_discount_reduces_weight() -> None:
     """q_j,d is divided by (1 + depth_j): deeper evidence weighs less."""
     good = make_item("e-a", correctness="1", outcome="1", node_id="n-root")
     bad = make_item(
-        "e-b", correctness="0", outcome="-1", reproducibility="0", scope_fit="0", contradiction="1",
+        "e-b",
+        correctness="0",
+        outcome="-1",
+        reproducibility="0",
+        scope_fit="0",
+        contradiction="1",
         node_id="n-child",
     )
     shallow_bad = run([good, bad], node_depths={"n-root": 0, "n-child": 0})
@@ -326,9 +336,7 @@ def test_p_above_gate_allows_g_when_m_and_e_are_nonzero() -> None:
 def test_m_is_not_raw_usage_frequency() -> None:
     """More uses do not raise M: bin eligibility and S(u) decide, not counts."""
     three_uses = run(_m_eligible_items(3))
-    six_uses_two_groups = run(
-        _correlated_copies("e-a", 6, independent=False)
-    )
+    six_uses_two_groups = run(_correlated_copies("e-a", 6, independent=False))
     assert six_uses_two_groups["m"] == "0.000000000000"  # 6 uses, 1 group: M=0
     assert Decimal(three_uses["m"]) > 0  # 3 uses, 3 groups: M>0
     # Doubling items within the same three groups leaves M unchanged.

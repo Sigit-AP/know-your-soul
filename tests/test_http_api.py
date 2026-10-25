@@ -154,9 +154,7 @@ def asgi_call(
 
 
 def _post(app: Any, path: str, payload: Any, **kwargs: Any) -> tuple[int, dict[str, Any]]:
-    status, _, body = asgi_call(
-        app, "POST", path, body=json.dumps(payload).encode("utf-8"), **kwargs
-    )
+    status, _, body = asgi_call(app, "POST", path, body=json.dumps(payload).encode("utf-8"), **kwargs)
     return status, json.loads(body.decode("utf-8"))
 
 
@@ -359,9 +357,7 @@ def test_malformed_json_gets_completion_audit(stack: Any) -> None:
 def test_unknown_field_gets_validation_audit(stack: Any) -> None:
     app = create_app(stack)
     before = _audit_count(stack.store)
-    status, out = _post(
-        app, "/v1/knowledge/query", {"purpose": "x", "token_budget": 512, "bogus_field": True}
-    )
+    status, out = _post(app, "/v1/knowledge/query", {"purpose": "x", "token_budget": 512, "bogus_field": True})
     assert status == 400
     assert out["error"]["code"] == "VALIDATION_ERROR"
     assert _audit_count(stack.store) == before + 1
@@ -420,14 +416,10 @@ def test_remote_client_requires_api_key(stack: Any) -> None:
     assert status == 401
     assert json.loads(body.decode("utf-8"))["error"]["code"] == "UNAUTHORIZED"
 
-    status, _, _ = asgi_call(
-        app, "GET", "/v1/health", client=remote, headers=[(b"x-api-key", b"wrong-key")]
-    )
+    status, _, _ = asgi_call(app, "GET", "/v1/health", client=remote, headers=[(b"x-api-key", b"wrong-key")])
     assert status == 401
 
-    status, _, _ = asgi_call(
-        app, "GET", "/v1/health", client=remote, headers=[(b"x-api-key", b"test-key-123")]
-    )
+    status, _, _ = asgi_call(app, "GET", "/v1/health", client=remote, headers=[(b"x-api-key", b"test-key-123")])
     assert status == 200
 
 

@@ -224,9 +224,7 @@ def test_cooldown_blocks_rapid_promotion() -> None:
 
 def test_cooldown_elapsed_allows_transition() -> None:
     old = NOW - (DEFAULT_REVIEW_POLICY.cooldown + timedelta(seconds=1))
-    decision = decide(
-        make_signal(p="0.90", uncertainty="0.30", qualifying_review_streak=3, last_transition_at=old)
-    )
+    decision = decide(make_signal(p="0.90", uncertainty="0.30", qualifying_review_streak=3, last_transition_at=old))
     assert decision.target_status == LifecycleStatus.READY_TO_PROMOTE
     assert decision.transitioned is True
 

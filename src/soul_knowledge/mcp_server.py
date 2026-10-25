@@ -351,9 +351,7 @@ def _validate_object(context: str, schema: Mapping[str, Any], value: Mapping[str
         raise ToolError("INVALID_ARGUMENTS", f"property {context!r}: unknown properties: {', '.join(unknown)}")
     missing = [key for key in schema.get("required", []) if key not in value]
     if missing:
-        raise ToolError(
-            "INVALID_ARGUMENTS", f"property {context!r}: missing required properties: {', '.join(missing)}"
-        )
+        raise ToolError("INVALID_ARGUMENTS", f"property {context!r}: missing required properties: {', '.join(missing)}")
     for key, item in value.items():
         _check_property(f"{context}.{key}", item, properties[str(key)])
 
@@ -439,7 +437,7 @@ class _Adapter:
         """
         try:
             canonical = canonical_json(arguments) if isinstance(arguments, (dict, list)) else "null"
-        except (TypeError, ValueError):  # pragma: no cover - defensive
+        except TypeError, ValueError:  # pragma: no cover - defensive
             canonical = "null"
         invocation = Invocation.create(
             operation,
@@ -629,7 +627,7 @@ class _Adapter:
                     decided_at=datetime.fromisoformat(decided_at) if decided_at else datetime.now(UTC),
                     note=approval_arg.get("note", ""),
                 )
-            except (ValidationError, ValueError):
+            except ValidationError, ValueError:
                 raise ToolError("INVALID_ARGUMENTS", "property 'approval': invalid approval record") from None
         receipt = self._service.apply_improvement(
             proposal_id=args["proposal_id"],
@@ -730,9 +728,7 @@ class _Adapter:
         text = canonical_json(payload)
         size = len(text.encode("utf-8"))
         if size > self._resource_max_bytes:
-            raise MCPError(
-                types.INVALID_PARAMS, f"resource {uri!r} exceeds the {self._resource_max_bytes}-byte cap"
-            )
+            raise MCPError(types.INVALID_PARAMS, f"resource {uri!r} exceeds the {self._resource_max_bytes}-byte cap")
         return types.ReadResourceResult(
             contents=[types.TextResourceContents(uri=uri, mime_type="application/json", text=text)]
         )

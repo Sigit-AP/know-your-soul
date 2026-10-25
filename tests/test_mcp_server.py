@@ -381,9 +381,7 @@ def test_server_requires_an_existing_graph_root(tmp_path: Path) -> None:
 def _mask(payload: Any) -> Any:
     """Strip per-invocation values (audit ids, recommendation expiries)."""
     if isinstance(payload, dict):
-        return {
-            key: _mask(value) for key, value in payload.items() if key not in {"audit_event_id", "expiry"}
-        }
+        return {key: _mask(value) for key, value in payload.items() if key not in {"audit_event_id", "expiry"}}
     if isinstance(payload, list):
         return [_mask(item) for item in payload]
     return payload

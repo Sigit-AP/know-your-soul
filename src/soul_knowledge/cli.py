@@ -128,9 +128,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     stack = build_stack(args.store, args.output_root)
     try:
-        result = dispatch_text(
-            stack, command, payload_text, actor=args.actor, idempotency_key=args.idempotency_key
-        )
+        result = dispatch_text(stack, command, payload_text, actor=args.actor, idempotency_key=args.idempotency_key)
     except AdapterValidationError as error:
         _print_error(error)
         return 2

@@ -82,9 +82,7 @@ class MetricsRegistry:
             counters = sorted(self._counters.items())
             gauges = sorted(self._gauges.items())
         return {
-            "counters": [
-                {"name": name, "labels": dict(labels), "value": value} for (name, labels), value in counters
-            ],
+            "counters": [{"name": name, "labels": dict(labels), "value": value} for (name, labels), value in counters],
             "gauges": [{"name": name, "labels": dict(labels), "value": value} for (name, labels), value in gauges],
         }
 
