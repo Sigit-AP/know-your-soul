@@ -23,15 +23,24 @@ JSON payload (sorted keys, compact separators, UTF-8). Parity with the frozen
 fixtures in ``tests/fixtures/token_budget_cases.json`` is enforced by
 ``check`` and by ``tests/test_acceptance_e2e.py``.
 
-Quality gate (Opsi C, gate contract 2.0.0 — see docs/recovery/ and
+Quality gate (Opsi C, gate contract 2.1.0 — see docs/recovery/ and
 ``bench/README.md``): a case is accepted iff its quality reaches the
 per-case COMPLIANT CEILING — the maximum rubric coverage any
 contract-compliant response can deliver for that case — and the quality
 floor. The ceiling is computed from the real projected graph artifact
 (never hardcoded), so it rises automatically when enrichment improves.
-The raw-corpus baseline (quality 1.0, full corpus tokens) is still
-reported per case as ``gap_vs_raw_read`` — the recalibration changes what
-the gate *accepts*, never what it *measures*.
+Gate 2.1.0 (Ruling Q03) additionally restricts ceiling candidates to
+nodes reachable under the single-root routing contract: the subtree of
+the case's ``expected_primary_domain`` root, plus the subtree of any root
+the deterministic router actually selected for the case. A ceiling the
+old formula (2.0.0, kept verbatim in the ledger) computed from cross-root
+node sets no compliant single-root response can assemble is lowered to
+the routing-feasible maximum and annotated (``ceiling_routing_note``);
+when the routing-feasible maximum equals the unrestricted value, the
+2.0.0 record stands byte-identical. The raw-corpus baseline (quality 1.0,
+full corpus tokens) is still reported per case as ``gap_vs_raw_read`` —
+the recalibration changes what the gate *accepts*, never what it
+*measures*.
 """
 
 from __future__ import annotations
@@ -64,13 +73,23 @@ MIN_TOKEN_BUDGET = 128
 ACCESS_ONLY_CAP = 160
 DEFAULT_REPEATS = 5
 QUALITY_FLOOR = 0.6
-# Gate contract 2.0.0 (Opsi C). Float tolerance for ratio comparisons.
+# Gate contract 2.1.0 (Opsi C + Ruling Q03). Float tolerance for ratio
+# comparisons.
 CEILING_EPSILON = 1e-9
 # Exact subset maximization of the compliant ceiling up to this many source
 # nodes per case; beyond it a deterministic greedy fallback is used.
 CEILING_EXACT_MAX_NODES = 12
 
-GATE_VERSION = "2.0.0"
+# Gate 2.1.0 (Ruling Q03): the compliant ceiling must be achievable by a
+# compliant SINGLE-ROOT response, so ceiling candidates are restricted to
+# the subtrees of the roots the routing contract designates for the case
+# (the expected primary domain, plus any root the deterministic router
+# actually selected). When that routing-feasible maximum equals the
+# unrestricted (gate 2.0.0) ceiling value, the 2.0.0 record stands
+# byte-identical; when it is lower, the ceiling is lowered and annotated.
+VACUOUS_CEILING_NOTE = "vacuous: rubric unreachable under expected routing (case-design debt)"
+
+GATE_VERSION = "2.1.0"
 
 PRIMARY_DOMAINS = ("P1", "P2", "P3", "P4", "P5", "P6", "P7")
 
@@ -344,13 +363,18 @@ def _ceiling_payload(nodes: list[dict[str, Any]], source_files: list[str]) -> di
 def compliant_ceiling(
     case: dict[str, Any],
     graph_nodes: list[dict[str, Any]],
+    *,
+    allowed_ids: set[str] | None = None,
 ) -> dict[str, Any]:
-    """Per-case COMPLIANT CEILING (gate contract 2.0.0, Opsi C).
+    """Per-case COMPLIANT CEILING (gate contract 2.1.0, Opsi C).
 
     Definition: the maximum ``rubric_score`` obtainable by any subset *S* of
     the projected-graph nodes whose ``source_file`` is one of the case's
     ``source_files``, when *S* is packed into a contract-shaped response
     payload (``_ceiling_payload``) that fits the case's ``token_budget``.
+    When *allowed_ids* is given, candidates are additionally restricted to
+    those node ids (used by the gate 2.1.0 single-root routing-feasibility
+    constraint; ``None`` reproduces the gate 2.0.0 formula exactly).
 
     Everything is derived from the real projection artifact — node labels are
     the enriched summaries the system is actually allowed to publish — so the
@@ -364,6 +388,8 @@ def compliant_ceiling(
     budget = int(case.get("token_budget", 1024))
     wanted = set(source_files)
     nodes = [node for node in graph_nodes if node.get("source_file") in wanted]
+    if allowed_ids is not None:
+        nodes = [node for node in nodes if node["id"] in allowed_ids]
     nodes.sort(key=lambda node: node["id"])  # deterministic order
 
     def score_of(subset: tuple[int, ...]) -> float:
@@ -421,6 +447,86 @@ def compliant_ceiling(
         "ceiling_estimated_tokens": tokens_of(best_subset),
         "source_node_count": len(nodes),
     }
+
+
+def _root_subtree_node_ids(links: list[dict[str, Any]], root_id: str) -> set[str]:
+    """Node ids reachable from *root_id* via ``parent_of`` edges (inclusive).
+
+    The projected graph is a strict ``parent_of`` tree rooted at the primary
+    domains, so this set is exactly the node population a compliant
+    single-root response routed to *root_id* may assemble results from
+    (frozen Task 4 service contract: results come only from the selected
+    root's traversal subtree).
+    """
+    children: dict[str, list[str]] = {}
+    for link in links:
+        if link.get("relation") == "parent_of":
+            children.setdefault(str(link.get("source")), []).append(str(link.get("target")))
+    seen: set[str] = set()
+    stack = [root_id]
+    while stack:
+        current = stack.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        stack.extend(children.get(current, ()))
+    return seen
+
+
+def routing_feasible_ceiling(
+    case: dict[str, Any],
+    graph: dict[str, Any],
+    routed_domains: list[str],
+) -> dict[str, Any]:
+    """Gate 2.1.0 ceiling: the gate 2.0.0 ceiling under Ruling Q03.
+
+    Ruling Q03 (controller, 2026-10-25, progress.md): the compliant ceiling
+    must respect BOTH contract bounds — (1) the compliant payload (budget, no
+    raw text) and (2) the case's routing expectation (a single routed root;
+    results assembled only from that root's subtree). A ceiling computed from
+    a cross-root node set overestimates what a compliant system can deliver.
+
+    Feasibility set: the union of the subtrees of (a) the case's
+    ``expected_primary_domain`` root and (b) every root the deterministic
+    router actually selected for this case (*routed_domains*). Both are
+    legitimate routing designations for the case — the case-design intent and
+    the frozen coverage-dominance router's decision — so the ceiling stays
+    the maximum a compliant response *as this case is actually routed* can
+    achieve. Only the routing decision is consulted here, never the measured
+    quality, so the gate standard cannot be gamed by the response itself.
+
+    When the routing-feasible maximum equals the unrestricted (2.0.0) value,
+    the 2.0.0 record is returned byte-identical — the correction only ever
+    lowers ceilings that no compliant single-root response can reach, and
+    annotates them via ``ceiling_routing_note``.
+    """
+    links = graph.get("links", [])
+    unrestricted = compliant_ceiling(case, graph["nodes"])
+    expected = case["expected_primary_domain"]
+    expected_ids = _root_subtree_node_ids(links, expected)
+    expected_max = compliant_ceiling(case, graph["nodes"], allowed_ids=expected_ids)
+    allowed = set(expected_ids)
+    for domain in routed_domains:
+        allowed |= _root_subtree_node_ids(links, domain)
+    feasible = expected_max if allowed == expected_ids else compliant_ceiling(case, graph["nodes"], allowed_ids=allowed)
+    if feasible["quality_ceiling"] >= unrestricted["quality_ceiling"] - CEILING_EPSILON:
+        # The 2.0.0 ceiling is already achievable under the routing contract:
+        # return its record byte-identical, plus informational notes only.
+        result = dict(unrestricted)
+        if expected_max["quality_ceiling"] < unrestricted["quality_ceiling"] - CEILING_EPSILON:
+            result["ceiling_routing_note"] = (
+                "ceiling feasible only via the router's actual domain choice outside the "
+                "expected primary domain (case-design debt: routing-expectation mismatch)"
+            )
+        return result
+    result = dict(feasible)
+    result["ceiling_method"] = feasible["ceiling_method"] + "+single-root"
+    result["ceiling_unrestricted"] = unrestricted["quality_ceiling"]
+    if expected_max["quality_ceiling"] <= CEILING_EPSILON:
+        result["ceiling_routing_note"] = VACUOUS_CEILING_NOTE
+    else:
+        result["ceiling_routing_note"] = "ceiling lowered to the single-root routing-feasible maximum"
+    return result
 
 
 # ------------------------------------------------------------- system adapter
@@ -505,11 +611,21 @@ def run_benchmark(repeats: int) -> int:
             "gate_version": GATE_VERSION,
             "rule": (
                 "accepted iff quality_system >= quality_ceiling (per-case compliant ceiling, "
-                "epsilon 1e-9) AND quality_system >= quality_floor_applied "
-                "(min(QUALITY_FLOOR, quality_ceiling))"
+                "single-root routing-feasible, epsilon 1e-9) AND quality_system >= "
+                "quality_floor_applied (min(QUALITY_FLOOR, quality_ceiling))"
             ),
             "quality_floor": QUALITY_FLOOR,
             "ceiling_definition": (
+                "max rubric_score over subsets of projected-graph nodes whose source_file is in "
+                "the case's source_files, packed into a contract-shaped response payload within "
+                "the case token_budget, with candidates restricted to nodes reachable under the "
+                "single-root routing contract (Ruling Q03): the subtree of the case's "
+                "expected_primary_domain root plus the subtree of every root the deterministic "
+                "router actually selected for the case; when this routing-feasible maximum "
+                "equals the gate 2.0.0 value, the 2.0.0 record stands byte-identical; computed "
+                "from the live projection artifact, never hardcoded"
+            ),
+            "ceiling_definition_2.0.0": (
                 "max rubric_score over subsets of projected-graph nodes whose source_file is in "
                 "the case's source_files, packed into a contract-shaped response payload within "
                 "the case token_budget; computed from the live projection artifact, never hardcoded"
@@ -559,7 +675,6 @@ def run_benchmark(repeats: int) -> int:
 
         all_passed = True
         for case in cases:
-            ceiling = compliant_ceiling(case, graph["nodes"])
             latencies: list[float] = []
             last_response: Any = None
             for _ in range(repeats):
@@ -570,6 +685,13 @@ def run_benchmark(repeats: int) -> int:
             system_tokens = estimate_tokens_of_payload(payload)
             answer_text = json.dumps(payload, ensure_ascii=False)
             quality_system = rubric_score(case["rubric_terms"], answer_text)
+            # Gate 2.1.0 (Ruling Q03): the ceiling is computed against the
+            # roots the routing contract designates for this case — the
+            # expected primary domain plus the domains the deterministic
+            # router actually selected. Routing only, never quality, feeds
+            # the ceiling, so the response cannot relax its own standard.
+            routed_domains = sorted({str(r.get("domain")) for r in payload.get("results", [])})
+            ceiling = routing_feasible_ceiling(case, graph, routed_domains)
             quality_baseline = ledger["baseline"]["quality"]
             quality_ceiling = ceiling["quality_ceiling"]
             # The floor can never demand more than the achievable maximum: a
@@ -580,41 +702,48 @@ def run_benchmark(repeats: int) -> int:
             quality_floor_applied = min(QUALITY_FLOOR, quality_ceiling)
             below_ceiling = quality_system < quality_ceiling - CEILING_EPSILON
             below_floor = quality_system < quality_floor_applied - CEILING_EPSILON
-            # Gate 2.0.0 (Opsi C): a token saving never excuses falling short
-            # of what a contract-compliant response can deliver — a case that
-            # loses against its per-case compliant ceiling is rejected even
-            # when it saves tokens.
+            # Gate 2.1.0 (Opsi C + Ruling Q03): a token saving never excuses
+            # falling short of what a contract-compliant response can deliver
+            # — a case that loses against its per-case compliant ceiling is
+            # rejected even when it saves tokens.
             if below_ceiling or below_floor:
                 verdict = "rejected"
                 all_passed = False
             else:
                 verdict = "accepted"
-            ledger["cases"].append(
-                {
-                    "id": case["id"],
-                    "expected_primary_domain": case["expected_primary_domain"],
-                    "status": "measured",
-                    "latency_ms": {
-                        "p50": percentile(latencies, 50),
-                        "p95": percentile(latencies, 95),
-                        "samples": latencies,
-                    },
-                    "system_estimated_tokens": system_tokens,
-                    "baseline_estimated_tokens": baseline_tokens,
-                    "token_saving_ratio": round(1.0 - system_tokens / baseline_tokens, 6),
-                    "quality_system": round(quality_system, 6),
-                    "quality_baseline": quality_baseline,
-                    "gap_vs_raw_read": round(quality_baseline - quality_system, 6),
-                    "quality_ceiling": quality_ceiling,
-                    "ceiling_method": ceiling["ceiling_method"],
-                    "ceiling_node_ids": ceiling["ceiling_node_ids"],
-                    "ceiling_estimated_tokens": ceiling["ceiling_estimated_tokens"],
-                    "quality_floor_applied": round(quality_floor_applied, 6),
-                    "ceiling_below_floor": quality_ceiling < QUALITY_FLOOR - CEILING_EPSILON,
-                    "quality_regression": below_ceiling,
-                    "verdict": verdict,
-                }
-            )
+            case_entry = {
+                "id": case["id"],
+                "expected_primary_domain": case["expected_primary_domain"],
+                "status": "measured",
+                "latency_ms": {
+                    "p50": percentile(latencies, 50),
+                    "p95": percentile(latencies, 95),
+                    "samples": latencies,
+                },
+                "system_estimated_tokens": system_tokens,
+                "baseline_estimated_tokens": baseline_tokens,
+                "token_saving_ratio": round(1.0 - system_tokens / baseline_tokens, 6),
+                "quality_system": round(quality_system, 6),
+                "quality_baseline": quality_baseline,
+                "gap_vs_raw_read": round(quality_baseline - quality_system, 6),
+                "quality_ceiling": quality_ceiling,
+                "ceiling_method": ceiling["ceiling_method"],
+                "ceiling_node_ids": ceiling["ceiling_node_ids"],
+                "ceiling_estimated_tokens": ceiling["ceiling_estimated_tokens"],
+                "ceiling_routed_domains": routed_domains,
+                "quality_floor_applied": round(quality_floor_applied, 6),
+                "ceiling_below_floor": quality_ceiling < QUALITY_FLOOR - CEILING_EPSILON,
+                "quality_regression": below_ceiling,
+                "verdict": verdict,
+            }
+            # Gate 2.1.0 transparency: when the single-root routing
+            # constraint changed (or narrowly did not change) the ceiling,
+            # the ledger says so explicitly, next to the 2.0.0 value.
+            if "ceiling_unrestricted" in ceiling:
+                case_entry["ceiling_unrestricted_2.0.0"] = ceiling["ceiling_unrestricted"]
+            if ceiling.get("ceiling_routing_note"):
+                case_entry["ceiling_routing_note"] = ceiling["ceiling_routing_note"]
+            ledger["cases"].append(case_entry)
 
     ledger["status"] = "ok" if all_passed else "failed"
     rejected = [case["id"] for case in ledger["cases"] if case.get("verdict") == "rejected"]
@@ -622,6 +751,11 @@ def run_benchmark(repeats: int) -> int:
     out = RESULTS_DIR / f"ledger-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.json"
     out.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"run: {ledger['status'].upper()}; ledger -> {out}")
+    annotated = [
+        (case["id"], case["ceiling_routing_note"]) for case in ledger["cases"] if case.get("ceiling_routing_note")
+    ]
+    for cid, note in annotated:
+        print(f"run: note {cid}: {note}")
     if rejected:
         print(f"run: rejected ({len(rejected)}/{len(cases)}): {', '.join(rejected)}")
     return 0 if all_passed else 1
