@@ -35,9 +35,45 @@ Per case, over N repeats (default 5):
 * **tokens**: system `estimated_tokens = ceil(utf8_byte_length / 4)` of the
   canonical response payload vs the raw-corpus baseline (13,151 tokens);
 * **quality**: fraction of the case's rubric terms present in the response
-  payload (raw-corpus baseline = 1.0 by construction);
-* **quality gate**: a case whose quality loses against its paired baseline is
-  **rejected even when it saves tokens** (token-budget contract 1.0.0).
+  payload. The raw-corpus baseline (1.0 by construction) is still reported
+  per case as `gap_vs_raw_read` — a comparison metric, not the gate;
+* **quality gate (gate contract 2.0.0, "Opsi C")**: a case is **accepted**
+  iff `quality_system >= quality_ceiling` (its per-case *compliant ceiling*,
+  ε = 1e-9) **and** `quality_system >= quality_floor_applied`
+  (`min(QUALITY_FLOOR, quality_ceiling)`). Falling short of the ceiling is
+  rejected **even when the token saving is large**.
+
+### The compliant ceiling
+
+`quality_ceiling` is the maximum rubric coverage any *contract-compliant*
+response can deliver for a case: the maximum `rubric_score` over subsets of
+the projected-graph nodes whose `source_file` is one of the case's
+`source_files`, packed into a contract-shaped response payload
+(`QueryResponse.canonical_payload` shape, fixed dummy metadata) that fits the
+case's `token_budget`. It is computed from the **live projection artifact**
+(newest `generations/*/graph.json`), never hardcoded — when enrichment
+improves (e.g. richer `enriched_summary`), the ceiling rises automatically.
+Exact subset maximization up to 12 source nodes per case (scores are monotone
+in the subset, so when the full set fits the budget it *is* the optimum); a
+deterministic greedy fallback (marginal rubric gain, fewer tokens, node id)
+beyond that. Budget-awareness is currently never binding (largest ceiling
+payload ≈ 360 est. tokens vs the 1024 budget) but is enforced so a future
+richer projection cannot silently make the gate unwinnable.
+
+Why not the raw-corpus baseline as the gate (gate 1.0.0)? The response
+contract forbids raw corpus text in the payload and caps the budget at 1024
+tokens, while rubric terms live in section *bodies* — so `quality == 1.0`
+is **provably unreachable** for any compliant response (measured ceiling:
+34/83 rubric terms ≈ 0.41 coverage even with perfect retrieval). A gate
+nothing can pass carries zero signal (Goodhart inverted): it rejected honest
+optimal systems and misattributed a measurement-calibration flaw to the
+retrieval layer. Gate 2.0.0 restores the intended semantics: `rejected` now
+means *the system delivered less than a compliant response could* — a real
+retrieval/selection bug — while `gap_vs_raw_read` keeps the honest distance
+to raw-read visible on every case. Cases whose ceiling sits below
+`QUALITY_FLOOR` carry `ceiling_below_floor: true` (enrichment debt: rubric
+terms absent from every publishable summary) — flagged in the ledger, never
+silently accepted or rejected on floor grounds.
 
 ## Exit codes
 

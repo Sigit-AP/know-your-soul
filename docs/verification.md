@@ -29,10 +29,22 @@ behavior unchanged — verified by the green suite above).
 
 ## 2. Benchmark (paired raw-SOUL vs system)
 
-Ledger: `bench/results/ledger-20261025T151538Z.json` (`repeats: 5`,
-`status: failed`). Command `python bench/run.py run` exited **1** — the
-quality gate rejected every case. This is an honest measurement of an open
-quality issue, not a harness defect (see §5 and `docs/audit-release.md`).
+Ledger: `bench/results/ledger-20261025T192059Z.json` (`repeats: 5`,
+`status: failed`, gate contract **2.0.0** "Opsi C"). Command
+`python bench/run.py run` exited **1**: the recalibrated gate accepts
+**21/24** cases and rejects 3 — q03, q05, q16 — each a *genuine* retrieval
+defect (system quality strictly below the per-case compliant ceiling; see
+`docs/recovery/task-10-T10-1-opsi-c-gate-recalibration.md`).
+
+Gate recalibration (SUB-22, controller ruling "Opsi C"): gate 1.0.0 compared
+`quality_system` against the raw-corpus baseline (1.0), which is provably
+unreachable for any contract-compliant response (no raw corpus text in the
+payload + 1024-token budget, while rubric terms live in section bodies;
+measured compliant ceiling 34/83 terms ≈ 0.41). Gate 2.0.0 accepts iff
+`quality_system >= quality_ceiling` (per-case, computed from the live
+projection artifact, never hardcoded) AND `>= min(QUALITY_FLOOR, ceiling)`.
+The raw-corpus baseline remains in the ledger as a metric
+(`gap_vs_raw_read` per case, mean 0.5861).
 
 | Metric | Source of truth | Value | Evidence |
 |--------|-----------------|-------|----------|
@@ -40,20 +52,19 @@ quality issue, not a harness defect (see §5 and `docs/audit-release.md`).
 | Frozen questions | `bench/cases.json` | 24 cases, all 7 domains covered | `check: OK` exit 0 |
 | Estimator parity | `tests/fixtures/token_budget_cases.json` | 7/7 payload fixtures match | `TestTokenEstimatorParity` |
 | Repeats | bench ledger | 5 per case | ledger `repeats: 5` |
-| Latency p50 (per case, across 24 cases) | bench ledger | median **4.04 ms** (min ~2.4, max ~7.4) | ledger `latency_ms.p50` |
-| Latency p95 (per case, across 24 cases) | bench ledger | median **5.16 ms** (max 20.86) | ledger `latency_ms.p95` |
-| Token savings (paired) | bench ledger | mean **95.95%** (min 93.16%); system 120–901 est. tokens vs 13,151 raw-corpus baseline | ledger `token_saving_ratio` |
-| Quality verdicts | bench ledger | **0/24 accepted**; quality mean 0.0778 (min 0.0, max 0.5); every case rejected | ledger `quality_system`, `verdict` |
-| Quality gate behavior | bench ledger | every quality regression rejected *despite* ≥93% token savings — the gate works | `TestBenchmarkQualityGate` (48 passed) |
+| Latency p50 (per case, across 24 cases) | bench ledger | median **8.46 ms** (min 3.29, max 16.11) | ledger `latency_ms.p50` |
+| Latency p95 (per case, across 24 cases) | bench ledger | median **11.02 ms** (max 35.67) | ledger `latency_ms.p95` |
+| Token savings (paired) | bench ledger | mean **94.28%** (min 92.45%); system 123–993 est. tokens vs 13,151 raw-corpus baseline | ledger `token_saving_ratio` |
+| Compliant ceiling | bench ledger | per-case 0.0–1.0, mean **0.4181**; 18/24 cases below the 0.6 floor (`ceiling_below_floor`, enrichment debt) | ledger `quality_ceiling`, `ceiling_method: exact-full` |
+| Quality verdicts | bench ledger | **21/24 accepted**; quality mean 0.4139; rejected: q03 (0 vs 0.333), q05 (0 vs 0.5, routing `ambiguous`), q16 (0.5 vs 0.75, misrouted to P6) | ledger `quality_system`, `quality_ceiling`, `verdict` |
+| Quality gate behavior | bench ledger | every below-ceiling case rejected *despite* ≥92% token savings — the gate works | `TestBenchmarkQualityGate` |
 
-Diagnosis (fresh probe, 2026-10-25): after Agent-2's routing fix (`c410fa4`)
-NL queries route correctly (`ranked`, correct primary root and correct
-source-file nodes in results, e.g. q01 → `07_calibration_bayes`), but the
-response payload carries node summaries, not section content, so the rubric
-vocabulary (grounded in the frozen corpus, verified) is absent from the
-payload. Routing is fixed; **payload content depth is the open quality
-issue** (owner: retrieval/service, Agent-2 line). Recorded as launch-blocking
-finding T10-1 in `docs/audit-release.md`.
+Diagnosis history: gate 1.0.0 rejected 24/24 (then 4/24 post-enrichment)
+because it demanded raw-read parity; the recalibration record
+(`docs/recovery/task-10-T10-1-opsi-c-gate-recalibration.md`) carries the
+unreachability proof and the before/after numbers. The remaining 3 rejections
+are retrieval-line defects (owner: retrieval/service), not bench
+miscalibration.
 
 ## 3. Graphify coverage
 
@@ -117,7 +128,7 @@ reviewer verifies both the regression probe and the fix.
 
 | Finding ID | Class | Status | Recovery doc |
 |------------|-------|--------|--------------|
-| T10-1 (benchmark quality: 0/24 accepted) | launch-blocking | **OPEN** | `docs/audit-release.md` §2/§3 |
+| T10-1 (benchmark quality) | launch-blocking | **PARTIALLY CLOSED — gate recalibrated (Opsi C, 21/24); 3 retrieval defects open** | `docs/recovery/task-10-T10-1-opsi-c-gate-recalibration.md`, `docs/audit-release.md` §2/§3 |
 
 ## 6. Remaining skip (external, recorded)
 

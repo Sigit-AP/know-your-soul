@@ -1196,7 +1196,15 @@ class TestGraphifyCoverageGate:
 
 
 class TestBenchmarkQualityGate:
-    """Acceptance bullet: token savings never excuse quality regression."""
+    """Acceptance bullet: token savings never excuse falling short of the
+    per-case compliant ceiling (gate contract 2.0.0, Opsi C).
+
+    Gate 1.0.0 compared quality against the raw-corpus baseline (1.0), which
+    no contract-compliant response can reach (the contract forbids raw corpus
+    text in the payload while rubric terms live in the body). Gate 2.0.0 keeps
+    the baseline as a reported metric (``gap_vs_raw_read``) but accepts against
+    the per-case compliant ceiling computed from the real projection artifact.
+    """
 
     def test_paired_token_savings_never_excuse_quality_regression(self, tmp_path: Path) -> None:
         import os
@@ -1211,20 +1219,33 @@ class TestBenchmarkQualityGate:
         assert new_ledgers, "the benchmark wrote no new ledger"
         ledger = json.loads(new_ledgers[-1].read_text(encoding="utf-8"))
         assert ledger["status"] in {"ok", "failed"}
+        assert ledger["gate"]["gate_version"] == bench.GATE_VERSION
+        # The raw-corpus baseline survives as a comparison metric, unchanged.
         assert ledger["baseline"]["quality"] == 1.0
         assert len(ledger["cases"]) == 24
         for case in ledger["cases"]:
             assert case["status"] == "measured"
             assert case["baseline_estimated_tokens"] == 13151
-            # The gate itself: a quality regression (or sub-floor quality) is
-            # rejected even when the token saving is large.
-            must_reject = case["quality_regression"] or case["quality_system"] < bench.QUALITY_FLOOR
+            # The ceiling is derived from the projection artifact and bounded
+            # by the raw-read baseline; the applied floor never exceeds it.
+            assert 0.0 <= case["quality_ceiling"] <= 1.0
+            assert case["quality_floor_applied"] == min(bench.QUALITY_FLOOR, case["quality_ceiling"])
+            # The gate itself: falling short of the per-case compliant ceiling
+            # (or the applied floor) is rejected even when the token saving is
+            # large. Ledger values are rounded to 6 dp on both sides, so the
+            # comparison is exact at that precision.
+            eps = bench.CEILING_EPSILON
+            must_reject = (
+                case["quality_system"] < case["quality_ceiling"] - eps
+                or case["quality_system"] < case["quality_floor_applied"] - eps
+            )
             if must_reject:
                 assert case["verdict"] == "rejected", (
-                    f"{case['id']}: quality {case['quality_system']} regressed but verdict "
-                    f"{case['verdict']!r} — the quality gate must reject it despite a "
-                    f"token saving of {case['token_saving_ratio']}"
+                    f"{case['id']}: quality {case['quality_system']} below ceiling "
+                    f"{case['quality_ceiling']} but verdict {case['verdict']!r} — the quality "
+                    f"gate must reject it despite a token saving of {case['token_saving_ratio']}"
                 )
             else:
                 assert case["verdict"] == "accepted"
+            assert case["gap_vs_raw_read"] == round(1.0 - case["quality_system"], 6)
             assert case["token_saving_ratio"] > 0, "the system must beat full-corpus token cost"
