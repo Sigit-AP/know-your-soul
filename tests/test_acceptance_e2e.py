@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import argparse
 import ast
-import hashlib
 import importlib.metadata
 import importlib.util
 import json
@@ -651,15 +650,14 @@ class TestRollback:
         (tmp_path / "relearn").mkdir()
         fx = RelearnFixture(tmp_path / "relearn")
         offer = fx.make_offer()
-        fx.engine.checkpoint()
-        pre_db_hash = hashlib.sha256(fx.db_path.read_bytes()).hexdigest()
-        pre_graph_bytes = (fx.generation / "gen-1" / "graph.json").read_bytes()
+        pre_graph_bytes = (fx.generation / "generations" / "gen-1" / "graph.json").read_bytes()
         pre_audit_count = fx.store.audit_event_count()
         receipt = fx.engine.apply("RESET", approve(offer.offer_id, "RESET"), at=NOW)
         rollback = fx.engine.rollback(receipt.relearn_id, actor="operator")
         assert rollback.verified is True
-        assert rollback.restored_db_sha256 == pre_db_hash
-        assert (fx.generation / "gen-1" / "graph.json").read_bytes() == pre_graph_bytes
+        sqlite_artifact = next(a for a in receipt.backup.artifacts if a.kind == "sqlite")
+        assert rollback.restored_db_sha256 == sqlite_artifact.sha256
+        assert (fx.generation / "generations" / "gen-1" / "graph.json").read_bytes() == pre_graph_bytes
         reopened = EventStore(fx.db_path)
         try:
             assert reopened.audit_event_count() == pre_audit_count + 1

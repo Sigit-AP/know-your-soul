@@ -29,7 +29,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Callable
+import time
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -37,7 +38,7 @@ from soul_knowledge.domain import storage_payload
 from soul_knowledge.events import AuditReceipt, Invocation, InvocationJournal, InvocationOutcome
 from soul_knowledge.store import EventStore, StoreError
 
-__all__ = ["AuditLog", "UnknownInvocation"]
+__all__ = ["AuditLog", "UnknownInvocation", "failure_outcome", "success_outcome"]
 
 
 class UnknownInvocation(StoreError):
@@ -46,6 +47,50 @@ class UnknownInvocation(StoreError):
 
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def success_outcome(
+    invocation: Invocation,
+    started: float,
+    *,
+    result_references: Mapping[str, Any] | None = None,
+    projection_outcome: str = "appended",
+    linked_domain_event_id: str | None = None,
+) -> InvocationOutcome:
+    """The spec 7.7 success outcome for one mutation-path final audit.
+
+    Every final audit carries outcome/result references, the projection
+    outcome, the measured duration and the correlation ID (the invocation id,
+    mirroring the read-path ``KnowledgeService._finish_success``). *started* is
+    a ``time.monotonic()`` reading taken when the invocation began.
+    """
+    return InvocationOutcome(
+        status="success",
+        result_references=result_references or {},
+        projection_outcome=projection_outcome,
+        duration_ms=int((time.monotonic() - started) * 1000),
+        correlation_id=invocation.invocation_id,
+        linked_domain_event_id=linked_domain_event_id,
+    )
+
+
+def failure_outcome(
+    invocation: Invocation,
+    started: float,
+    error: BaseException,
+    *,
+    projection_outcome: str = "skipped",
+    linked_domain_event_id: str | None = None,
+) -> InvocationOutcome:
+    """The spec 7.7 failure outcome: typed error plus the same chain fields."""
+    return InvocationOutcome(
+        status="failure",
+        error=f"{type(error).__name__}: {error}",
+        projection_outcome=projection_outcome,
+        duration_ms=int((time.monotonic() - started) * 1000),
+        correlation_id=invocation.invocation_id,
+        linked_domain_event_id=linked_domain_event_id,
+    )
 
 
 class AuditLog:

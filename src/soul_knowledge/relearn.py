@@ -7,10 +7,12 @@ frozen contract ``docs/contracts/relearn-contract.md``.
   deterministic :class:`~soul_knowledge.source_registry.RelearnOffer` and sets
   ``RELEARN_PENDING``. The engine never chooses a mode; without an explicit
   :class:`RelearnApproval` nothing changes.
-* ``apply`` first takes a **verified atomic backup** (SQLite after a WAL
-  checkpoint, the generation directory, the scoring-contract version — staged
-  in a temp directory, hash-verified, activated with one rename), then applies
-  the mode inside a single mutation transaction:
+* ``apply`` first takes a **verified atomic backup** (SQLite through the
+  online backup API, the ``CURRENT`` pointer, the generation directory
+  hash-verified against the projection manifest, the scoring-contract
+  version — staged in a temp directory and activated with one rename via
+  :func:`soul_knowledge.backup.backup_protected_artifacts`), then applies the
+  mode inside a single mutation transaction:
 
   - RESET quarantines every evidence item of the old versions; the receipt
     states the zero vector (P=M=E=0, U=1, level 1) and promotion is blocked
@@ -35,15 +37,17 @@ import json
 import os
 import shutil
 import sqlite3
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from soul_knowledge.audit import AuditLog
+from soul_knowledge.audit import AuditLog, failure_outcome, success_outcome
+from soul_knowledge.backup import backup_protected_artifacts
 from soul_knowledge.domain import Event, EventKind, PrimaryDomain, canonical_json, new_id
-from soul_knowledge.events import Invocation, InvocationOutcome
+from soul_knowledge.events import Invocation
 from soul_knowledge.source_registry import (
     RELEARN_PENDING,
     ParserVersions,
@@ -131,11 +135,16 @@ class RelearnApproval(BaseModel):
 
 
 class BackupArtifact(BaseModel):
-    """One hash-recorded artifact inside a backup."""
+    """One hash-recorded artifact inside a backup.
+
+    ``generation_file`` paths are relative to the backed-up generation
+    directory; ``sqlite``/``current_pointer`` paths are relative to the backup
+    directory itself.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    kind: Literal["sqlite", "generation_file"]
+    kind: Literal["sqlite", "current_pointer", "generation_file"]
     path: str
     sha256: str
     byte_length: int
@@ -370,59 +379,63 @@ class RelearnEngine:
     # ----------------------------------------------------------------- backup
 
     def _verified_backup(self, relearn_id: str, at: datetime) -> BackupManifest:
-        """Copy every protected artifact, verify hashes, activate atomically."""
+        """Verified atomic backup of the full protected set via the shared helper.
+
+        Delegates to :func:`soul_knowledge.backup.backup_protected_artifacts`
+        (wave-1 residual): the SQLite store through the online backup API, the
+        ``CURRENT`` pointer, and the generation directory verified against the
+        *manifest-declared* hashes — staged in a sibling temp directory and
+        activated with one atomic rename. ``generation_dir`` is the projection
+        root (the directory holding ``CURRENT`` and ``generations/``).
+        """
         if self._backup_root is None or self._store.db_path == ":memory:":
             raise BackupUnavailable("a verified relearn backup requires a file-backed store")
         self.checkpoint()
-        db_path = Path(self._store.db_path)
-        artifacts: list[BackupArtifact] = []
-        stage = self._backup_root / f".tmp-{relearn_id}"
         final = self._backup_root / relearn_id
-        if stage.exists():
-            shutil.rmtree(stage)
-        stage.mkdir(parents=True)
-
-        db_copy = stage / "soul.db"
-        source_db_hash = _sha256_file(db_path)
-        shutil.copyfile(db_path, db_copy)
-        if _sha256_file(db_copy) != source_db_hash:
-            raise BackupVerificationError("staged SQLite copy does not hash-match the source")
-        artifacts.append(
-            BackupArtifact(kind="sqlite", path="soul.db", sha256=source_db_hash, byte_length=db_copy.stat().st_size)
+        projection_root = (
+            self._generation_dir if self._generation_dir is not None else self._backup_root / ".projection-absent"
         )
-
-        if self._generation_dir is not None and self._generation_dir.exists():
-            generation_copy = stage / "generation"
-            shutil.copytree(self._generation_dir, generation_copy)
-            for file in sorted(self._generation_dir.rglob("*")):
-                if not file.is_file():
-                    continue
-                relative = file.relative_to(self._generation_dir).as_posix()
-                source_hash = _sha256_file(file)
-                if _sha256_file(generation_copy / relative) != source_hash:
-                    raise BackupVerificationError(f"staged generation copy {relative!r} does not hash-match")
+        receipt = backup_protected_artifacts(self._store, projection_root=projection_root, dest_dir=final)
+        artifacts: list[BackupArtifact] = []
+        for artifact in receipt.artifacts:
+            if artifact.kind == "generation_file":
+                # Manifest paths stay relative to the generation directory.
                 artifacts.append(
                     BackupArtifact(
                         kind="generation_file",
-                        path=relative,
-                        sha256=source_hash,
-                        byte_length=file.stat().st_size,
+                        path=artifact.path.removeprefix("generation/"),
+                        sha256=artifact.sha256,
+                        byte_length=artifact.byte_length,
                     )
                 )
-
+            elif artifact.kind == "current_pointer":
+                artifacts.append(
+                    BackupArtifact(
+                        kind="current_pointer",
+                        path=artifact.path,
+                        sha256=artifact.sha256,
+                        byte_length=artifact.byte_length,
+                    )
+                )
+            else:
+                artifacts.append(
+                    BackupArtifact(
+                        kind="sqlite",
+                        path=artifact.path,
+                        sha256=artifact.sha256,
+                        byte_length=artifact.byte_length,
+                    )
+                )
         manifest = BackupManifest(
             relearn_id=relearn_id,
             created_at=at,
             artifacts=tuple(artifacts),
             scoring_contract_version=self._scoring_contract_version,
-            verified=True,
+            verified=receipt.verified,
         )
-        (stage / "manifest.json").write_text(
+        (final / "manifest.json").write_text(
             json.dumps(manifest.model_dump(mode="json"), indent=1, sort_keys=True), encoding="utf-8"
         )
-        if final.exists():  # pragma: no cover - relearn ids are unique
-            shutil.rmtree(final)
-        os.replace(stage, final)  # one atomic rename activates the backup
         return manifest
 
     # ------------------------------------------------------------------ apply
@@ -445,6 +458,7 @@ class RelearnEngine:
         idempotency collision and fails loud.
         """
         at = at or _utcnow()
+        started = time.monotonic()
         audit = AuditLog(self._store)
         if idempotency_key is not None:
             replayed = self._replay_receipt(idempotency_key, mode=mode, actor=actor, audit=audit)
@@ -474,7 +488,7 @@ class RelearnEngine:
             backup = self._verified_backup(relearn_id, at)
             audit.begin(invocation)
             audit_begun = True
-            self._apply_mutation(
+            record_event_id = self._apply_mutation(
                 effective_key,
                 relearn_id=relearn_id,
                 backup=backup,
@@ -490,12 +504,17 @@ class RelearnEngine:
                 audit.begin(invocation)
             audit.complete(
                 invocation.invocation_id,
-                InvocationOutcome(status="failure", error=f"{type(error).__name__}: {error}"),
+                failure_outcome(invocation, started, error),
             )
             raise
         final = audit.complete(
             invocation.invocation_id,
-            InvocationOutcome(status="success", duration_ms=0, result_references={"relearn_id": relearn_id}),
+            success_outcome(
+                invocation,
+                started,
+                result_references={"relearn_id": relearn_id},
+                linked_domain_event_id=record_event_id,
+            ),
         )
         return RelearnReceipt(
             relearn_id=relearn_id,
@@ -530,9 +549,10 @@ class RelearnEngine:
         each); the receipt fields come from the stored relearn record because
         the pending offer no longer exists once the first apply cleared it.
         """
+        started = time.monotonic()
         with self._store.read() as conn:
             row = conn.execute(
-                "SELECT payload_json FROM event_log WHERE kind = 'domain' AND idempotency_key = ?",
+                "SELECT event_id, payload_json FROM event_log WHERE kind = 'domain' AND idempotency_key = ?",
                 (idempotency_key,),
             ).fetchone()
         if row is None:
@@ -557,7 +577,12 @@ class RelearnEngine:
         audit.begin(invocation)
         final = audit.complete(
             invocation.invocation_id,
-            InvocationOutcome(status="success", duration_ms=0, result_references={"relearn_id": relearn_id}),
+            success_outcome(
+                invocation,
+                started,
+                result_references={"relearn_id": relearn_id},
+                linked_domain_event_id=str(row["event_id"]),
+            ),
         )
         carried = [str(evidence_id) for evidence_id in record["carried_evidence_ids"]]
         return RelearnReceipt(
@@ -591,8 +616,11 @@ class RelearnEngine:
         quarantined: list[str],
         actor: str,
         at: datetime,
-    ) -> None:
-        """One transaction: supersession, quarantine, state and the relearn record."""
+    ) -> str:
+        """One transaction: supersession, quarantine, state and the relearn record.
+
+        Returns the relearn record's domain event id so the final audit links it.
+        """
         new_version_id = offer.current_source_version_id
         record = {
             "relearn_id": relearn_id,
@@ -643,6 +671,7 @@ class RelearnEngine:
                 domain=event.domain.value,
                 idempotency_key=effective_key,
             )
+        return event.event_id
 
     def _load_backup_manifest(self, relearn_id: str) -> BackupManifest:
         if self._backup_root is None:
@@ -656,6 +685,7 @@ class RelearnEngine:
 
     def rollback(self, relearn_id: str, *, actor: str = "operator") -> RollbackReceipt:
         """Restore the byte-exact pre-relearn state plus one linked audit event."""
+        started = time.monotonic()
         if self._backup_root is None:
             raise UnknownRelearn(f"no backup root; cannot roll back {relearn_id!r}")
         backup_dir = self._backup_root / relearn_id
@@ -687,17 +717,24 @@ class RelearnEngine:
                 raise RollbackVerificationError("restored database hash mismatch after rename")
 
             if self._generation_dir is not None and (backup_dir / "generation").exists():
-                if self._generation_dir.exists():
-                    shutil.rmtree(self._generation_dir)
-                shutil.copytree(backup_dir / "generation", self._generation_dir)
+                pointer = (backup_dir / "CURRENT").read_text(encoding="utf-8").strip()
+                target = self._generation_dir / "generations" / pointer
+                if target.exists():
+                    shutil.rmtree(target)
+                shutil.copytree(backup_dir / "generation", target)
                 for artifact in manifest.artifacts:
                     if artifact.kind != "generation_file":
                         continue
-                    restored = self._generation_dir / artifact.path
+                    restored = target / artifact.path
                     if not restored.exists() or _sha256_file(restored) != artifact.sha256:
                         raise RollbackVerificationError(
                             f"restored generation file {artifact.path!r} does not hash-match the backup"
                         )
+                live_pointer = self._generation_dir / "CURRENT"
+                shutil.copyfile(backup_dir / "CURRENT", live_pointer)
+                pointer_artifact = next((a for a in manifest.artifacts if a.kind == "current_pointer"), None)
+                if pointer_artifact is not None and _sha256_file(live_pointer) != pointer_artifact.sha256:
+                    raise RollbackVerificationError("restored CURRENT pointer does not hash-match the backup")
         except Exception:
             self._store = EventStore(db_path)
             self._registry = SourceRegistry(self._store)
@@ -715,10 +752,11 @@ class RelearnEngine:
         audit.begin(invocation)
         final = audit.complete(
             invocation.invocation_id,
-            InvocationOutcome(
-                status="success",
-                duration_ms=0,
+            success_outcome(
+                invocation,
+                started,
                 result_references={"relearn_id": relearn_id, "restored_db_sha256": restored_db_sha256},
+                projection_outcome="restored",
             ),
         )
         return RollbackReceipt(

@@ -26,6 +26,7 @@ import hashlib
 import json
 import sqlite3
 import threading
+import time
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -44,7 +45,7 @@ from soul_knowledge.domain import (
     canonical_json,
     storage_payload,
 )
-from soul_knowledge.events import ChainReport, DomainReceipt, Invocation, InvocationOutcome, WriteReceipt
+from soul_knowledge.events import ChainReport, DomainReceipt, Invocation, WriteReceipt
 
 if TYPE_CHECKING:
     from soul_knowledge.audit import AuditLog
@@ -791,8 +792,9 @@ class EventStore:
         mismatch a typed :class:`AuditOutcomeMismatch` is raised carrying both
         outcomes, chained to the original error (ruling C1).
         """
-        from soul_knowledge.audit import AuditLog
+        from soul_knowledge.audit import AuditLog, failure_outcome, success_outcome
 
+        started = time.monotonic()
         audit = audit_log if audit_log is not None else AuditLog(self)
         audit.begin(invocation)
         idempotency_key = invocation.idempotency_key or invocation.invocation_id
@@ -806,7 +808,7 @@ class EventStore:
             try:
                 failure_receipt = audit.complete(
                     invocation.invocation_id,
-                    InvocationOutcome(status="failure", error=f"{type(error).__name__}: {error}"),
+                    failure_outcome(invocation, started, error),
                 )
             except Exception as audit_error:
                 raise StoreError(
@@ -822,7 +824,12 @@ class EventStore:
             raise
         receipt = audit.complete(
             invocation.invocation_id,
-            InvocationOutcome(status="success", duration_ms=0, linked_domain_event_id=domain.domain_event_id),
+            success_outcome(
+                invocation,
+                started,
+                result_references={"operation": invocation.operation},
+                linked_domain_event_id=domain.domain_event_id,
+            ),
         )
         if receipt.status != "success":
             raise AuditOutcomeMismatch(

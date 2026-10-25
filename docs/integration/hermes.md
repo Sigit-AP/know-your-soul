@@ -71,15 +71,12 @@ mcp_servers:
            "--graph-root", "/root/superpower-knowledge-soul/.local/graph",
            "--db", "/root/superpower-knowledge-soul/.local/soul.sqlite3"]
     enabled: true
-    sampling: {enabled: false}      # optional belt-and-suspenders; the server refuses regardless
-    elicitation: {enabled: false}   # optional belt-and-suspenders; the server refuses regardless
     # no env, no provider keys, no project_path, no url required
 ```
 
-The `sampling`/`elicitation` entries are **not required**: the server
-registers no such handlers, so the capabilities are never advertised and any
-client request for them is method-not-found. Setting them only stops Hermes
-from offering the client-side callbacks.
+The server registers no `sampling` or `elicitation` handlers, so those
+capabilities are never advertised and any client request for them is
+method-not-found; the entry above must not configure them.
 
 ## 3. Optional: Streamable HTTP on loopback
 

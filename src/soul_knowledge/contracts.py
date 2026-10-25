@@ -619,10 +619,21 @@ class ProposeImprovementRequest(BaseModel):
 
 
 class ProposalResponse(_ResponseMeta):
-    """The persisted proposal plus its audit/projection metadata."""
+    """The persisted proposal plus its audit/projection metadata.
+
+    The optional ``domain_event_id``/``audit_event_seq``/``node_version``/
+    ``knowledge_seq`` fields are the spec 7.9 mutation-receipt fields (the
+    ``WriteReceipt`` pattern, ``events.py``); they are populated when the
+    caller hands the domain result through, and stay ``None`` on zero-weight
+    or unwired paths.
+    """
 
     proposal: ImprovementProposal
     idempotent_replay: bool = False
+    domain_event_id: str | None = None
+    audit_event_seq: int | None = None
+    node_version: int | None = None
+    knowledge_seq: int | None = None
 
 
 class ApplyImprovementRequest(BaseModel):
@@ -636,7 +647,7 @@ class ApplyImprovementRequest(BaseModel):
 
 
 class ImprovementResponse(_ResponseMeta):
-    """The outcome of an apply or an improvement rollback."""
+    """The outcome of an apply or an improvement rollback (spec 7.9 field set)."""
 
     proposal_id: str
     node_id: str
@@ -645,6 +656,10 @@ class ImprovementResponse(_ResponseMeta):
     status: str
     content_sha256: str
     idempotent_replay: bool
+    domain_event_id: str | None = None
+    audit_event_seq: int | None = None
+    node_version: int | None = None
+    knowledge_seq: int | None = None
 
 
 class RollbackRequest(BaseModel):
@@ -669,7 +684,13 @@ class RollbackRequest(BaseModel):
 
 
 class RollbackResponse(_ResponseMeta):
-    """The outcome of an improvement rollback or a relearn rollback."""
+    """The outcome of an improvement rollback or a relearn rollback.
+
+    The optional ``domain_event_id``/``audit_event_seq``/``node_version``/
+    ``knowledge_seq`` fields are the spec 7.9 mutation-receipt fields; a
+    relearn rollback restores bytes instead of appending a domain event, so
+    they stay ``None`` there.
+    """
 
     kind: Literal["improvement", "relearn"]
     node_id: str | None = None
@@ -681,3 +702,7 @@ class RollbackResponse(_ResponseMeta):
     restored_db_sha256: str | None = None
     verified: bool | None = None
     idempotent_replay: bool | None = None
+    domain_event_id: str | None = None
+    audit_event_seq: int | None = None
+    node_version: int | None = None
+    knowledge_seq: int | None = None

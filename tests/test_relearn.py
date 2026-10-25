@@ -14,6 +14,7 @@ exactly one linked audit event.
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -126,8 +127,11 @@ class RelearnFixture:
         (self.corpus / "a.md").write_text("alpha v1\n", encoding="utf-8")
         (self.corpus / "b.md").write_text("beta v1\n", encoding="utf-8")
         self.generation = tmp_path / "generation"
-        (self.generation / "gen-1").mkdir(parents=True)
-        (self.generation / "gen-1" / "graph.json").write_text('{"graph": 1}', encoding="utf-8")
+        generation = self.generation / "generations" / "gen-1"
+        generation.mkdir(parents=True)
+        (generation / "graph.json").write_text('{"graph": 1}', encoding="utf-8")
+        manifest = {"artifacts": {"graph.json": sha256_of(generation / "graph.json")}}
+        (generation / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
         (self.generation / "CURRENT").write_text("gen-1", encoding="utf-8")
 
         self.store = EventStore(self.db_path)
@@ -365,8 +369,6 @@ def test_relearn_carries_zero_evidence_weight_and_no_promotion(fx: RelearnFixtur
 
 def test_apply_takes_verified_atomic_backup(fx: RelearnFixture) -> None:
     offer = fx.make_offer()
-    fx.engine.checkpoint()
-    pre_hash = sha256_of(fx.db_path)
     receipt = fx.engine.apply("RESET", approve(offer.offer_id, "RESET"), at=NOW)
 
     backup = receipt.backup
@@ -375,12 +377,13 @@ def test_apply_takes_verified_atomic_backup(fx: RelearnFixture) -> None:
     kinds = {artifact.kind for artifact in backup.artifacts}
     assert "sqlite" in kinds
     assert "generation_file" in kinds
+    assert "current_pointer" in kinds  # the protected set includes the CURRENT pointer
     sqlite_artifact = next(artifact for artifact in backup.artifacts if artifact.kind == "sqlite")
-    assert sqlite_artifact.sha256 == pre_hash
-    # the backup directory holds byte-identical copies
+    # the backup directory holds copies whose bytes hash-match the recorded manifest
     backup_dir = fx.tmp_path / "backups" / receipt.relearn_id
     assert (backup_dir / "manifest.json").exists()
-    assert sha256_of(backup_dir / "soul.db") == pre_hash
+    assert sha256_of(backup_dir / "soul.db") == sqlite_artifact.sha256
+    assert (backup_dir / "CURRENT").read_text(encoding="utf-8") == "gen-1"
     generation_artifacts = [a for a in backup.artifacts if a.kind == "generation_file"]
     assert generation_artifacts
     for artifact in generation_artifacts:
@@ -405,25 +408,26 @@ def test_memory_store_cannot_backup(fx: RelearnFixture) -> None:
 
 def test_rollback_restores_exact_pre_relearn_state(fx: RelearnFixture) -> None:
     offer = fx.make_offer()
-    fx.engine.checkpoint()
-    pre_db_hash = sha256_of(fx.db_path)
-    pre_graph_bytes = (fx.generation / "gen-1" / "graph.json").read_bytes()
+    pre_graph_bytes = (fx.generation / "generations" / "gen-1" / "graph.json").read_bytes()
     pre_audit_count = fx.store.audit_event_count()
     node_before = fx.store.current_node("n-1")
     assert node_before is not None
 
     receipt = fx.engine.apply("RESET", approve(offer.offer_id, "RESET"), at=NOW)
-    # post-apply the world moved on: old version superseded, graph reprojected
-    (fx.generation / "gen-1" / "graph.json").write_text('{"graph": 2}', encoding="utf-8")
+    # post-apply the world moved on: old version superseded, graph reprojected, pointer moved
+    (fx.generation / "generations" / "gen-1" / "graph.json").write_text('{"graph": 2}', encoding="utf-8")
+    (fx.generation / "CURRENT").write_text("gen-2", encoding="utf-8")
 
     rollback = fx.engine.rollback(receipt.relearn_id, actor="operator")
     assert rollback.verified is True
-    assert rollback.restored_db_sha256 == pre_db_hash  # byte-exact database restore
+    sqlite_artifact = next(a for a in receipt.backup.artifacts if a.kind == "sqlite")
+    assert rollback.restored_db_sha256 == sqlite_artifact.sha256  # byte-exact restore of the verified backup
 
     reopened = EventStore(fx.db_path)
     try:
-        # exact pre-relearn graph bytes
-        assert (fx.generation / "gen-1" / "graph.json").read_bytes() == pre_graph_bytes
+        # exact pre-relearn graph bytes and CURRENT pointer
+        assert (fx.generation / "generations" / "gen-1" / "graph.json").read_bytes() == pre_graph_bytes
+        assert (fx.generation / "CURRENT").read_text(encoding="utf-8") == "gen-1"
         # exact pre-relearn source-version states (pending offer restored too)
         previous = reopened.retained_source_version(fx.v1.source_version_id)
         assert previous is not None

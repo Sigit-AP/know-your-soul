@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -32,7 +33,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from soul_knowledge.audit import AuditLog
+from soul_knowledge.audit import AuditLog, failure_outcome, success_outcome
 from soul_knowledge.domain import (
     Event,
     EventKind,
@@ -44,7 +45,7 @@ from soul_knowledge.domain import (
     new_id,
     storage_payload,
 )
-from soul_knowledge.events import Invocation, InvocationOutcome
+from soul_knowledge.events import DomainReceipt, Invocation
 from soul_knowledge.store import EventStore, StoreError
 
 __all__ = [
@@ -178,17 +179,21 @@ class ApprovalRecord(BaseModel):
 
 
 class ProposalRecord(BaseModel):
-    """The persisted proposal plus its audit identity."""
+    """The persisted proposal plus its audit identity and domain result (spec 7.9)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     proposal: ImprovementProposal
     audit_event_id: str
     audit_event_seq: int
+    domain_event_id: str | None = None
+    node_version: int | None = None
+    # A proposal is a zero-knowledge-weight admin event: knowledge_seq stays None.
+    knowledge_seq: int | None = None
 
 
 class ImprovementReceipt(BaseModel):
-    """The audited outcome of an apply/retain/rollback."""
+    """The audited outcome of an apply/retain/rollback (spec 7.9 field set)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -201,6 +206,9 @@ class ImprovementReceipt(BaseModel):
     audit_event_id: str
     audit_event_seq: int
     idempotent_replay: bool = False
+    domain_event_id: str | None = None
+    node_version: int | None = None
+    knowledge_seq: int | None = None
 
 
 class MergeReceipt(BaseModel):
@@ -215,6 +223,7 @@ class MergeReceipt(BaseModel):
     valid_from: datetime
     audit_event_id: str
     audit_event_seq: int
+    domain_event_id: str | None = None
 
 
 RegressionGate = Callable[[Node, Node], Sequence[str]]
@@ -348,7 +357,12 @@ def propose(
         ),
     )
     return ProposalRecord(
-        proposal=proposal, audit_event_id=receipt.audit_event_id, audit_event_seq=receipt.audit_event_seq
+        proposal=proposal,
+        audit_event_id=receipt.audit_event_id,
+        audit_event_seq=receipt.audit_event_seq,
+        domain_event_id=receipt.domain_event_id,
+        node_version=receipt.node_version,
+        knowledge_seq=receipt.knowledge_seq,
     )
 
 
@@ -428,21 +442,31 @@ class _Audited:
         self._store = store
         self._audit = AuditLog(store)
         self.invocation = Invocation.create(operation, request_hash, actor=actor, idempotency_key=idempotency_key)
+        self._started = time.monotonic()
         self._audit.begin(self.invocation)
 
-    def run[T](self, write: Callable[[], T]) -> tuple[T, str, int]:
+    def run[T](
+        self,
+        write: Callable[[], T],
+        *,
+        linked_domain_event_id: Callable[[T], str | None] | None = None,
+    ) -> tuple[T, str, int]:
         try:
             result = write()
         except Exception as error:
             self._audit.complete(
                 self.invocation.invocation_id,
-                InvocationOutcome(status="failure", error=f"{type(error).__name__}: {error}"),
+                failure_outcome(self.invocation, self._started, error),
             )
             raise
+        link = linked_domain_event_id(result) if linked_domain_event_id is not None else None
         final = self._audit.complete(
             self.invocation.invocation_id,
-            InvocationOutcome(
-                status="success", duration_ms=0, result_references={"operation": self.invocation.operation}
+            success_outcome(
+                self.invocation,
+                self._started,
+                result_references={"operation": self.invocation.operation},
+                linked_domain_event_id=link,
             ),
         )
         return result, final.audit_event_id, final.event_seq
@@ -468,7 +492,7 @@ def apply_improvement(
         idempotency_key,
     )
 
-    def write() -> tuple[Node, int, str, bool]:
+    def write() -> tuple[Node, int, DomainReceipt]:
         validate_proposal(store, proposal, check_version=False)
         node = store.current_node(proposal.node_id)
         assert node is not None  # validate_proposal guarantees it
@@ -518,9 +542,11 @@ def apply_improvement(
                     f"{relation.target_node_id}:{relation.kind.value}"
                 ),
             )
-        return after, node.version, domain.domain_event_id, domain.idempotent_replay
+        return after, node.version, domain
 
-    (after, from_version, _domain_event_id, replay), audit_event_id, audit_event_seq = audited.run(write)
+    (after, from_version, domain), audit_event_id, audit_event_seq = audited.run(
+        write, linked_domain_event_id=lambda result: result[2].domain_event_id
+    )
     return ImprovementReceipt(
         proposal_id=proposal.proposal_id,
         node_id=proposal.node_id,
@@ -530,7 +556,10 @@ def apply_improvement(
         content_sha256=content_fingerprint(after),
         audit_event_id=audit_event_id,
         audit_event_seq=audit_event_seq,
-        idempotent_replay=replay,
+        idempotent_replay=domain.idempotent_replay,
+        domain_event_id=domain.domain_event_id,
+        node_version=domain.node_version,
+        knowledge_seq=domain.knowledge_seq,
     )
 
 
@@ -574,6 +603,9 @@ def retain_improvement(
         audit_event_id=receipt.audit_event_id,
         audit_event_seq=receipt.audit_event_seq,
         idempotent_replay=receipt.idempotent_replay,
+        domain_event_id=receipt.domain_event_id,
+        node_version=receipt.node_version,
+        knowledge_seq=receipt.knowledge_seq,
     )
 
 
@@ -607,7 +639,7 @@ def merge_nodes(
     )
     key = idempotency_key or audited.invocation.invocation_id
 
-    def write() -> None:
+    def write() -> DomainReceipt:
         store.append_domain(
             Event(
                 kind=EventKind.RELATION_ADD,
@@ -624,7 +656,7 @@ def merge_nodes(
             ),
             idempotency_key=f"{key}:relation",
         )
-        store.append_domain(
+        return store.append_domain(
             Event(
                 kind=EventKind.NODE_RETIRE,
                 node_id=source_node_id,
@@ -636,7 +668,7 @@ def merge_nodes(
             idempotency_key=f"{key}:retire",
         )
 
-    _, audit_event_id, audit_event_seq = audited.run(write)
+    domain, audit_event_id, audit_event_seq = audited.run(write, linked_domain_event_id=lambda d: d.domain_event_id)
     return MergeReceipt(
         merge_id=merge_id,
         source_node_id=source_node_id,
@@ -644,6 +676,7 @@ def merge_nodes(
         valid_from=at,
         audit_event_id=audit_event_id,
         audit_event_seq=audit_event_seq,
+        domain_event_id=domain.domain_event_id,
     )
 
 
@@ -731,4 +764,7 @@ def rollback_improvement(
         audit_event_id=receipt.audit_event_id,
         audit_event_seq=receipt.audit_event_seq,
         idempotent_replay=receipt.idempotent_replay,
+        domain_event_id=receipt.domain_event_id,
+        node_version=receipt.node_version,
+        knowledge_seq=receipt.knowledge_seq,
     )
