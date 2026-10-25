@@ -1,0 +1,16 @@
+{
+  "contract_version": "access-policy/1.0.0",
+  "status": "FROZEN",
+  "decision_cost": {"model_calls": 0, "graph_calls": 0},
+  "surface_decisions": {
+    "L1_greeting": "never_call",
+    "L1_one_fact_lookup": "never_call",
+    "L1_one_command": "never_call",
+    "L1_file_read": "never_call",
+    "L1_status_check": "never_call",
+    "ambiguous": "may_call_access_only",
+    "required": "call"
+  },
+  "unknown_surface": "may_call_access_only",
+  "access_only": {"max_estimated_tokens": 160, "knowledge_payload_tokens": 0}
+}
