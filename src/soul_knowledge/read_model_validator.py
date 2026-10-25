@@ -28,7 +28,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from soul_knowledge.domain import canonical_json
 from soul_knowledge.graphify_adapter import ACCEPTED_SCHEMA_VERSIONS, GraphifyAdapter
 
-__all__ = ["HASHED_ARTIFACTS", "REQUIRED_MANIFEST_KEYS", "ReadModelValidator", "ValidationReport"]
+__all__ = [
+    "HASHED_ARTIFACTS",
+    "REQUIRED_MANIFEST_KEYS",
+    "CollapsedLink",
+    "ReadModelValidator",
+    "ValidationReport",
+]
 
 HASHED_ARTIFACTS = ("graph.json", "GRAPH_REPORT.md", "analysis.json", "labels.json", "signatures.json", "graph.html")
 
@@ -66,6 +72,23 @@ _SECRET_RES = (
 )
 
 
+class CollapsedLink(BaseModel):
+    """One node pair whose parallel typed links collapse to a single edge.
+
+    ``graph.json`` preserves distinct typed relations on the same node pair
+    (the explicit simple-graph decision, matrix row 39), but a NetworkX
+    simple-graph load keeps only one edge per pair. The collapse is loud:
+    every affected pair is named here with its relation kinds so consumers
+    (Task 4 retrieval) read the links list instead of assuming 1:1 pair→edge.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    source: str
+    target: str
+    relations: tuple[str, ...]
+
+
 class ValidationReport(BaseModel):
     """The fail-closed verdict for one generation directory."""
 
@@ -75,6 +98,7 @@ class ValidationReport(BaseModel):
     errors: tuple[str, ...] = Field(default_factory=tuple)
     node_count: int = 0
     edge_count: int = 0
+    collapsed_links: tuple[CollapsedLink, ...] = Field(default_factory=tuple)
 
 
 class ReadModelValidator:
@@ -136,6 +160,7 @@ class ReadModelValidator:
 
         # ------------------------------------------------------- graph schema
         node_count, edge_count = 0, 0
+        collapsed: list[CollapsedLink] = []
         graph_path = generation_dir / "graph.json"
         graph: dict[str, Any] | None = None
         if graph_path.is_file():
@@ -197,6 +222,21 @@ class ReadModelValidator:
                     ):
                         errors.append(f"node {node.get('id')!r} has an absolute source_file {source_file!r}")
 
+            # Loud collapse report: every node pair carrying parallel typed
+            # links collapses to one edge in the simple-graph load (row 39).
+            # The collapse is reported, never silently dropped, and never a
+            # gate failure — consumers read the links list (finding F1).
+            links_by_pair: dict[tuple[str, str], list[str]] = {}
+            for link in links:
+                if not isinstance(link, dict):
+                    continue
+                source, target = link.get("source"), link.get("target")
+                if isinstance(source, str) and isinstance(target, str):
+                    links_by_pair.setdefault((source, target), []).append(str(link.get("relation")))
+            for (source, target), relations in sorted(links_by_pair.items()):
+                if len(relations) > 1:
+                    collapsed.append(CollapsedLink(source=source, target=target, relations=tuple(sorted(relations))))
+
             # Load through the pinned loader: direction and confidence backfill
             # must survive the round trip (matrix row 34).
             try:
@@ -229,7 +269,13 @@ class ReadModelValidator:
                     errors.append(f"artifact {name} contains a secret-shaped string {secret.group(0)[:8]}…")
                     break
 
-        return ValidationReport(ok=not errors, errors=tuple(errors), node_count=node_count, edge_count=edge_count)
+        return ValidationReport(
+            ok=not errors,
+            errors=tuple(errors),
+            node_count=node_count,
+            edge_count=edge_count,
+            collapsed_links=tuple(collapsed),
+        )
 
     def _junk_node_reasons(self, node: Mapping[str, Any]) -> list[str]:
         """The product junk-node classifier (matrix row 21)."""

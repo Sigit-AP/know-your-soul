@@ -232,6 +232,41 @@ def test_multigraph_probe_and_parallel_edges(tmp_path: Path) -> None:
     assert pair == ["depends_on", "supports"]
 
 
+def test_parallel_link_collapse_is_reported_loudly(tmp_path: Path) -> None:
+    """Fix round 1 (F1): the simple-graph collapse of parallel typed links is
+    loud — the report names every collapsed pair and its relation kinds while
+    validation still passes (the simple-graph decision itself stands)."""
+    store, generation, manifest = _generation(tmp_path)
+    report = ReadModelValidator().validate(generation, manifest)
+    assert report.ok
+    assert report.collapsed_links == ()
+
+    alpha = file_scoped_id("alpha.md")
+    beta = file_scoped_id("beta.md")
+    for kind, key in ((RelationKind.SUPPORTS, "extra:supports"), (RelationKind.DEPENDS_ON, "extra:depends")):
+        store.append_domain(
+            Event(
+                kind=EventKind.RELATION_ADD,
+                node_id=alpha,
+                domain=PrimaryDomain.P1,
+                relation=Relation(kind=kind, source_node_id=alpha, target_node_id=beta),
+            ),
+            idempotency_key=key,
+        )
+    receipt = GraphProjector(store, output_root=tmp_path / "out").rebuild()
+    generation = Path(receipt.generation_dir)
+    manifest = json.loads((generation / "manifest.json").read_text(encoding="utf-8"))
+    graph = json.loads((generation / "graph.json").read_text(encoding="utf-8"))
+
+    report = ReadModelValidator().validate(generation, manifest)
+    assert report.ok, report.errors  # the collapse is a loud warning, not a gate failure
+    collapsed = {(entry.source, entry.target): entry.relations for entry in report.collapsed_links}
+    assert collapsed[(alpha, beta)] == ("depends_on", "supports")
+    # The pinned loader really does collapse the pair to a single edge.
+    loaded = GraphifyAdapter().load_graph(generation / "graph.json")
+    assert loaded.number_of_edges() == len(graph["links"]) - 1
+
+
 def test_validation_report_is_serializable(tmp_path: Path) -> None:
     _, generation, manifest = _generation(tmp_path)
     report = ReadModelValidator().validate(generation, manifest)

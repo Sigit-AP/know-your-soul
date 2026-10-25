@@ -32,6 +32,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, Relation, RelationKind
+from soul_knowledge.events import Invocation
 from soul_knowledge.fragment_generator import FRAGMENT_GENERATOR_VERSION
 from soul_knowledge.graphify_adapter import GraphifyAdapter
 from soul_knowledge.source_registry import ParserVersions, SourceKind, SourceRegistry
@@ -335,6 +336,52 @@ class SeedImporter:
             os.fsync(handle.fileno())
         os.replace(tmp, manifest_path)
         return receipts
+
+    # -------------------------------------------------------------- retire
+
+    def retire_source(self, source_scope: str) -> tuple[str, ...]:
+        """Retire every live node imported from *source_scope* (fix F2).
+
+        A source the watcher reports as ``REMOVED`` must not leave its nodes
+        in the store or the projection: each live node whose import scope
+        (``payload["source_file"]``) matches gets a ``node.retire`` domain
+        event through :meth:`EventStore.commit` with a retire-scoped
+        idempotency key, so a replayed removal is a no-op and the retired
+        nodes stay in the append-only history as superseded revisions.
+        Returns the node ids this call newly retired.
+        """
+        live: dict[str, Node] = {}
+        for event in self._store.replay_domain():
+            if event.kind is EventKind.NODE_UPSERT and event.node is not None:
+                live[event.node_id] = event.node
+            elif event.kind is EventKind.NODE_RETIRE:
+                live.pop(event.node_id, None)
+        retired: list[str] = []
+        for node_id in sorted(live):
+            node = live[node_id]
+            if node.payload.get("source_file") != source_scope:
+                continue
+            version = self._store.node_version(node_id)
+            request_hash = hashlib.sha256(f"retire-source\0{source_scope}\0{node_id}\0{version}".encode()).hexdigest()
+            receipt = self._store.commit(
+                Event(
+                    kind=EventKind.NODE_RETIRE,
+                    node_id=node_id,
+                    domain=node.domain,
+                    node=node,
+                    source_version_id=node.source_version_id,
+                    actor=self._actor,
+                ),
+                invocation=Invocation.create(
+                    "knowledge.retire_source",
+                    request_hash=request_hash,
+                    actor=self._actor,
+                    idempotency_key=f"retire:{source_scope}:{node_id}:{version}",
+                ),
+            )
+            if not receipt.idempotent_replay:
+                retired.append(node_id)
+        return tuple(retired)
 
     # -------------------------------------------------------------- plumbing
 
