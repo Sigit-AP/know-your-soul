@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "soul-knowledge"
+version = "0.1.0"
+description = "Standalone deterministic knowledge and learning graph for Hermes Agent; no model, provider, or vector calls."
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "graphifyy[mcp]==0.9.95",
+    "mcp==2.3.0",
+    "networkx==3.7",
+    "numpy==2.5.4",
+    "pydantic==2.14.1",
+    "starlette==1.10.0",
+    "uvicorn==0.54.0",
+]
+
+[project.scripts]
+soul-knowledge = "soul_knowledge.cli:main"
+
+[dependency-groups]
+dev = [
+    "hypothesis==6.170.9",
+    "pyright==1.1.414",
+    "pytest==9.1.1",
+    "ruff==0.17.2",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/soul_knowledge"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"
+markers = []
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pyright]
+pythonVersion = "3.14"
+typeCheckingMode = "basic"
+venvPath = "."
+venv = ".venv"
+include = ["src", "tests"]
