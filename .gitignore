@@ -7,4 +7,4 @@ __pycache__/
 graphify-out/
 .hermes-knowledge/
 *.sqlite3-wal
-*.sqlite3-shm
+*.sqlite3-shmbench/results/
