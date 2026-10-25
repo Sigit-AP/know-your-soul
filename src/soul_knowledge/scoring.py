@@ -27,7 +27,7 @@ from __future__ import annotations
 import hashlib
 import tomllib
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal, localcontext
@@ -52,12 +52,17 @@ __all__ = [
     "ScoringConfigError",
     "UnknownNodeError",
     "ZeroWeightStatus",
+    "EvidenceScope",
     "evidence_item",
     "score_items",
     "serialize_score",
 ]
 
 SCORING_CONFIG_PATH = Path(__file__).resolve().parent / "scoring_config.toml"
+
+# The relearn scope hook: (compatible source version ids, quarantined evidence ids).
+# Wired by the service so scoring honours the same exclusions as review.
+EvidenceScope = Callable[[], tuple[frozenset[str], frozenset[str]]]
 
 PRECISION = DECIMAL_PRECISION
 MICROSECONDS_PER_DAY = Decimal(86_400 * 1_000_000)
@@ -98,9 +103,7 @@ def _toml_int(table: Mapping[str, Any], key: str, *, section: str) -> int:
 def _require_keys(table: Mapping[str, Any], expected: set[str], *, section: str) -> None:
     actual = set(table)
     if actual != expected:
-        raise ScoringConfigError(
-            f"[{section}] must contain exactly {sorted(expected)}, got {sorted(actual)}"
-        )
+        raise ScoringConfigError(f"[{section}] must contain exactly {sorted(expected)}, got {sorted(actual)}")
 
 
 @dataclass(frozen=True)
@@ -148,17 +151,13 @@ class ScoringConfig:
             "composite",
         }
         if set(data) != expected:
-            raise ScoringConfigError(
-                f"config must contain exactly {sorted(expected)}, got {sorted(set(data))}"
-            )
+            raise ScoringConfigError(f"config must contain exactly {sorted(expected)}, got {sorted(set(data))}")
 
         meta = data["meta"]
         _require_keys(meta, {"contract_version"}, section="meta")
         contract_version = str(meta["contract_version"])
         if contract_version != "1.0.0":
-            raise ScoringConfigError(
-                f"contract_version {contract_version!r} is not the frozen '1.0.0'"
-            )
+            raise ScoringConfigError(f"contract_version {contract_version!r} is not the frozen '1.0.0'")
 
         half_lives = data["half_life_days"]
         _require_keys(half_lives, {"p", "m", "e"}, section="half_life_days")
@@ -650,12 +649,7 @@ def score_items(
             and uncertainties["p"] <= cfg.promotion_max_u_p
         )
 
-        if (
-            p_score < cfg.promotion_quality_gate
-            or p_score == 0
-            or m_score == 0
-            or e_score == 0
-        ):
+        if p_score < cfg.promotion_quality_gate or p_score == 0 or m_score == 0 or e_score == 0:
             g_score = Decimal(0)
         else:
             g_score = (
@@ -714,9 +708,7 @@ def _build_explanations(
     }
 
 
-def _dimension_explanation(
-    enriched: Sequence[_Enriched], dimension: str, total: Decimal, term: str
-) -> dict[str, Any]:
+def _dimension_explanation(enriched: Sequence[_Enriched], dimension: str, total: Decimal, term: str) -> dict[str, Any]:
     entries = []
     for entry in enriched:
         value = getattr(entry, term)
@@ -743,13 +735,34 @@ class ScoreEngine:
     canonical order as every other replay consumer. The engine never writes.
     """
 
-    def __init__(self, store: EventStore, *, config: ScoringConfig | None = None) -> None:
+    def __init__(
+        self,
+        store: EventStore,
+        *,
+        config: ScoringConfig | None = None,
+        evidence_scope: EvidenceScope | None = None,
+    ) -> None:
         self._store = store
         self._config = config if config is not None else ScoringConfig.default()
+        self._evidence_scope = evidence_scope
 
     @property
     def config(self) -> ScoringConfig:
         return self._config
+
+    def _in_scope(self, evidence: Evidence) -> bool:
+        """Evidence eligibility from the relearn scope hook (concern #2 wiring).
+
+        A wired scope is ``(compatible_source_version_ids,
+        quarantined_evidence_ids)``. Evidence from a superseded source version
+        or quarantined by the last relearn never reaches the formulas; an empty
+        compatible set means "no approved baseline" and therefore excludes
+        everything (fail-closed, matching ``SourceRegistry.active() is None``).
+        """
+        if self._evidence_scope is None:
+            return True
+        compatible, quarantined = self._evidence_scope()
+        return evidence.source_version_id in compatible and evidence.evidence_id not in quarantined
 
     def score_node(
         self,
@@ -762,7 +775,7 @@ class ScoreEngine:
         snapshot = self._snapshot()
         if node_id not in snapshot[0]:
             raise UnknownNodeError(f"unknown node {node_id!r}")
-        items = [evidence_item(ev) for ev in snapshot[1].get(node_id, ())]
+        items = [evidence_item(ev) for ev in snapshot[1].get(node_id, ()) if self._in_scope(ev)]
         return score_items(
             items,
             at=moment,
@@ -805,6 +818,7 @@ class ScoreEngine:
             evidence_item(ev)
             for depth_node in sorted(node_depths)
             for ev in evidence_by_node.get(depth_node, ())
+            if self._in_scope(ev)
         ]
         return score_items(
             items,

@@ -34,7 +34,6 @@ from soul_knowledge.contracts import (
     KnowledgeError,
     MetadataExceedsBudget,
     NodeNotFound,
-    OperationNotImplemented,
     PolicyArtifactError,
     QueryRequest,
     RecommendationItem,
@@ -602,13 +601,16 @@ def test_every_operation_returns_an_audit_event_id(tmp_path: Path) -> None:
     assert store.verify_chain().ok
 
 
-def test_evaluate_is_a_typed_audited_not_implemented(tmp_path: Path) -> None:
+def test_evaluate_is_audited_and_scored(tmp_path: Path) -> None:
+    """Task 5 wiring: evaluate now scores instead of returning NOT_IMPLEMENTED."""
     store, _, service = _seeded(tmp_path)
     audits_before = store.audit_event_count()
-    with pytest.raises(OperationNotImplemented) as excinfo:
-        service.evaluate(EvaluateRequest(node_id="n-gates"))
-    assert excinfo.value.code == "NOT_IMPLEMENTED"
-    assert excinfo.value.audit_event_id
+    response = service.evaluate(EvaluateRequest(node_id="n-gates"))
+    assert response.audit_event_id
+    assert response.node_id == "n-gates"
+    assert response.p == "0.000000000000", "no evidence yet, so P is zero (never a fabricated prior)"
+    assert response.overall_uncertainty == "1.000000000000"
+    assert response.professional_level == 1
     assert store.audit_event_count() == audits_before + 1
 
 

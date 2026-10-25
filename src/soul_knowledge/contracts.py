@@ -18,11 +18,12 @@ from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from soul_knowledge.domain import RelationKind, canonical_json, quantize_score
+from soul_knowledge.improvement import ApprovalRecord, DiffOperation, ImprovementProposal
 
 __all__ = [
     "ACCESS_ONLY_TOKEN_CAP",
@@ -33,29 +34,47 @@ __all__ = [
     "AccessDecision",
     "AccessPolicy",
     "AmbiguousDomain",
+    "ApplyImprovementRequest",
+    "ApprovalRequiredError",
     "BudgetExceedsMax",
     "BudgetTooSmall",
+    "DueReviewView",
     "EvaluateRequest",
     "EvaluateResponse",
+    "ImprovementNotFound",
+    "ImprovementResponse",
+    "InvalidProposal",
     "KnowledgeError",
+    "LifecycleError",
     "MetadataExceedsBudget",
+    "MixedSourceVersionsError",
     "NodeNotFound",
     "NodeResponse",
     "NodeView",
     "OperationNotImplemented",
+    "OperatorDecisionRequiredError",
     "PolicyArtifactError",
     "PrimaryRootMissing",
     "PromotionVerdict",
+    "ProposalResponse",
+    "ProposeImprovementRequest",
     "QueryRequest",
     "QueryResponse",
     "RecommendationBlock",
     "RecommendationItem",
+    "RegressionGateError",
     "ResultNode",
+    "ReviewDecisionView",
+    "ReviewRequest",
+    "ReviewResponse",
+    "RollbackRequest",
+    "RollbackResponse",
     "StaleProjectionUnavailable",
     "SubtreeEdge",
     "SubtreeResponse",
     "TraversalMode",
     "UnknownDomain",
+    "UnknownRelearnError",
     "attempt_promotion",
     "estimated_tokens_of_payload",
     "score_text",
@@ -144,6 +163,40 @@ class OperationNotImplemented(KnowledgeError):
 
 class PolicyArtifactError(KnowledgeError):
     code = "POLICY_HASH_MISMATCH"
+
+
+class LifecycleError(KnowledgeError):
+    """A store-backed lifecycle failure that has no more specific contract."""
+
+    code = "LIFECYCLE_ERROR"
+
+
+class InvalidProposal(LifecycleError):
+    code = "PROPOSAL_INVALID"
+
+
+class ApprovalRequiredError(LifecycleError):
+    code = "APPROVAL_REQUIRED"
+
+
+class RegressionGateError(LifecycleError):
+    code = "REGRESSION_GATE_FAILED"
+
+
+class ImprovementNotFound(LifecycleError):
+    code = "IMPROVEMENT_NOT_FOUND"
+
+
+class UnknownRelearnError(LifecycleError):
+    code = "UNKNOWN_RELEARN"
+
+
+class OperatorDecisionRequiredError(LifecycleError):
+    code = "OPERATOR_DECISION_REQUIRED"
+
+
+class MixedSourceVersionsError(LifecycleError):
+    code = "MIXED_SOURCE_VERSIONS"
 
 
 # ------------------------------------------------------------------- requests
@@ -492,3 +545,139 @@ class AccessPolicy:
         """
         verdict = self._surface_decisions.get(str(task_surface), self._unknown_surface)
         return _DECISION_BY_VERDICT[verdict]
+
+
+# ------------------------------------------------- lifecycle tool contracts
+#
+# The remaining four public tools (review, propose_improvement,
+# apply_improvement, rollback) share the same envelope as every other read:
+# audit id, projection version, both watermarks and staleness. Requests are
+# ``extra="forbid"`` so a CLI/API/MCP adapter can never smuggle fields in.
+
+
+class ReviewRequest(BaseModel):
+    """The ``knowledge.review`` request: one node, plus an optional due scan."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    node_id: str = Field(min_length=1)
+    at: datetime | None = None
+    include_due: bool = False
+
+
+class ReviewDecisionView(BaseModel):
+    """The deterministic review-policy verdict, serialized for the caller."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    current_status: str
+    desired_status: str
+    target_status: str
+    transitioned: bool
+    qualifying_for_promotion: bool
+    reasons: tuple[str, ...] = ()
+    blocked_by: tuple[str, ...] = ()
+    policy_version: str
+
+
+class DueReviewView(BaseModel):
+    """One candidate emitted by the due-review scheduler (no model call)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    node_id: str
+    version: int
+    domain: str
+    reasons: tuple[str, ...] = ()
+    last_review_at: datetime | None = None
+    target_status: str | None = None
+
+
+class ReviewResponse(_ResponseMeta):
+    """The ``knowledge.review`` response: decision, versions and recommendations."""
+
+    node_id: str
+    decision: ReviewDecisionView
+    persisted: bool
+    from_version: int
+    to_version: int
+    relearn_pending: bool
+    due: tuple[DueReviewView, ...] = ()
+    recommendations: RecommendationBlock
+
+
+class ProposeImprovementRequest(BaseModel):
+    """The ``knowledge.propose_improvement`` request: one structured diff."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    node_id: str = Field(min_length=1)
+    diff: tuple[DiffOperation, ...] = Field(min_length=1)
+    rationale: str = Field(min_length=1)
+    base_version: int | None = Field(default=None, ge=1)
+    at: datetime | None = None
+
+
+class ProposalResponse(_ResponseMeta):
+    """The persisted proposal plus its audit/projection metadata."""
+
+    proposal: ImprovementProposal
+    idempotent_replay: bool = False
+
+
+class ApplyImprovementRequest(BaseModel):
+    """The ``knowledge.apply_improvement`` request (approval for high impact)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    proposal_id: str = Field(min_length=1)
+    approval: ApprovalRecord | None = None
+    at: datetime | None = None
+
+
+class ImprovementResponse(_ResponseMeta):
+    """The outcome of an apply or an improvement rollback."""
+
+    proposal_id: str
+    node_id: str
+    from_version: int
+    to_version: int
+    status: str
+    content_sha256: str
+    idempotent_replay: bool
+
+
+class RollbackRequest(BaseModel):
+    """The ``knowledge.rollback`` request: exactly one rollback target."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    node_id: str | None = Field(default=None, min_length=1)
+    to_version: int | None = Field(default=None, ge=1)
+    relearn_id: str | None = Field(default=None, min_length=1)
+    at: datetime | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_target(self) -> RollbackRequest:
+        improvement = self.node_id is not None
+        relearn = self.relearn_id is not None
+        if improvement == relearn:
+            raise ValueError("rollback requires exactly one of node_id or relearn_id")
+        if relearn and self.to_version is not None:
+            raise ValueError("to_version only applies to an improvement rollback")
+        return self
+
+
+class RollbackResponse(_ResponseMeta):
+    """The outcome of an improvement rollback or a relearn rollback."""
+
+    kind: Literal["improvement", "relearn"]
+    node_id: str | None = None
+    relearn_id: str | None = None
+    from_version: int | None = None
+    to_version: int | None = None
+    status: str
+    content_sha256: str | None = None
+    restored_db_sha256: str | None = None
+    verified: bool | None = None
+    idempotent_replay: bool | None = None

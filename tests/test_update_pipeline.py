@@ -17,7 +17,7 @@ import pytest
 from soul_knowledge.domain import EventKind, LifecycleStatus, PrimaryDomain
 from soul_knowledge.fragment_generator import file_scoped_id
 from soul_knowledge.importer import SeedImporter
-from soul_knowledge.projection import GraphProjector, ShrinkGuardError
+from soul_knowledge.projection import GraphProjector, ProjectorBusy, ShrinkGuardError
 from soul_knowledge.source_watcher import ChangeKind, SourceChange, SourceWatcher
 from soul_knowledge.store import EventStore
 from soul_knowledge.update_pipeline import UpdateReceipt, update_from_changes
@@ -166,3 +166,56 @@ def test_shrink_guard_still_blocks_an_unscoped_shrink(tmp_path: Path) -> None:
     )
     assert receipt.projection is not None
     assert receipt.projection.activated is True
+
+
+def test_rebuild_retries_while_another_projector_holds_the_lock(tmp_path: Path) -> None:
+    """K2: a busy rebuild lock must not drop the watcher batch.
+
+    A reader-triggered ``repair_if_stale`` holds the single rebuild lock, so a
+    watcher batch can arrive while ``rebuild`` would raise ``ProjectorBusy``.
+    The pipeline retries with a bounded backoff instead of losing the change.
+    """
+    store, importer, projector = _populated(tmp_path)
+    watcher, receipts = _watched(tmp_path, store, importer, projector)
+
+    real_rebuild = projector.rebuild
+    calls = {"count": 0}
+
+    def busy_twice(**kwargs: object) -> object:
+        calls["count"] += 1
+        if calls["count"] <= 2:
+            raise ProjectorBusy("another projector holds the rebuild lock for this corpus root")
+        return real_rebuild(**kwargs)  # type: ignore[arg-type]
+
+    projector.rebuild = busy_twice  # type: ignore[method-assign]
+    (tmp_path / "corpus" / "alpha.md").write_bytes(
+        ALPHA + b"\n## Third Lesson\n\nRetry the rebuild while the lock is busy.\n"
+    )
+    changes = watcher.poll()
+    projector.rebuild = real_rebuild  # type: ignore[method-assign]
+
+    assert [change.kind for change in changes] == [ChangeKind.CHANGED]
+    assert calls["count"] == 3, "two busy signals then one successful rebuild"
+    assert receipts and receipts[-1].projection is not None
+    assert receipts[-1].projection.activated is True
+
+
+def test_busy_lock_exhaustion_keeps_the_typed_error(tmp_path: Path) -> None:
+    """The retry is bounded: an exhausted budget still surfaces ``ProjectorBusy``."""
+    _, importer, projector = _populated(tmp_path)
+    (tmp_path / "corpus" / "alpha.md").write_bytes(ALPHA + b"\n## Fourth Lesson\n\nNever lose a batch.\n")
+    changes = [SourceChange(path="alpha.md", kind=ChangeKind.CHANGED, content_sha256="0" * 64)]
+
+    def always_busy(**kwargs: object) -> object:
+        raise ProjectorBusy("another projector holds the rebuild lock for this corpus root")
+
+    projector.rebuild = always_busy  # type: ignore[method-assign]
+    with pytest.raises(ProjectorBusy):
+        update_from_changes(
+            changes,
+            importer=importer,
+            projector=projector,
+            root=tmp_path / "corpus",
+            domain=PrimaryDomain.P1,
+            rebuild_attempts=1,
+        )

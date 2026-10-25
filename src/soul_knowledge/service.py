@@ -30,41 +30,78 @@ import hashlib
 import json
 import threading
 import time
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
+
+from pydantic import ValidationError
 
 from soul_knowledge.audit import AuditLog
 from soul_knowledge.contracts import (
     ACCESS_ONLY_TOKEN_CAP,
     DEFAULT_MAX_TOKEN_BUDGET,
     MINIMUM_TOKEN_BUDGET,
+    ApplyImprovementRequest,
+    ApprovalRequiredError,
     BudgetExceedsMax,
     BudgetTooSmall,
+    DueReviewView,
     EvaluateRequest,
     EvaluateResponse,
+    ImprovementNotFound,
+    ImprovementResponse,
+    InvalidProposal,
     KnowledgeError,
+    LifecycleError,
     MetadataExceedsBudget,
+    MixedSourceVersionsError,
     NodeNotFound,
     NodeResponse,
     NodeView,
-    OperationNotImplemented,
+    OperatorDecisionRequiredError,
     PrimaryRootMissing,
+    ProposalResponse,
+    ProposeImprovementRequest,
     QueryRequest,
     QueryResponse,
     RecommendationBlock,
     RecommendationItem,
+    RegressionGateError,
     ResultNode,
+    ReviewDecisionView,
+    ReviewRequest,
+    ReviewResponse,
+    RollbackRequest,
+    RollbackResponse,
     StaleProjectionUnavailable,
     SubtreeEdge,
     SubtreeResponse,
+    UnknownRelearnError,
     estimated_tokens_of_payload,
     score_text,
 )
-from soul_knowledge.domain import Event, EventKind, Evidence, Node, canonical_json
+from soul_knowledge.domain import Event, EventKind, Evidence, Node, canonical_json, quantize_score
 from soul_knowledge.events import Invocation, InvocationOutcome, WriteReceipt
+from soul_knowledge.improvement import (
+    ApprovalRequired,
+    ProposalValidationError,
+    RegressionGateFailure,
+    UnknownImprovement,
+    apply_improvement,
+    get_proposal,
+    propose,
+    rollback_improvement,
+)
+from soul_knowledge.improvement import UnknownNode as ImprovementUnknownNode
 from soul_knowledge.projection import GraphProjector, ProjectorBusy
 from soul_knowledge.read_model_validator import ReadModelValidator
+from soul_knowledge.relearn import (
+    BackupUnavailable,
+    MixedSourceVersions,
+    OperatorDecisionRequired,
+    RelearnEngine,
+    UnknownRelearn,
+)
 from soul_knowledge.retrieval import (
     BudgetedTraversal,
     LexicalIndex,
@@ -73,7 +110,11 @@ from soul_knowledge.retrieval import (
     sanitize_text,
     tokenize,
 )
-from soul_knowledge.store import EventStore
+from soul_knowledge.review import ReviewEngine
+from soul_knowledge.review import UnknownNode as ReviewUnknownNode
+from soul_knowledge.scheduler import DueReviewScheduler
+from soul_knowledge.scoring import ScoreEngine, UnknownNodeError
+from soul_knowledge.store import EventStore, StoreError
 
 __all__ = ["KnowledgeService"]
 
@@ -139,8 +180,49 @@ class KnowledgeService:
         self._default_actor = default_actor
         self._snapshot_cache: dict[tuple[str, str], _Snapshot] = {}
         self._cache_lock = threading.Lock()
+        # Lifecycle engines (Tasks 5/6) share one evidence-scope hook so the
+        # relearn quarantine excludes the same evidence from scoring and from
+        # review counts (Task 6 concern #2).
+        self._relearn_engine = RelearnEngine(store)
+        self._evidence_scope = self._relearn_scope
+        self._score_engine = ScoreEngine(store, evidence_scope=self._evidence_scope)
+        self._review_engine = ReviewEngine(
+            store,
+            registry=self._relearn_engine.registry,
+            evidence_scope=self._evidence_scope,
+        )
+        self._scheduler = DueReviewScheduler(store, self._review_engine)
 
     # ------------------------------------------------------------- introspection
+
+    def _relearn_scope(self) -> tuple[frozenset[str], frozenset[str]]:
+        """The shared ``(compatible, quarantined)`` evidence scope.
+
+        Both scoring (Task 5) and review (Task 6) consume this hook, so a
+        relearn quarantine excludes the same evidence everywhere instead of
+        only in the review count (Task 6 concern #2).
+
+        The source-version filter is only meaningful once a source manifest
+        exists. A store that never recorded a source version has nothing to be
+        incompatible with, so the compatible set is "every recorded evidence
+        source version" rather than the empty fail-closed set — otherwise a
+        freshly built store could never score anything. Once the registry holds
+        rows, ``active() is None`` (all CURRENT pending an operator decision)
+        fails closed exactly as the relearn contract requires.
+        """
+        quarantined = self._relearn_engine.quarantined_evidence_ids()
+        compatible = self._relearn_engine.compatible_source_version_ids()
+        if not compatible:
+            with self._store.read() as conn:
+                registry_rows = conn.execute("SELECT COUNT(*) AS n FROM source_version").fetchone()
+            if registry_rows is not None and int(registry_rows["n"]) == 0:
+                compatible = self._evidence_source_versions()
+        return compatible, quarantined
+
+    def _evidence_source_versions(self) -> frozenset[str]:
+        with self._store.read() as conn:
+            rows = conn.execute("SELECT DISTINCT source_version_id FROM evidence").fetchall()
+        return frozenset(str(row["source_version_id"]) for row in rows if row["source_version_id"] is not None)
 
     def snapshot_cache_keys(self) -> list[tuple[str, str]]:
         """The warm cache keys: ``(graph_content_hash, projection_version)`` only."""
@@ -307,11 +389,11 @@ class KnowledgeService:
         results: list[ResultNode],
         *,
         required_watermark: int,
-        invocation: Invocation,
+        at: datetime,
     ) -> RecommendationBlock:
         """Deterministic three-list block; structured references, never raw text."""
         evidence_map = self._evidence_ids_by_node([result.node_id for result in results], required_watermark)
-        expiry = invocation.started_at + timedelta(days=_RECOMMENDATION_EXPIRY_DAYS)
+        expiry = at + timedelta(days=_RECOMMENDATION_EXPIRY_DAYS)
         best: list[RecommendationItem] = []
         recommended: list[RecommendationItem] = []
         unnecessary: list[RecommendationItem] = []
@@ -530,7 +612,7 @@ class KnowledgeService:
         results = ranked_results
         truncated = False
         while True:
-            block = self._recommendations(results, required_watermark=required_watermark, invocation=invocation)
+            block = self._recommendations(results, required_watermark=required_watermark, at=invocation.started_at)
             confidence = self._aggregate_confidence(results)
             response = self._finalize_query(
                 {
@@ -759,19 +841,461 @@ class KnowledgeService:
             raise NodeNotFound(f"evidence target {evidence.node_id!r} does not exist")
         return node.domain
 
+    # ---------------------------------------------------------------- lifecycle
+
+    def _meta_after(self, audit_event_id: str) -> dict[str, Any]:
+        """Audit/projection metadata for a lifecycle response.
+
+        A lifecycle call can move the knowledge watermark, so the metadata
+        names the generation that actually covers the change: the stale-read
+        repair path runs once. If even that repair cannot produce a readable
+        generation the response is marked ``stale=True`` instead of failing a
+        write that already committed.
+        """
+        required = self._store.knowledge_high_watermark()
+        try:
+            snapshot = self._snapshot(required)
+        except StaleProjectionUnavailable:
+            return {
+                "audit_event_id": audit_event_id,
+                "projection_version": self._store.projection_version(),
+                "required_knowledge_watermark": required,
+                "source_knowledge_high_watermark": required,
+                "stale": True,
+            }
+        return {
+            "audit_event_id": audit_event_id,
+            "projection_version": snapshot.projection_version,
+            "required_knowledge_watermark": required,
+            "source_knowledge_high_watermark": snapshot.watermark,
+            "stale": False,
+        }
+
+    @staticmethod
+    def _map_lifecycle_error(error: BaseException) -> KnowledgeError:
+        """Map the Task 5/6 store errors onto the knowledge error taxonomy."""
+        if isinstance(error, KnowledgeError):
+            return error
+        if isinstance(error, UnknownNodeError):
+            return NodeNotFound(str(error))
+        if isinstance(error, (ReviewUnknownNode, ImprovementUnknownNode)):
+            return NodeNotFound(str(error))
+        if isinstance(error, ProposalValidationError):
+            return InvalidProposal(str(error))
+        if isinstance(error, ApprovalRequired):
+            return ApprovalRequiredError(str(error))
+        if isinstance(error, RegressionGateFailure):
+            return RegressionGateError(str(error))
+        if isinstance(error, UnknownImprovement):
+            return ImprovementNotFound(str(error))
+        if isinstance(error, UnknownRelearn):
+            return UnknownRelearnError(str(error))
+        if isinstance(error, OperatorDecisionRequired):
+            return OperatorDecisionRequiredError(str(error))
+        if isinstance(error, MixedSourceVersions):
+            return MixedSourceVersionsError(str(error))
+        if isinstance(error, BackupUnavailable):
+            return LifecycleError(f"backup unavailable: {error}")
+        return LifecycleError(f"{type(error).__name__}: {error}")
+
+    def _audit_lifecycle_failure(
+        self,
+        operation: str,
+        payload: Any,
+        actor: str | None,
+        error: BaseException,
+        started: float,
+    ) -> KnowledgeError:
+        """Close a failed lifecycle invocation with exactly one final audit."""
+        typed = self._map_lifecycle_error(error)
+        invocation = self._begin(operation, payload, actor, None)
+        typed.audit_event_id = invocation.audit_event_id
+        self._finish_failure(invocation, started, typed)
+        return typed
+
+    def _result_node_from_node(self, node: Node) -> ResultNode:
+        """A contract result row built from a domain node (review responses)."""
+        return ResultNode(
+            node_id=node.node_id,
+            summary=sanitize_text(node.summary or node.node_id, max_length=_MAX_SUMMARY_LENGTH),
+            domain=node.domain.value,
+            kind=node.kind.value,
+            version=node.version,
+            confidence=score_text(node.scores.confidence),
+            p=score_text(node.scores.p),
+        )
+
+    def _assessment_event(self, node_id: str, assessment: Any, *, at: datetime) -> tuple[Event | None, int | None]:
+        """The node revision that materializes the assessment, or ``None``.
+
+        ``evaluate`` is one of the three score-moving tools (relearn contract):
+        the frozen P/M/E vector is written as a new immutable revision. An
+        unchanged vector writes nothing, so repeated evaluations cannot inflate
+        the revision history.
+        """
+        node = self._store.current_node(node_id)
+        if node is None:
+            raise UnknownNodeError(f"unknown node {node_id!r}")
+        current = node.scores
+        updated = current.model_copy(
+            update={
+                "p": assessment.p,
+                "m": assessment.m,
+                "e": assessment.e,
+                "uncertainty": assessment.overall_uncertainty,
+                "confidence": Decimal(1) - assessment.overall_uncertainty,
+                "professional_level": assessment.professional_level,
+                "selected_m_bin": assessment.selected_m_bin,
+            }
+        )
+        unchanged = (
+            quantize_score(updated.p),
+            quantize_score(updated.m),
+            quantize_score(updated.e),
+            quantize_score(updated.uncertainty),
+            quantize_score(updated.confidence),
+            updated.professional_level,
+            updated.selected_m_bin,
+        ) == (
+            current.p,
+            current.m,
+            current.e,
+            current.uncertainty,
+            current.confidence,
+            current.professional_level,
+            current.selected_m_bin,
+        )
+        if unchanged:
+            return None, None
+        event = Event(
+            kind=EventKind.NODE_UPSERT,
+            node_id=node_id,
+            domain=node.domain,
+            node=node.model_copy(update={"scores": updated, "updated_at": at}),
+            source_version_id=node.source_version_id,
+            occurred_at=at,
+            payload={"evaluate": assessment.to_contract_dict()},
+        )
+        return event, node.version
+
     # ------------------------------------------------------------------ evaluate
 
     def evaluate(self, request: EvaluateRequest, *, actor: str | None = None) -> EvaluateResponse:
-        """Fixed contract; the scoring engine lands in Task 5.
+        """Score one node (or a primary plus descendants) and materialize P/M/E.
 
-        The invocation is still journalled and receives exactly one final
-        failure audit event with the typed ``NOT_IMPLEMENTED`` code.
+        Full precision is used for every comparison; only the response carries
+        the 12-decimal serialization. Exactly one final audit event closes the
+        invocation: the scoring write owns it when scores changed, otherwise
+        the read-only audit does.
         """
         started = time.monotonic()
-        invocation = self._begin("knowledge.evaluate", request.model_dump(mode="json"), actor, None)
-        error = OperationNotImplemented(
-            "knowledge.evaluate is a fixed Task 4 contract; the scoring engine arrives in Task 5",
-            audit_event_id=invocation.audit_event_id,
+        payload = request.model_dump(mode="json")
+        try:
+            at = request.at or datetime.now(UTC)
+            engine = self._score_engine
+            assessment = (
+                engine.aggregate_primary(request.node_id, context=request.context_tags, at=at)
+                if request.include_descendants
+                else engine.score_node(request.node_id, context=request.context_tags, at=at)
+            )
+            event, expected_version = self._assessment_event(request.node_id, assessment, at=at)
+        except (UnknownNodeError, StoreError) as error:
+            typed = self._audit_lifecycle_failure("knowledge.evaluate", payload, actor, error, started)
+            raise typed from error
+
+        invocation = Invocation.create(
+            "knowledge.evaluate",
+            request_hash=self._request_hash(payload),
+            actor=actor or self._default_actor,
         )
-        self._finish_failure(invocation, started, error)
-        raise error
+        if event is None:
+            self._audit.begin(invocation)
+            audit_event_id = invocation.audit_event_id
+            self._finish_success(
+                invocation,
+                started,
+                {"node_id": request.node_id, "persisted": False, "level": assessment.professional_level},
+            )
+        else:
+            receipt = self._store.commit(event, invocation=invocation, expected_version=expected_version)
+            audit_event_id = receipt.audit_event_id
+
+        data = assessment.to_contract_dict()
+        return EvaluateResponse(
+            **self._meta_after(audit_event_id),
+            node_id=request.node_id,
+            p=str(data["p"]),
+            m=str(data["m"]),
+            e=str(data["e"]),
+            u_p=str(data["u_p"]),
+            u_m=str(data["u_m"]),
+            u_e=str(data["u_e"]),
+            overall_uncertainty=str(data["overall_uncertainty"]),
+            professional_level=int(data["professional_level"]),
+            selected_m_bin=data["selected_m_bin"],
+            m_bin_evidence_count=data["m_bin_evidence_count"],
+            promotable=bool(data["promotable"]),
+            g=str(data["g"]),
+            explanations=dict(assessment.explanations),
+        )
+
+    # -------------------------------------------------------------------- review
+
+    def review(
+        self,
+        request: ReviewRequest | str,
+        *,
+        at: datetime | None = None,
+        include_due: bool = False,
+        actor: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> ReviewResponse:
+        """Run the deterministic review policy and return its recommendation block.
+
+        The canonical argument is a validated :class:`ReviewRequest`; an adapter
+        may instead pass the node id plus keyword arguments, which is exactly
+        the tool's argument surface.
+        """
+        if not isinstance(request, ReviewRequest):
+            request = ReviewRequest(node_id=request, at=at, include_due=include_due)
+        started = time.monotonic()
+        payload = request.model_dump(mode="json")
+        try:
+            report = self._review_engine.review(
+                request.node_id,
+                at=request.at,
+                actor=actor or self._default_actor,
+                idempotency_key=idempotency_key,
+            )
+        except StoreError as error:
+            typed = self._audit_lifecycle_failure("knowledge.review", payload, actor, error, started)
+            raise typed from error
+
+        try:
+            at = request.at or datetime.now(UTC)
+            node = self._store.current_node(request.node_id)
+            if node is None:  # pragma: no cover - the engine just read it
+                raise NodeNotFound(f"node {request.node_id!r} disappeared during review")
+            required = self._store.knowledge_high_watermark()
+            block = self._recommendations([self._result_node_from_node(node)], required_watermark=required, at=at)
+            due = tuple(self._scheduler.scan_due(at=at)) if request.include_due else ()
+            decision = report.decision
+            response = ReviewResponse(
+                **self._meta_after(report.audit_event_id),
+                node_id=report.node_id,
+                decision=ReviewDecisionView(
+                    current_status=decision.current_status.value,
+                    desired_status=decision.desired_status.value,
+                    target_status=decision.target_status.value,
+                    transitioned=decision.transitioned,
+                    qualifying_for_promotion=decision.qualifying_for_promotion,
+                    reasons=decision.reasons,
+                    blocked_by=decision.blocked_by,
+                    policy_version=decision.policy_version,
+                ),
+                persisted=report.persisted,
+                from_version=report.from_version,
+                to_version=report.to_version,
+                relearn_pending=report.relearn_pending,
+                due=tuple(
+                    DueReviewView(
+                        node_id=candidate.node_id,
+                        version=candidate.version,
+                        domain=candidate.domain.value,
+                        reasons=candidate.reasons,
+                        last_review_at=candidate.last_review_at,
+                        target_status=(
+                            candidate.decision.target_status.value if candidate.decision is not None else None
+                        ),
+                    )
+                    for candidate in due
+                ),
+                recommendations=block,
+            )
+        except StoreError as error:
+            typed = self._map_lifecycle_error(error)
+            typed.audit_event_id = report.audit_event_id
+            raise typed from error
+        return response
+
+    # ------------------------------------------------------ propose / apply / rollback
+
+    def propose_improvement(
+        self,
+        request: ProposeImprovementRequest | None = None,
+        *,
+        node_id: str | None = None,
+        diff: tuple[Any, ...] | list[Any] | None = None,
+        rationale: str | None = None,
+        base_version: int | None = None,
+        at: datetime | None = None,
+        actor: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> ProposalResponse:
+        """Persist one structured diff proposal (zero knowledge weight).
+
+        Accepts a validated :class:`ProposeImprovementRequest` or the same
+        fields as keyword arguments (CLI/API/MCP adapters).
+        """
+        if not isinstance(request, ProposeImprovementRequest):
+            if node_id is None or diff is None or rationale is None:
+                raise InvalidProposal("propose_improvement requires node_id, diff and rationale")
+            request = ProposeImprovementRequest(
+                node_id=node_id,
+                diff=tuple(diff),
+                rationale=rationale,
+                base_version=base_version,
+                at=at,
+            )
+        started = time.monotonic()
+        payload = request.model_dump(mode="json")
+        try:
+            record = propose(
+                self._store,
+                node_id=request.node_id,
+                diff=request.diff,
+                rationale=request.rationale,
+                base_version=request.base_version,
+                actor=actor or self._default_actor,
+                at=request.at,
+                idempotency_key=idempotency_key,
+            )
+        except StoreError as error:
+            typed = self._audit_lifecycle_failure("knowledge.propose_improvement", payload, actor, error, started)
+            raise typed from error
+        try:
+            meta = self._meta_after(record.audit_event_id)
+        except StoreError as error:  # pragma: no cover - projection repair failure
+            typed = self._map_lifecycle_error(error)
+            typed.audit_event_id = record.audit_event_id
+            raise typed from error
+        return ProposalResponse(**meta, proposal=record.proposal)
+
+    def apply_improvement(
+        self,
+        request: ApplyImprovementRequest | str | None = None,
+        *,
+        proposal_id: str | None = None,
+        approval: Any = None,
+        at: datetime | None = None,
+        actor: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> ImprovementResponse:
+        """Apply a proposal: approval and regression gate run before any write.
+
+        Accepts a validated :class:`ApplyImprovementRequest`, a bare proposal id,
+        or the tool's keyword arguments.
+        """
+        if not isinstance(request, ApplyImprovementRequest):
+            resolved = proposal_id if proposal_id is not None else request
+            if resolved is None:
+                raise InvalidProposal("apply_improvement requires a proposal_id")
+            request = ApplyImprovementRequest(proposal_id=resolved, approval=approval, at=at)
+        started = time.monotonic()
+        payload = request.model_dump(mode="json")
+        try:
+            proposal = get_proposal(self._store, request.proposal_id)
+            if proposal is None:
+                raise UnknownImprovement(f"no proposal {request.proposal_id!r} in the event log")
+            receipt = apply_improvement(
+                self._store,
+                proposal,
+                approval=request.approval,
+                at=request.at,
+                actor=actor or self._default_actor,
+                idempotency_key=idempotency_key,
+            )
+        except StoreError as error:
+            typed = self._audit_lifecycle_failure("knowledge.apply_improvement", payload, actor, error, started)
+            raise typed from error
+        try:
+            meta = self._meta_after(receipt.audit_event_id)
+        except StoreError as error:  # pragma: no cover - projection repair failure
+            typed = self._map_lifecycle_error(error)
+            typed.audit_event_id = receipt.audit_event_id
+            raise typed from error
+        return ImprovementResponse(
+            **meta,
+            proposal_id=receipt.proposal_id,
+            node_id=receipt.node_id,
+            from_version=receipt.from_version,
+            to_version=receipt.to_version,
+            status=receipt.status,
+            content_sha256=receipt.content_sha256,
+            idempotent_replay=receipt.idempotent_replay,
+        )
+
+    def rollback(
+        self,
+        request: RollbackRequest | None = None,
+        *,
+        node_id: str | None = None,
+        to_version: int | None = None,
+        relearn_id: str | None = None,
+        at: datetime | None = None,
+        actor: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> RollbackResponse:
+        """Roll back one improvement revision *or* one relearn apply.
+
+        Accepts a validated :class:`RollbackRequest` or the tool's keyword
+        arguments; exactly one rollback target must be supplied.
+        """
+        if not isinstance(request, RollbackRequest):
+            try:
+                request = RollbackRequest(
+                    node_id=node_id,
+                    to_version=to_version,
+                    relearn_id=relearn_id,
+                    at=at,
+                )
+            except ValidationError as error:
+                raise InvalidProposal(f"rollback request is invalid: {error}") from error
+        started = time.monotonic()
+        payload = request.model_dump(mode="json")
+        operation = "knowledge.rollback"
+        try:
+            if request.relearn_id is not None:
+                relearn_receipt = self._relearn_engine.rollback(request.relearn_id, actor=actor or self._default_actor)
+                try:
+                    meta = self._meta_after(relearn_receipt.audit_event_id)
+                except StoreError as error:  # pragma: no cover - projection repair failure
+                    typed = self._map_lifecycle_error(error)
+                    typed.audit_event_id = relearn_receipt.audit_event_id
+                    raise typed from error
+                return RollbackResponse(
+                    **meta,
+                    kind="relearn",
+                    relearn_id=relearn_receipt.relearn_id,
+                    status="restored",
+                    restored_db_sha256=relearn_receipt.restored_db_sha256,
+                    verified=relearn_receipt.verified,
+                )
+            assert request.node_id is not None  # RollbackRequest guarantees one target
+            receipt = rollback_improvement(
+                self._store,
+                node_id=request.node_id,
+                to_version=request.to_version,
+                actor=actor or self._default_actor,
+                at=request.at,
+                idempotency_key=idempotency_key,
+            )
+        except StoreError as error:
+            typed = self._audit_lifecycle_failure(operation, payload, actor, error, started)
+            raise typed from error
+        try:
+            meta = self._meta_after(receipt.audit_event_id)
+        except StoreError as error:  # pragma: no cover - projection repair failure
+            typed = self._map_lifecycle_error(error)
+            typed.audit_event_id = receipt.audit_event_id
+            raise typed from error
+        return RollbackResponse(
+            **meta,
+            kind="improvement",
+            node_id=receipt.node_id,
+            from_version=receipt.from_version,
+            to_version=receipt.to_version,
+            status=receipt.status,
+            content_sha256=receipt.content_sha256,
+            idempotent_replay=receipt.idempotent_replay,
+        )
