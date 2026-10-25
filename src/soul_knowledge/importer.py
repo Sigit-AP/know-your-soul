@@ -20,6 +20,17 @@ Imports are *structured*: the caller supplies an explicit
 Directory imports are incremental through a manifest that is *anchored* to
 the resolved corpus root and keyed by content hash, never stat data: a
 manifest written for another root fails closed.
+
+Residual audit wave-1 (R2): every file read is contained and bounded.
+
+* Contained — each candidate resolves through
+  :func:`soul_knowledge.security.resolve_within_root` against the import root
+  (the corpus root for directory imports, the file's own directory for
+  standalone file imports): a symlink or path that resolves outside the root
+  fails closed with a typed ``PathEscapeError`` and its bytes are never read.
+* Bounded — a file larger than :data:`MAX_IMPORT_FILE_BYTES` (and a manifest
+  larger than :data:`MAX_IMPORT_MANIFEST_BYTES`) fails closed with a typed
+  ``OversizedPayloadError`` before its content is read.
 """
 
 from __future__ import annotations
@@ -35,18 +46,32 @@ from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomai
 from soul_knowledge.events import Invocation
 from soul_knowledge.fragment_generator import FRAGMENT_GENERATOR_VERSION
 from soul_knowledge.graphify_adapter import GraphifyAdapter
+from soul_knowledge.security import OversizedPayloadError, resolve_within_root
 from soul_knowledge.source_registry import ParserVersions, SourceKind, SourceRegistry
 from soul_knowledge.store import EventStore
 
 __all__ = [
     "DEFAULT_PARSER_VERSIONS",
     "KNOWLEDGE_ROOT_ID",
+    "MAX_IMPORT_FILE_BYTES",
+    "MAX_IMPORT_MANIFEST_BYTES",
     "ImportManifestError",
     "ImportReceipt",
     "SeedImporter",
 ]
 
 KNOWLEDGE_ROOT_ID = "KROOT"
+
+MAX_IMPORT_FILE_BYTES = 1_048_576
+"""Per-file import budget: 1 MiB, matching ``security.DEFAULT_MAX_PAYLOAD_BYTES``.
+
+Structured seed markdown is operator-curated prose; real corpus files are
+kilobytes. One MiB bounds the worst-case parse/hash work per file without
+touching any legitimate seed.
+"""
+
+MAX_IMPORT_MANIFEST_BYTES = 1_048_576
+"""Budget for the incremental import manifest read (manifests are tiny JSON)."""
 
 DEFAULT_PARSER_VERSIONS = ParserVersions(
     parser_version="markdown-heading-1",
@@ -59,6 +84,29 @@ DEFAULT_PARSER_VERSIONS = ParserVersions(
 
 class ImportManifestError(RuntimeError):
     """The incremental import manifest is missing, unreadable or mis-anchored."""
+
+
+def _read_contained_file(root: str | Path, path: str | Path, *, max_bytes: int = MAX_IMPORT_FILE_BYTES) -> bytes:
+    """Read *path* only when it resolves inside *root* and fits *max_bytes*.
+
+    Fails closed: a symlink/path escaping the root raises a typed
+    ``PathEscapeError`` before any byte is read; an oversized file raises a
+    typed ``OversizedPayloadError`` from the stat metadata, and the actual
+    byte count is re-checked after the read so a racing writer cannot smuggle
+    extra content past the guard.
+    """
+    resolved = resolve_within_root(root, path)
+    size = resolved.stat().st_size
+    if size > max_bytes:
+        raise OversizedPayloadError(
+            f"import file {str(path)!r} is {size} bytes, exceeding the {max_bytes}-byte import cap"
+        )
+    content = resolved.read_bytes()
+    if len(content) > max_bytes:
+        raise OversizedPayloadError(
+            f"import file {str(path)!r} grew past the {max_bytes}-byte import cap while being read"
+        )
+    return content
 
 
 class ImportReceipt(BaseModel):
@@ -143,17 +191,21 @@ class SeedImporter:
         domain: PrimaryDomain,
         source_uri: str,
         source_scope: str | None = None,
+        import_root: str | Path | None = None,
     ) -> ImportReceipt:
         """Import one structured markdown file under an explicit domain mapping.
 
         ``source_scope`` overrides the id scope; directory imports pass the
         corpus-relative path so same-named files in different directories get
-        distinct file-scoped ids.
+        distinct file-scoped ids. ``import_root`` pins the containment root
+        (directory imports pass the corpus root); the default is the file's
+        own directory, so a standalone import can never follow a symlink or
+        path outside the directory the caller named.
         """
         if not isinstance(domain, PrimaryDomain):
             raise TypeError(f"an explicit PrimaryDomain mapping is required, got {domain!r}")
         path = Path(path)
-        content = path.read_bytes()
+        content = _read_contained_file(import_root if import_root is not None else path.parent, path)
         scope = source_scope if source_scope is not None else path.name
         version = self._registry.observe(path.resolve(), SourceKind.OPERATOR_IMPORT, self._parser_versions)
         self.ensure_roots(version.source_version_id)
@@ -277,7 +329,11 @@ class SeedImporter:
         previous: dict[str, dict[str, str]] = {}
         if manifest_path.exists():
             try:
-                stored = json.loads(manifest_path.read_text(encoding="utf-8"))
+                stored = json.loads(
+                    _read_contained_file(self._state_dir, manifest_path, max_bytes=MAX_IMPORT_MANIFEST_BYTES).decode(
+                        "utf-8"
+                    )
+                )
             except (OSError, json.JSONDecodeError) as error:
                 raise ImportManifestError(f"unreadable import manifest {manifest_path}: {error}") from error
             if stored.get("root") != str(root):
@@ -289,7 +345,7 @@ class SeedImporter:
         current: dict[str, str] = {}
         for file in sorted(root.rglob("*.md"), key=lambda item: item.as_posix()):
             relative = file.relative_to(root).as_posix()
-            current[relative] = hashlib.sha256(file.read_bytes()).hexdigest()
+            current[relative] = hashlib.sha256(_read_contained_file(root, file)).hexdigest()
 
         receipts: list[ImportReceipt] = []
         imported: dict[str, ImportReceipt] = {}
@@ -301,6 +357,7 @@ class SeedImporter:
                 domain=domain,
                 source_uri=f"{source_uri_prefix}/{relative}",
                 source_scope=relative,
+                import_root=root,
             )
             receipts.append(receipt)
             imported[relative] = receipt
@@ -312,6 +369,7 @@ class SeedImporter:
                 domain=domain,
                 source_uri=f"{source_uri_prefix}/{relative}",
                 source_scope=relative,
+                import_root=root,
             )
 
         manifest = {

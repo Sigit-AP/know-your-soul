@@ -114,6 +114,7 @@ from soul_knowledge.review import ReviewEngine
 from soul_knowledge.review import UnknownNode as ReviewUnknownNode
 from soul_knowledge.scheduler import DueReviewScheduler
 from soul_knowledge.scoring import ScoreEngine, UnknownNodeError
+from soul_knowledge.security import redact_text
 from soul_knowledge.store import EventStore, StoreError
 
 __all__ = ["KnowledgeService"]
@@ -124,6 +125,20 @@ _MAX_PROVENANCE_LENGTH = 256
 _MAX_SUMMARY_LENGTH = 256
 _RECOMMENDATION_LIST_CAP = 3
 _RECOMMENDATION_EXPIRY_DAYS = 30
+
+
+def _redacted_content(text: str, *, max_length: int) -> str:
+    """Sanitize then redact one content-derived string leaving the service.
+
+    Defense-in-depth (residual audit wave-1, R1): the publish gate already
+    fails closed on secret shapes, but every read surface additionally passes
+    content text through :func:`soul_knowledge.security.redact_text`. Clean
+    input is byte-identical (``redact_text`` only rewrites pattern matches),
+    so the frozen token-budget contract is untouched for clean corpora; only
+    the string payload changes, never the response structure.
+    """
+
+    return redact_text(sanitize_text(text, max_length=max_length))
 
 
 class _Snapshot:
@@ -335,7 +350,7 @@ class KnowledgeService:
         scores = cls._scores_of(node)
         return ResultNode(
             node_id=str(node["id"]),
-            summary=sanitize_text(str(node.get("label") or node["id"]), max_length=_MAX_SUMMARY_LENGTH),
+            summary=_redacted_content(str(node.get("label") or node["id"]), max_length=_MAX_SUMMARY_LENGTH),
             domain=str(node.get("domain", "")),
             kind=str(node.get("kind", "")),
             version=int(node.get("version", 1)),
@@ -347,20 +362,24 @@ class KnowledgeService:
     def _node_view(cls, node: dict[str, Any]) -> NodeView:
         scores = cls._scores_of(node)
         provenance = tuple(
-            sanitize_text(str(item), max_length=_MAX_PROVENANCE_LENGTH)
+            _redacted_content(str(item), max_length=_MAX_PROVENANCE_LENGTH)
             for item in node.get("provenance", [])
             if isinstance(item, str)
         )
         return NodeView(
             node_id=str(node["id"]),
-            summary=sanitize_text(str(node.get("label") or node["id"]), max_length=_MAX_SUMMARY_LENGTH),
+            summary=_redacted_content(str(node.get("label") or node["id"]), max_length=_MAX_SUMMARY_LENGTH),
             domain=str(node.get("domain", "")),
             kind=str(node.get("kind", "")),
             version=int(node.get("version", 1)),
             lifecycle_status=str(node.get("lifecycle_status", "")),
             source_version_id=str(node.get("source_version_id", "")),
             provenance=provenance,
-            context_tags=tuple(str(tag) for tag in node.get("context_tags", []) if isinstance(tag, str)),
+            context_tags=tuple(
+                _redacted_content(str(tag), max_length=_MAX_SUMMARY_LENGTH)
+                for tag in node.get("context_tags", [])
+                if isinstance(tag, str)
+            ),
             confidence=score_text(scores.get("confidence", "0")),
             p=score_text(scores.get("p", "0")),
         )
@@ -589,7 +608,7 @@ class KnowledgeService:
         provenance = tuple(
             sorted(
                 {
-                    sanitize_text(str(item), max_length=_MAX_PROVENANCE_LENGTH)
+                    _redacted_content(str(item), max_length=_MAX_PROVENANCE_LENGTH)
                     for node in consulted
                     for item in node.get("provenance", [])
                     if isinstance(item, str)
@@ -917,7 +936,7 @@ class KnowledgeService:
         """A contract result row built from a domain node (review responses)."""
         return ResultNode(
             node_id=node.node_id,
-            summary=sanitize_text(node.summary or node.node_id, max_length=_MAX_SUMMARY_LENGTH),
+            summary=_redacted_content(node.summary or node.node_id, max_length=_MAX_SUMMARY_LENGTH),
             domain=node.domain.value,
             kind=node.kind.value,
             version=node.version,
