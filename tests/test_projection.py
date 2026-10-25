@@ -37,11 +37,13 @@ from soul_knowledge.projection import (
     ARTIFACT_NAMES,
     FragmentCache,
     GraphProjector,
+    OversizedArtifactError,
     ProjectionValidationError,
     ProjectorBusy,
     ShrinkGuardError,
     StalePublicationError,
 )
+from soul_knowledge.retrieval import BudgetedTraversal, PrimaryRouter
 from soul_knowledge.source_registry import SourceRegistry
 from soul_knowledge.source_watcher import ChangeKind, SourceWatcher
 from soul_knowledge.store import EventStore
@@ -634,3 +636,173 @@ def test_recover_incomplete_runs_the_projection_repair_hook(tmp_path: Path) -> N
     manifest = projector.active_manifest()
     assert manifest is not None
     assert manifest["source_knowledge_high_watermark"] == store.knowledge_high_watermark()
+
+
+# ---------------------------------------------------------------------------
+# Opsi A summary enrichment (T10-1) and R2 write-side publish caps
+# ---------------------------------------------------------------------------
+
+ENRICH = (
+    b"# Guide\n"
+    b"\n"
+    b"Intro sentence one. Intro sentence two stays corpus-side.\n"
+    b"\n"
+    b"## Terms\n"
+    b"\n"
+    b"- **Alpha Term** -- the first definition.\n"
+    b"- **Beta Term** -- the second definition.\n"
+)
+
+
+def _enriched(tmp_path: Path, content: bytes = ENRICH) -> tuple[EventStore, GraphProjector]:
+    store = EventStore(tmp_path / "soul.sqlite3")
+    importer = SeedImporter(store, state_dir=tmp_path / "import-state")
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    (corpus / "guide.md").write_bytes(content)
+    importer.import_file(corpus / "guide.md", domain=PrimaryDomain.P1, source_uri="soul://corpus/guide.md")
+    projector = GraphProjector(store, output_root=tmp_path / "out")
+    return store, projector
+
+
+def _labels(tmp_path: Path) -> dict[str, str]:
+    return {node["id"]: node["label"] for node in _graph_json(tmp_path)["nodes"]}
+
+
+def test_projection_enriches_file_summary_with_first_sentence_only(tmp_path: Path) -> None:
+    store, projector = _enriched(tmp_path)
+    projector.rebuild()
+    labels = _labels(tmp_path)
+    file_id = file_scoped_id("guide.md")
+    # Opsi A: heading + the sanitized, capped FIRST sentence; later sentences
+    # stay corpus-side (raw-body containment, see test_service.py's marker).
+    assert labels[file_id] == "Guide — Intro sentence one."
+    assert "stays corpus-side" not in labels[file_id]
+
+
+def test_projection_enriches_section_summary_with_defined_term_digest(tmp_path: Path) -> None:
+    store, projector = _enriched(tmp_path)
+    projector.rebuild()
+    labels = _labels(tmp_path)
+    section_id = f"{file_scoped_id('guide.md')}_terms"
+    # `**Term** — gloss` leads are the section's own mini-headings: a digest
+    # of them is label-like knowledge, capped and in source order.
+    assert labels[section_id] == "Terms — Alpha Term; Beta Term"
+
+
+def test_enrichment_sanitizes_control_bidi_redacts_secrets_and_masks_paths(tmp_path: Path) -> None:
+    content = (
+        "# Secrets\n\nFirst sentence mentions sk-ABCDEFGHIJKLMNOPQRST and /usr/local/bin/tool and xo\u202exb.\n"
+    ).encode("utf-8")
+    store, projector = _enriched(tmp_path, content)
+    projector.rebuild()
+    label = _labels(tmp_path)[file_scoped_id("guide.md")]
+    assert "sk-ABCDEFGHIJKLMNOPQRST" not in label
+    assert "[REDACTED:openai-style key]" in label
+    assert "/usr/local/bin/tool" not in label
+    assert "[path]" in label
+    assert "\u202e" not in label and "\u200b" not in label
+    assert label.startswith("Secrets — ")
+
+
+def test_enrichment_respects_the_summary_cap_on_fragment_boundaries(tmp_path: Path) -> None:
+    long_lead = "Lead " + "x" * 300
+    content = f"# Capped\n\n- **{long_lead}** -- too long to fit.\n- **Short** -- fits never.\n".encode()
+    store, projector = _enriched(tmp_path, content)
+    projector.rebuild()
+    label = _labels(tmp_path)[file_scoped_id("guide.md")]
+    assert len(label) <= 256
+    # The oversized first lead ends the fill: no mid-word cut, no partial term.
+    assert label == "Capped"
+
+
+def test_enrichment_degrades_when_source_is_missing(tmp_path: Path) -> None:
+    store, projector = _enriched(tmp_path)
+    (tmp_path / "corpus" / "guide.md").unlink()
+    projector.rebuild()
+    labels = _labels(tmp_path)
+    assert labels[file_scoped_id("guide.md")] == "Guide"
+    assert labels[f"{file_scoped_id('guide.md')}_terms"] == "Terms"
+
+
+def test_enrichment_degrades_when_source_drifts_from_its_recorded_hash(tmp_path: Path) -> None:
+    store, projector = _enriched(tmp_path)
+    (tmp_path / "corpus" / "guide.md").write_bytes(b"# Guide\n\nTampered body, never re-imported.\n")
+    projector.rebuild()
+    labels = _labels(tmp_path)
+    assert labels[file_scoped_id("guide.md")] == "Guide"
+    assert "Tampered" not in labels[file_scoped_id("guide.md")]
+
+
+def test_enriched_rebuild_is_byte_deterministic(tmp_path: Path) -> None:
+    store, projector = _enriched(tmp_path)
+    first = projector.rebuild()
+    second = projector.rebuild()
+    assert second.content_hash == first.content_hash
+    assert second.projection_version == first.projection_version
+
+
+def test_enriched_labels_feed_the_lexical_index(tmp_path: Path) -> None:
+    """The enriched summary is what the query router/ranker reads (T10-1)."""
+    store, projector = _enriched(tmp_path)
+    projector.rebuild()
+    graph = _graph_json(tmp_path)
+    router = PrimaryRouter(graph["nodes"], BudgetedTraversal.from_graph_json(graph).links)
+    # "beta" exists only in the source body, never in any heading: it reaches
+    # the index solely through the enriched summary.
+    outcome = router.route(domain=None, purpose="which node defines the beta term?", context_tags=())
+    assert outcome.status == "ranked"
+    assert outcome.domain is PrimaryDomain.P1
+
+
+# --------------------------------------------------------------- R2 caps
+
+
+def test_oversized_node_summary_fails_typed_before_building(tmp_path: Path) -> None:
+    """R2: a 70 KB store summary can no longer wedge rebuilds behind a bare
+    security error — the write-side cap raises a typed error naming the node,
+    and no generation is published."""
+    store, projector = _enriched(tmp_path)
+    assert projector.rebuild().activated
+    active_before = (tmp_path / "out" / "CURRENT").read_text(encoding="utf-8")
+    bloated = Node(
+        node_id="bloated",
+        parent_id="P1",
+        domain=PrimaryDomain.P1,
+        summary="x" * 70_000,
+        payload={"source_file": "soul://operator"},
+        provenance=("soul://operator",),
+        source_version_id=SourceRegistry(store).active().source_version_id,  # type: ignore[union-attr]
+    )
+    store.append_domain(
+        Event(kind=EventKind.NODE_UPSERT, node_id="bloated", domain=PrimaryDomain.P1, node=bloated),
+        idempotency_key="bloated",
+    )
+    with pytest.raises(OversizedArtifactError, match="bloated"):
+        projector.rebuild()
+    # Fail-closed with no torn publication: the previous generation serves.
+    assert (tmp_path / "out" / "CURRENT").read_text(encoding="utf-8") == active_before
+    assert projector.active_manifest() is not None
+
+
+def test_artifact_size_cap_is_fail_closed_and_typed(tmp_path: Path) -> None:
+    """R2 probe: an artifact over the publish cap is rejected typed, at
+    assembly time — before any byte of the generation reaches disk; a normal
+    artifact under the cap publishes fine."""
+    store, _ = _enriched(tmp_path)
+    capped = GraphProjector(store, output_root=tmp_path / "out", max_artifact_bytes=64)
+    with pytest.raises(OversizedArtifactError, match="byte"):
+        capped.rebuild()
+    assert not (tmp_path / "out" / "CURRENT").exists()
+    normal = GraphProjector(store, output_root=tmp_path / "out")
+    receipt = normal.rebuild()
+    assert receipt.activated
+    assert normal.active_manifest() is not None
+
+
+def test_write_if_changed_rechecks_the_cap_at_the_write_point(tmp_path: Path) -> None:
+    store, _ = _enriched(tmp_path)
+    projector = GraphProjector(store, output_root=tmp_path / "out", max_artifact_bytes=16)
+    with pytest.raises(OversizedArtifactError):
+        projector._write_if_changed(tmp_path / "out" / "graph.json", b"x" * 32)
+    assert not (tmp_path / "out" / "graph.json").exists()

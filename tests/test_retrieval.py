@@ -430,3 +430,56 @@ def test_root_aggregation_is_bounded_by_its_three_strongest_hits() -> None:
     outcome = router.route(domain=None, purpose="goodhart law metric target", context_tags=())
     assert outcome.status == "ranked"
     assert outcome.root_node_id == "P2"
+
+
+def test_enriched_summary_terms_route_to_the_right_root() -> None:
+    """T10-1 (Opsi A): terms that exist only in a node's enriched summary —
+    the defined-term digest lifted from the source body at projection — are
+    searchable and route to that node's primary root. The digest text never
+    appears in any heading, so this isolates the enrichment channel."""
+    nodes = [*_primary_nodes()]
+    links: list[GraphLink] = []
+    nodes.append(
+        {
+            "id": "p2-catalog",
+            "kind": "child",
+            "domain": "P2",
+            # Enriched label shape: heading + defined-term digest.
+            "label": "Catalog — Overconfidence countermeasure; Calibration gate",
+            "context_tags": [],
+        }
+    )
+    links.append(GraphLink(source="P2", target="p2-catalog", relation="parent_of"))
+    nodes.append(
+        {
+            "id": "p5-notes",
+            "kind": "child",
+            "domain": "P5",
+            "label": "Notes — Reasoning chains",
+            "context_tags": [],
+        }
+    )
+    links.append(GraphLink(source="P5", target="p5-notes", relation="parent_of"))
+    router = PrimaryRouter(nodes, links)
+    outcome = router.route(domain=None, purpose="what is the overconfidence countermeasure?", context_tags=())
+    assert outcome.status == "ranked"
+    assert outcome.root_node_id == "P2"
+
+
+def test_enriched_summary_first_sentence_is_indexed() -> None:
+    """The capped first sentence after the digest is part of the indexable
+    summary field (spec 13.1: summaries are searchable)."""
+    index = LexicalIndex.from_graph_nodes(
+        [
+            {"id": "n-plain", "kind": "child", "domain": "P1", "label": "Plain", "context_tags": []},
+            {
+                "id": "n-enriched",
+                "kind": "child",
+                "domain": "P1",
+                "label": "Guide — Intro sentence one with a zephyr marker.",
+                "context_tags": [],
+            },
+        ]
+    )
+    hits = index.rank(["zephyr"])
+    assert [hit.node_id for hit in hits] == ["n-enriched"]

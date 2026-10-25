@@ -493,7 +493,12 @@ def test_response_never_contains_raw_corpus_text(tmp_path: Path) -> None:
     corpus = tmp_path / "corpus"
     corpus.mkdir()
     (corpus / "lesson.md").write_bytes(
-        b"# Lesson File\n\n## Gate Discipline\n\nRAW_SOUL_DO_NOT_EXPOSE: the raw body stays in the corpus.\n"
+        # Opsi A (operator ruling 2026-10-25): a projection summary is the
+        # heading plus the sanitized, capped first sentence. The marker lives
+        # in the SECOND sentence, so this test still pins the real contract:
+        # raw body text beyond the published digest never leaks.
+        b"# Lesson File\n\n## Gate Discipline\n\nSanitized digest sentence.\n\n"
+        b"RAW_SOUL_DO_NOT_EXPOSE: the raw body stays in the corpus.\n"
     )
     importer = SeedImporter(store, state_dir=tmp_path / "import-state")
     importer.import_file(corpus / "lesson.md", domain=PrimaryDomain.P1, source_uri="soul://corpus/lesson.md")
