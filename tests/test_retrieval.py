@@ -26,11 +26,14 @@ from soul_knowledge.contracts import (
 from soul_knowledge.domain import PrimaryDomain
 from soul_knowledge.retrieval import (
     DOMAIN_ALIASES,
+    STOPWORDS,
     BudgetedTraversal,
     GraphLink,
     LexicalIndex,
     PrimaryRouter,
     estimated_tokens,
+    normalize_term,
+    query_terms,
     resolve_domain_input,
     sanitize_text,
     tokenize,
@@ -354,3 +357,76 @@ def test_sanitize_text_strips_control_bidi_and_zero_width() -> None:
 def test_tokenize_is_casefolded_and_unicode_aware() -> None:
     assert tokenize("Pembelajaran Bermakna!") == ["pembelajaran", "bermakna"]
     assert tokenize("n-lesson-1") == ["n", "lesson", "1"]
+
+
+# ------------------------------------------------------- query-term hygiene
+
+
+def test_query_terms_drop_stopwords_and_fold_plurals() -> None:
+    """A natural-language question reduces to its content terms, deterministically."""
+    terms = query_terms("What are the claims about biases, and which of them may never be stated as facts?")
+    assert terms == ["claim", "bias", "stated", "fact"]
+    assert all(term not in STOPWORDS for term in terms)
+    # Stopword lists are closed and deterministic: no corpus statistics, no model.
+    assert "the" in STOPWORDS and "yang" in STOPWORDS and "bagaimana" in STOPWORDS
+
+
+def test_normalize_term_is_conservative() -> None:
+    assert normalize_term("claims") == "claim"
+    assert normalize_term("policies") == "policy"
+    assert normalize_term("biases") == "bias"
+    assert normalize_term("bias") == "bias"  # ambiguous -s, never stripped
+    assert normalize_term("status") == "status"
+    assert normalize_term("class") == "class"
+    assert normalize_term("lens") == "lens"
+    assert normalize_term("l1") == "l1"  # short ids survive untouched
+
+
+def test_nl_question_routes_to_a_root_instead_of_no_match() -> None:
+    """Before hygiene this question produced ``ambiguous``/``no_match`` (bench 2026-10-25)."""
+    nodes = _primary_nodes()
+    for node in nodes:
+        if node["id"] == "P3":
+            node["context_tags"] = ["kill criteria", "stop rule"]
+    router = PrimaryRouter(nodes)
+    outcome = router.route(
+        domain=None,
+        purpose="What are the kill criteria, and when should I stop the task instead of continuing?",
+        context_tags=(),
+    )
+    assert outcome.status == "ranked"
+    assert outcome.root_node_id == "P3"
+
+
+def test_root_aggregation_is_bounded_by_its_three_strongest_hits() -> None:
+    """Many weak hits in one domain must not outvote one strong hit in another.
+
+    A plain sum made a wide domain win on hit count; the top-three sum keeps
+    breadth from beating relevance.
+    """
+    nodes = [*_primary_nodes()]
+    links: list[GraphLink] = []
+    for index in range(6):
+        child = {
+            "id": f"p1-child-{index}",
+            "kind": "child",
+            "domain": "P1",
+            "label": f"weak mention number {index}",
+            "context_tags": [],
+        }
+        nodes.append(child)
+        links.append(GraphLink(source="P1", target=child["id"], relation="parent_of"))
+    nodes.append(
+        {
+            "id": "p2-child-strong",
+            "kind": "child",
+            "domain": "P2",
+            "label": "goodhart law metric target",
+            "context_tags": [],
+        }
+    )
+    links.append(GraphLink(source="P2", target="p2-child-strong", relation="parent_of"))
+    router = PrimaryRouter(nodes, links)
+    outcome = router.route(domain=None, purpose="goodhart law metric target", context_tags=())
+    assert outcome.status == "ranked"
+    assert outcome.root_node_id == "P2"

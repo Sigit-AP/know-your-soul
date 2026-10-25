@@ -36,6 +36,7 @@ __all__ = [
     "DOMAIN_ALIASES",
     "FIELD_WEIGHTS",
     "SEARCHABLE_FIELDS",
+    "STOPWORDS",
     "BudgetedTraversal",
     "GraphLink",
     "LexicalIndex",
@@ -44,6 +45,8 @@ __all__ = [
     "RouteOutcome",
     "TraversalReport",
     "estimated_tokens",
+    "normalize_term",
+    "query_terms",
     "resolve_domain_input",
     "sanitize_text",
     "tokenize",
@@ -76,6 +79,277 @@ FIELD_BOOST_STEP = Decimal("0.05")
 
 _TOKEN_RE = re.compile(r"[\w]+", re.UNICODE)
 _MIN_PREFIX_LENGTH = 3
+# How many of a candidate root's strongest hits count toward its routing score.
+_ROOT_HIT_DEPTH = 3
+
+# Query hygiene for natural-language questions (bench finding 2026-10-25).
+# Closed, deterministic lists only: no model, no corpus statistics at import.
+STOPWORDS: frozenset[str] = frozenset(
+    {
+        # English function words
+        "a",
+        "about",
+        "after",
+        "again",
+        "against",
+        "all",
+        "also",
+        "am",
+        "an",
+        "and",
+        "any",
+        "are",
+        "as",
+        "at",
+        "be",
+        "because",
+        "been",
+        "before",
+        "being",
+        "below",
+        "between",
+        "both",
+        "but",
+        "by",
+        "can",
+        "could",
+        "did",
+        "do",
+        "does",
+        "doing",
+        "done",
+        "down",
+        "during",
+        "each",
+        "either",
+        "else",
+        "ever",
+        "every",
+        "few",
+        "for",
+        "from",
+        "further",
+        "give",
+        "had",
+        "has",
+        "have",
+        "having",
+        "he",
+        "her",
+        "here",
+        "hers",
+        "him",
+        "his",
+        "how",
+        "i",
+        "if",
+        "in",
+        "into",
+        "is",
+        "it",
+        "its",
+        "just",
+        "let",
+        "like",
+        "list",
+        "many",
+        "may",
+        "me",
+        "might",
+        "mine",
+        "more",
+        "most",
+        "much",
+        "must",
+        "my",
+        "never",
+        "no",
+        "nor",
+        "not",
+        "now",
+        "of",
+        "off",
+        "on",
+        "once",
+        "only",
+        "or",
+        "other",
+        "ought",
+        "our",
+        "ours",
+        "out",
+        "over",
+        "own",
+        "per",
+        "put",
+        "same",
+        "shall",
+        "she",
+        "should",
+        "show",
+        "so",
+        "some",
+        "such",
+        "tell",
+        "than",
+        "that",
+        "the",
+        "their",
+        "theirs",
+        "them",
+        "then",
+        "there",
+        "these",
+        "they",
+        "this",
+        "those",
+        "through",
+        "to",
+        "too",
+        "under",
+        "until",
+        "up",
+        "upon",
+        "us",
+        "use",
+        "used",
+        "very",
+        "was",
+        "we",
+        "were",
+        "what",
+        "when",
+        "where",
+        "whether",
+        "which",
+        "while",
+        "who",
+        "whom",
+        "whose",
+        "why",
+        "will",
+        "with",
+        "within",
+        "without",
+        "would",
+        "you",
+        "your",
+        "yours",
+        "s",
+        "t",
+        # Indonesian function words (the corpus and prompts are bilingual)
+        "ada",
+        "adalah",
+        "agar",
+        "akan",
+        "atau",
+        "bagaimana",
+        "bahwa",
+        "belum",
+        "bisa",
+        "dalam",
+        "dan",
+        "dari",
+        "dengan",
+        "di",
+        "ialah",
+        "ini",
+        "itu",
+        "jika",
+        "juga",
+        "kalau",
+        "kamu",
+        "karena",
+        "ke",
+        "kita",
+        "maka",
+        "oleh",
+        "pada",
+        "secara",
+        "sebagai",
+        "sehingga",
+        "saja",
+        "saya",
+        "sudah",
+        "supaya",
+        "tentang",
+        "tidak",
+        "untuk",
+        "yang",
+    }
+)
+
+# Words that end in "s" but are not plurals; stripping would corrupt them.
+_NO_STRIP: frozenset[str] = frozenset(
+    {
+        "access",
+        "address",
+        "analysis",
+        "basis",
+        "bias",
+        "business",
+        "chaos",
+        "class",
+        "corpus",
+        "focus",
+        "gas",
+        "lens",
+        "less",
+        "means",
+        "plus",
+        "process",
+        "progress",
+        "series",
+        "status",
+        "stress",
+        "unless",
+        "various",
+        "versus",
+    }
+)
+
+# Latin/Greek plurals whose singular is not a suffix strip.
+_IRREGULAR: dict[str, str] = {
+    "analyses": "analysis",
+    "biases": "bias",
+    "criteria": "criterion",
+    "indices": "index",
+    "matrices": "matrix",
+}
+
+
+def normalize_term(term: str) -> str:
+    """A conservative, deterministic singular form (plural/possessive only).
+
+    Only regular English plurals are folded, and only when the result stays a
+    word of three or more characters; ambiguous "-s" endings are listed in
+    :data:`_NO_STRIP` and left untouched. Applied symmetrically to indexed
+    fields and to query terms, so the mapping is consistent by construction.
+    """
+    if len(term) <= 3 or term in _NO_STRIP:
+        return term
+    irregular = _IRREGULAR.get(term)
+    if irregular is not None:
+        return irregular
+    if term.endswith("ies") and len(term) > 4:
+        return term[:-3] + "y"
+    if term.endswith("sses"):
+        return term[:-2]
+    if term.endswith("s") and not term.endswith(("ss", "us", "is", "as", "os")):
+        return term[:-1]
+    return term
+
+
+def query_terms(text: str) -> list[str]:
+    """The query side of the index: tokens minus stopwords, then normalized."""
+    cleaned: list[str] = []
+    for token in tokenize(text):
+        if token in STOPWORDS:
+            continue
+        normalized = normalize_term(token)
+        if normalized and normalized not in STOPWORDS:
+            cleaned.append(normalized)
+    return list(dict.fromkeys(cleaned))
 
 
 def tokenize(text: str) -> list[str]:
@@ -169,7 +443,11 @@ class LexicalIndex:
         prepared: list[tuple[str, dict[str, frozenset[str]]]] = []
         frequency: dict[str, int] = {}
         for node_id, fields in entries:
-            cleaned = {field: frozenset(terms) for field, terms in fields.items() if field in SEARCHABLE_FIELDS}
+            cleaned = {
+                field: frozenset(normalize_term(term) for term in terms)
+                for field, terms in fields.items()
+                if field in SEARCHABLE_FIELDS
+            }
             prepared.append((node_id, cleaned))
             present: set[str] = set()
             for terms in cleaned.values():
@@ -250,7 +528,7 @@ class LexicalIndex:
         with localcontext() as context:
             context.prec = 34
             total = Decimal(0)
-            for term in dict.fromkeys(query_terms):
+            for term in dict.fromkeys(normalize_term(item) for item in query_terms):
                 if self.document_frequency(term) == 0:
                     continue
                 boost = self._term_boost(fields, term)
@@ -271,7 +549,7 @@ class LexicalIndex:
     def field_rank(self, fields: Mapping[str, frozenset[str]], query_terms: Iterable[str]) -> Decimal:
         """The strongest field a matched query term appears in (tie-breaker only)."""
         best = Decimal(0)
-        for term in dict.fromkeys(query_terms):
+        for term in dict.fromkeys(normalize_term(item) for item in query_terms):
             if self.document_frequency(term) == 0:
                 continue
             for field in SEARCHABLE_FIELDS:
@@ -281,7 +559,7 @@ class LexicalIndex:
 
     def rank(self, query_terms: Iterable[str]) -> tuple[RankedHit, ...]:
         """Positive-score hits ordered by ``(-score, -field_rank, node_id)``."""
-        terms = tuple(dict.fromkeys(query_terms))
+        terms = tuple(dict.fromkeys(normalize_term(item) for item in query_terms))
         hits = [
             RankedHit(
                 node_id=node_id,
@@ -373,15 +651,20 @@ class PrimaryRouter:
                 # No keyword fallback: lexical matches elsewhere are irrelevant.
                 return RouteOutcome(status="missing_root", domain=resolved)
             return RouteOutcome(status="direct", domain=resolved, root_node_id=root_id)
-        terms = tokenize(purpose)
+        terms = query_terms(purpose)
         for tag in context_tags:
-            terms.extend(tokenize(str(tag)))
-        totals: dict[str, Decimal] = {}
+            terms.extend(query_terms(str(tag)))
+        # Aggregate per root over its three strongest hits. A plain sum let a
+        # wide domain win on hit count alone; a plain max ignored breadth. The
+        # top-three sum is bounded on both sides (bench: 17/24 roots correct vs
+        # 16/24 for the sum, with the same typed ambiguity).
+        per_root: dict[str, list[Decimal]] = {}
         for hit in self._index.rank(terms):
             root_id = self._primary_root(hit.node_id)
             if root_id is None:
                 continue
-            totals[root_id] = totals.get(root_id, Decimal(0)) + hit.score
+            per_root.setdefault(root_id, []).append(hit.score)
+        totals = {root_id: sum(sorted(scores, reverse=True)[:_ROOT_HIT_DEPTH]) for root_id, scores in per_root.items()}
         if not totals:
             return RouteOutcome(status="no_match")
         best = max(totals.values())

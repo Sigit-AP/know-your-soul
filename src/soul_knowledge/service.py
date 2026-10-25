@@ -107,8 +107,8 @@ from soul_knowledge.retrieval import (
     LexicalIndex,
     PrimaryRouter,
     estimated_tokens,
+    query_terms,
     sanitize_text,
-    tokenize,
 )
 from soul_knowledge.review import ReviewEngine
 from soul_knowledge.review import UnknownNode as ReviewUnknownNode
@@ -599,9 +599,9 @@ class KnowledgeService:
 
         # Relevance order comes from the index itself, so the field-rank
         # tie-break survives; unknown ids sort last by node id.
-        terms = tokenize(request.purpose)
+        terms = query_terms(request.purpose)
         for tag in request.context_tags:
-            terms.extend(tokenize(tag))
+            terms.extend(query_terms(tag))
         rank_order = {hit.node_id: position for position, hit in enumerate(snapshot.index.rank(terms))}
         ordered_ids = sorted(
             (node_id for node_id in report.nodes if node_id in snapshot.nodes),
