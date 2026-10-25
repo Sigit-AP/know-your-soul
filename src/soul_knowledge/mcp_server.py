@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
 import time
@@ -62,9 +63,11 @@ from soul_knowledge.domain import (
     storage_payload,
 )
 from soul_knowledge.events import Invocation, InvocationOutcome
+from soul_knowledge.http_api import DEFAULT_HOST_ALLOWLIST, BoundaryMiddleware
 from soul_knowledge.improvement import ApprovalRecord, DiffOperation
 from soul_knowledge.projection import GraphProjector
 from soul_knowledge.security import (
+    DEFAULT_MAX_PAYLOAD_BYTES,
     assert_bind_allowed,
     redact_value,
     resolve_within_root,
@@ -823,7 +826,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--transport", choices=("stdio", "http"), default="stdio")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8080)
-    parser.add_argument("--api-key", default=None)
+    key = parser.add_mutually_exclusive_group()
+    key.add_argument(
+        "--api-key",
+        default=None,
+        help="API key for the http transport (WARNING: visible in argv; prefer --api-key-env)",
+    )
+    key.add_argument(
+        "--api-key-env",
+        default=None,
+        metavar="NAME",
+        help="read the API key from environment variable NAME (keeps it out of argv)",
+    )
     parser.add_argument("--max-token-budget", type=int, default=DEFAULT_MAX_TOKEN_BUDGET)
     args = parser.parse_args(argv)
 
@@ -847,14 +861,33 @@ def main(argv: list[str] | None = None) -> int:
     runtime_guard.install_socket_guard()
 
     if args.transport == "http":
+        # Wave-2 F6: a named env var keeps the key out of process argv.
+        api_key: str | None = args.api_key
+        if args.api_key_env is not None:
+            api_key = os.environ.get(args.api_key_env) or None
+            if api_key is None:
+                print(
+                    f"soul-knowledge-mcp: environment variable {args.api_key_env} is not set or is empty",
+                    file=sys.stderr,
+                )
+                return 2
         try:
-            assert_bind_allowed(f"{args.host}:{args.port}", api_key=args.api_key)
+            assert_bind_allowed(f"{args.host}:{args.port}", api_key=api_key)
         except Exception as error:  # noqa: BLE001
             print(f"soul-knowledge-mcp: bind refused: {error}", file=sys.stderr)
             return 2
         import uvicorn
 
-        uvicorn.run(server.streamable_http_app(), host=args.host, port=args.port, log_level="warning")
+        # Wave-2 F3: the streamable-HTTP app is wrapped in the same boundary
+        # middleware as the Task 7 API — Host allowlist plus per-request API
+        # key authentication (a configured key gates loopback too).
+        app = BoundaryMiddleware(
+            server.streamable_http_app(),
+            api_key=api_key,
+            host_allowlist=DEFAULT_HOST_ALLOWLIST,
+            max_body_bytes=DEFAULT_MAX_PAYLOAD_BYTES,
+        )
+        uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
         return 0
 
     import anyio

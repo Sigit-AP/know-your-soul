@@ -154,7 +154,10 @@ def asgi_call(
 
 
 def _post(app: Any, path: str, payload: Any, **kwargs: Any) -> tuple[int, dict[str, Any]]:
-    status, _, body = asgi_call(app, "POST", path, body=json.dumps(payload).encode("utf-8"), **kwargs)
+    headers = list(kwargs.pop("headers", []) or [])
+    if not any(name.lower() == b"content-type" for name, _ in headers):
+        headers.append((b"content-type", b"application/json"))
+    status, _, body = asgi_call(app, "POST", path, body=json.dumps(payload).encode("utf-8"), headers=headers, **kwargs)
     return status, json.loads(body.decode("utf-8"))
 
 
@@ -346,7 +349,9 @@ def test_typed_error_envelope(stack: Any) -> None:
 def test_malformed_json_gets_completion_audit(stack: Any) -> None:
     app = create_app(stack)
     before = _audit_count(stack.store)
-    status, _, body = asgi_call(app, "POST", "/v1/knowledge/query", body=b"{not json")
+    status, _, body = asgi_call(
+        app, "POST", "/v1/knowledge/query", body=b"{not json", headers=[(b"content-type", b"application/json")]
+    )
     assert status == 400
     error = json.loads(body.decode("utf-8"))["error"]
     assert error["code"] == "VALIDATION_ERROR"
@@ -423,14 +428,20 @@ def test_remote_client_requires_api_key(stack: Any) -> None:
     assert status == 200
 
 
-def test_loopback_client_needs_no_key(stack: Any) -> None:
+def test_loopback_client_also_needs_the_configured_key(stack: Any) -> None:
+    """Wave-2 F1: a configured API key gates loopback and unix peers too (CSRF)."""
     app = create_app(stack, api_key="test-key-123")
     status, _, _ = asgi_call(app, "GET", "/v1/health", client=("127.0.0.1", 5000))
-    assert status == 200
+    assert status == 401
     status, _, _ = asgi_call(app, "GET", "/v1/health", client=("::1", 5000))
-    assert status == 200
-    # A unix-socket peer (no client address) is a local peer.
+    assert status == 401
+    # A unix-socket peer (no client address) is local — still gated when a key is set.
     status, _, _ = asgi_call(app, "GET", "/v1/health", client=None)
+    assert status == 401
+    # The configured key passes from any local peer.
+    status, _, _ = asgi_call(
+        app, "GET", "/v1/health", client=("127.0.0.1", 5000), headers=[(b"x-api-key", b"test-key-123")]
+    )
     assert status == 200
 
 

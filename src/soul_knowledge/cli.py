@@ -18,12 +18,16 @@ on stderr. Exit codes:
 
 ``serve`` starts the persistent local API: a Unix socket by default, or
 opt-in loopback HTTP with ``--http HOST:PORT``; wider binds fail closed
-without ``--api-key``.
+without ``--api-key``. Prefer ``--api-key-env NAME`` over ``--api-key`` — an
+inline key is visible to every local user via process argv (wave-2 F6).
+``--ops-root`` confines ``backup``/``restore`` paths (default: the store's
+directory; wave-2 F1).
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Sequence
 from typing import Any
@@ -58,6 +62,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-root", default=DEFAULT_OUTPUT_ROOT, help="projection output directory")
     parser.add_argument("--actor", default="operator", help="actor recorded on the invocation audit")
     parser.add_argument("--idempotency-key", default=None, help="idempotency key for mutation commands")
+    parser.add_argument(
+        "--ops-root",
+        default=None,
+        help="fixed containment root for backup/restore paths (default: the store's directory)",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     for operation in (*KNOWLEDGE_OPERATIONS, *OPS_OPERATIONS):
@@ -76,7 +85,18 @@ def build_parser() -> argparse.ArgumentParser:
     bind = serve_parser.add_mutually_exclusive_group()
     bind.add_argument("--socket", default=None, help=f"unix socket path (default {DEFAULT_SOCKET_PATH})")
     bind.add_argument("--http", default=None, help="loopback HTTP bind as HOST:PORT (e.g. 127.0.0.1:8080)")
-    serve_parser.add_argument("--api-key", default=None, help="API key required for non-loopback binds/clients")
+    key = serve_parser.add_mutually_exclusive_group()
+    key.add_argument(
+        "--api-key",
+        default=None,
+        help="API key required for non-loopback binds/clients (WARNING: visible in process argv; prefer --api-key-env)",
+    )
+    key.add_argument(
+        "--api-key-env",
+        default=None,
+        metavar="NAME",
+        help="read the API key from environment variable NAME (keeps it out of argv)",
+    )
     serve_parser.add_argument(
         "--host-allowlist",
         default=None,
@@ -90,19 +110,34 @@ def _print_error(error: BaseException) -> None:
     print(canonical_json(error_envelope(error)), file=sys.stderr)
 
 
+def _print_usage_error(message: str) -> None:
+    """A CLI-usage failure envelope (exit 2); nothing reaches the store."""
+    envelope = {"error": {"code": "CLI_USAGE", "message": message, "retryable": False, "audit_event_id": None}}
+    print(canonical_json(envelope), file=sys.stderr)
+
+
 def _serve_command(args: argparse.Namespace) -> int:
     socket_path: str | None = args.socket
     http: str | None = args.http
     if socket_path is None and http is None:
         socket_path = DEFAULT_SOCKET_PATH
+    # Wave-2 F6: the key can come from the environment so it never sits in
+    # argv; a named-but-unset variable fails closed rather than serving
+    # unauthenticated.
+    api_key: str | None = args.api_key
+    if args.api_key_env is not None:
+        api_key = os.environ.get(args.api_key_env) or None
+        if api_key is None:
+            _print_usage_error(f"environment variable {args.api_key_env} is not set or is empty")
+            return 2
     allowlist = (
         tuple(entry.strip() for entry in args.host_allowlist.split(",") if entry.strip())
         if args.host_allowlist
         else DEFAULT_HOST_ALLOWLIST
     )
-    stack = build_stack(args.store, args.output_root)
+    stack = build_stack(args.store, args.output_root, ops_root=args.ops_root)
     try:
-        kwargs: dict[str, Any] = {"api_key": args.api_key, "host_allowlist": allowlist}
+        kwargs: dict[str, Any] = {"api_key": api_key, "host_allowlist": allowlist}
         if args.max_body_bytes is not None:
             kwargs["max_body_bytes"] = args.max_body_bytes
         serve(stack, socket_path=socket_path, http=http, **kwargs)
@@ -126,7 +161,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if payload_text == "-":
         payload_text = sys.stdin.read()
 
-    stack = build_stack(args.store, args.output_root)
+    stack = build_stack(args.store, args.output_root, ops_root=args.ops_root)
     try:
         result = dispatch_text(stack, command, payload_text, actor=args.actor, idempotency_key=args.idempotency_key)
     except AdapterValidationError as error:

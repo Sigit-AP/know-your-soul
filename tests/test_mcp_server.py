@@ -628,3 +628,154 @@ def test_unknown_resource_uri_fails_closed(tmp_path: Path) -> None:
                 await session.read_resource("soul://projection/../../etc/passwd")
 
     _run(scenario)
+
+
+# ------------------------------------------- wave-2 F3: http transport auth
+
+
+def _asgi_request(
+    app: Any,
+    path: str,
+    *,
+    headers: list[tuple[bytes, bytes]] | None = None,
+    client: tuple[str, int] | None = ("127.0.0.1", 5000),
+) -> tuple[int, bytes]:
+    """One GET through an ASGI app; returns (status, body)."""
+    header_list = list(headers or [])
+    if not any(name.lower() == b"host" for name, _ in header_list):
+        header_list.append((b"host", b"localhost"))
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode("ascii"),
+        "query_string": b"",
+        "headers": header_list,
+        "client": client,
+        "server": ("127.0.0.1", 80),
+    }
+    messages: list[dict[str, Any]] = []
+    sent = False
+
+    async def receive() -> dict[str, Any]:
+        nonlocal sent
+        if not sent:
+            sent = True
+            return {"type": "http.request", "body": b"", "more_body": False}
+        return {"type": "http.disconnect"}
+
+    async def send(message: dict[str, Any]) -> None:
+        messages.append(message)
+
+    import asyncio
+
+    asyncio.run(app(scope, receive, send))
+    start = next(m for m in messages if m["type"] == "http.response.start")
+    body = b"".join(m.get("body", b"") for m in messages if m["type"] == "http.response.body")
+    return int(start["status"]), body
+
+
+def test_f3_http_transport_wraps_streamable_app_with_boundary_auth(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--transport http --api-key K must authenticate every request (F3).
+
+    The old code only gated the bind decision; the wrapped app must now reject
+    keyless remote *and* keyless loopback callers, and pass keyed callers to
+    the real MCP streamable-http app.
+    """
+    from soul_knowledge import mcp_server
+    from soul_knowledge.http_api import BoundaryMiddleware
+
+    _seeded(tmp_path)  # graph root + store exist for main()'s startup path
+
+    async def sentinel_app(scope: Any, receive: Any, send: Any) -> None:
+        assert scope["type"] == "http"
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [(b"content-type", b"text/plain")],
+            }
+        )
+        await send({"type": "http.response.body", "body": b"INNER-MCP-APP"})
+
+    monkeypatch.setattr(mcp_server.Server, "streamable_http_app", lambda self: sentinel_app)
+    monkeypatch.setattr(mcp_server.runtime_guard, "verify_runtime", lambda **kwargs: {})
+    monkeypatch.setattr(mcp_server.runtime_guard, "install_socket_guard", lambda: None)
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr("uvicorn.run", lambda app, **kwargs: captured.setdefault("app", app))
+
+    code = mcp_server.main(
+        [
+            "--graph-root",
+            str(tmp_path / "graph"),
+            "--db",
+            str(tmp_path / "soul.sqlite3"),
+            "--transport",
+            "http",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "18080",
+            "--api-key",
+            "wave2-mcp-key",
+        ]
+    )
+    assert code == 0
+    app = captured.get("app")
+    assert isinstance(app, BoundaryMiddleware), "the http transport must install the boundary middleware"
+
+    # The old attack: any caller reaches the MCP app with no key at all.
+    status, _ = _asgi_request(app, "/mcp", client=("10.1.2.3", 9999))
+    assert status == 401
+    status, _ = _asgi_request(app, "/mcp", client=("127.0.0.1", 5000))
+    assert status == 401
+    status, _ = _asgi_request(app, "/mcp", headers=[(b"host", b"evil.example.com")])
+    assert status == 403
+    # The legitimate caller with the key reaches the inner app.
+    status, body = _asgi_request(app, "/mcp", headers=[(b"x-api-key", b"wave2-mcp-key")])
+    assert status == 200
+    assert body == b"INNER-MCP-APP"
+
+
+def test_f3_http_transport_without_key_serves_loopback_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No key configured: loopback is served, remote clients are denied."""
+    from soul_knowledge import mcp_server
+
+    _seeded(tmp_path)
+
+    async def sentinel_app(scope: Any, receive: Any, send: Any) -> None:
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"INNER"})
+
+    monkeypatch.setattr(mcp_server.Server, "streamable_http_app", lambda self: sentinel_app)
+    monkeypatch.setattr(mcp_server.runtime_guard, "verify_runtime", lambda **kwargs: {})
+    monkeypatch.setattr(mcp_server.runtime_guard, "install_socket_guard", lambda: None)
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr("uvicorn.run", lambda app, **kwargs: captured.setdefault("app", app))
+
+    code = mcp_server.main(
+        [
+            "--graph-root",
+            str(tmp_path / "graph"),
+            "--db",
+            str(tmp_path / "soul.sqlite3"),
+            "--transport",
+            "http",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "18081",
+        ]
+    )
+    assert code == 0
+    app = captured["app"]
+    status, _ = _asgi_request(app, "/mcp", client=("10.1.2.3", 9999))
+    assert status == 401
+    status, body = _asgi_request(app, "/mcp", client=("127.0.0.1", 5000))
+    assert status == 200
+    assert body == b"INNER"

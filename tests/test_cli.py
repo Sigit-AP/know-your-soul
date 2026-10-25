@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -401,3 +402,75 @@ def test_cli_serve_refuses_wildcard_bind_without_api_key(tmp_path: Path, capsys:
     assert code != 0
     envelope = json.loads(captured.err)
     assert envelope["error"]["code"] == "BIND_POLICY"
+
+
+# -------------------------------------------------- wave-2 F6: argv secrets
+
+
+def test_cli_serve_api_key_env_avoids_argv(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--api-key-env NAME reads the key from the environment, never argv."""
+    db_path, out_path = _seeded_paths(tmp_path)
+    monkeypatch.setenv("SOUL_TEST_API_KEY", "secret-from-env")
+    captured_kwargs: dict[str, object] = {}
+
+    def fake_serve(stack: object, **kwargs: object) -> None:
+        captured_kwargs.update(kwargs)
+
+    monkeypatch.setattr("soul_knowledge.cli.serve", fake_serve)
+    code = main(
+        _base(db_path, out_path) + ["serve", "--socket", str(tmp_path / "s.sock"), "--api-key-env", "SOUL_TEST_API_KEY"]
+    )
+    assert code == 0
+    assert captured_kwargs.get("api_key") == "secret-from-env"
+
+
+def test_cli_serve_api_key_env_missing_var_fails_closed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db_path, out_path = _seeded_paths(tmp_path)
+    monkeypatch.delenv("SOUL_MISSING_KEY", raising=False)
+    code = main(_base(db_path, out_path) + ["serve", "--api-key-env", "SOUL_MISSING_KEY"])
+    captured = capsys.readouterr()
+    assert code == 2
+    assert "SOUL_MISSING_KEY" in captured.err
+
+
+def test_cli_serve_api_key_and_api_key_env_are_mutually_exclusive(tmp_path: Path) -> None:
+    db_path, out_path = _seeded_paths(tmp_path)
+    with pytest.raises(SystemExit) as caught:
+        main(_base(db_path, out_path) + ["serve", "--api-key", "inline", "--api-key-env", "SOUL_TEST_API_KEY"])
+    assert caught.value.code == 2
+
+
+# ------------------------------------------- wave-2 F1: ops path containment
+
+
+def test_cli_backup_outside_ops_root_fails_closed(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    db_path, out_path = _seeded_paths(tmp_path)
+    outside = tmp_path.parent / f"wave2-cli-evil-{os.getpid()}.sqlite3"
+    try:
+        code, _, err = _invoke(_base(db_path, out_path) + ["backup", json.dumps({"dest_path": str(outside)})], capsys)
+        assert code == 1
+        assert err is not None
+        assert err["error"]["code"] == "PATH_ESCAPE"  # type: ignore[index]
+        assert not outside.exists(), "the old arbitrary-path write must fail closed"
+    finally:
+        outside.unlink(missing_ok=True)
+
+
+def test_cli_ops_root_option_allows_a_configured_root(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    db_path, out_path = _seeded_paths(tmp_path)
+    other_root = tmp_path / "backups"
+    other_root.mkdir()
+    dest = other_root / "backup.sqlite3"
+    code, out, err = _invoke(
+        ["--store", str(db_path), "--output-root", str(out_path), "--ops-root", str(other_root)]
+        + ["backup", json.dumps({"dest_path": str(dest)})],
+        capsys,
+    )
+    assert code == 0, err
+    assert out is not None
+    assert dest.exists()
+    assert out["sha256"]

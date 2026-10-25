@@ -19,14 +19,27 @@ Audit discipline (spec 7.7):
 
 Boundaries: the Starlette app enforces the Host allowlist and the
 loopback/Unix-socket policy from :mod:`soul_knowledge.security`, caps request
-bodies, and exposes only versioned ``/v1`` routes. ``serve`` binds a Unix
-socket by default; loopback HTTP is opt-in and wider binds require an API key.
+bodies (streaming, with a read timeout), requires ``application/json`` on
+POST routes (CSRF drive-by rejection), and exposes only versioned ``/v1``
+routes. ``serve`` binds a Unix socket by default — created owner-only
+(``0o600``) via :func:`_bind_unix_socket`; loopback HTTP is opt-in and wider
+binds require an API key. When an API key is configured it gates *every*
+client, loopback and unix-socket peers included (fail-closed; the CLI never
+talks to the socket, it dispatches in-process, so local CLI flows are
+unaffected). ``ops/backup`` and ``ops/restore`` paths are confined to the
+stack's ``ops_root`` (default: the store's directory) via
+:func:`soul_knowledge.security.resolve_within_root`.
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import hmac
 import json
+import logging
+import os
+import socket
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
@@ -59,11 +72,13 @@ from soul_knowledge.security import (
     DEFAULT_MAX_PAYLOAD_BYTES,
     BindPolicyError,
     HostNotAllowedError,
+    PathEscapeError,
     RequestView,
     UnauthorizedError,
     assert_bind_allowed,
     authorize_request,
     redact_text,
+    resolve_within_root,
 )
 from soul_knowledge.service import KnowledgeService
 from soul_knowledge.store import EventStore, StoreError
@@ -74,6 +89,7 @@ __all__ = [
     "KNOWLEDGE_OPERATIONS",
     "OPS_OPERATIONS",
     "AdapterValidationError",
+    "BoundaryMiddleware",
     "LocalStack",
     "UnknownOperation",
     "build_stack",
@@ -85,6 +101,8 @@ __all__ = [
     "status_for_error",
     "to_jsonable",
 ]
+
+logger = logging.getLogger(__name__)
 
 API_VERSION = "v1"
 DEFAULT_HOST_ALLOWLIST: tuple[str, ...] = ("localhost", "127.0.0.1", "::1")
@@ -126,37 +144,66 @@ class PayloadTooLarge(KnowledgeError):
     code = "PAYLOAD_TOO_LARGE"
 
 
+class RequestBodyTimeout(KnowledgeError):
+    """The request body was not fully received within the read timeout."""
+
+    code = "REQUEST_TIMEOUT"
+
+
+class UnsupportedMediaType(KnowledgeError):
+    """A POST route was called with a non-JSON Content-Type (CSRF guard)."""
+
+    code = "UNSUPPORTED_MEDIA_TYPE"
+
+
 # ---------------------------------------------------------------------- stack
 
 
 @dataclass
 class LocalStack:
-    """The store + projector + service + audit log behind one local API."""
+    """The store + projector + service + audit log behind one local API.
+
+    ``ops_root`` is the fixed containment root for ``ops/backup`` and
+    ``ops/restore`` paths (wave-2 F1): every caller-supplied path is resolved
+    through :func:`soul_knowledge.security.resolve_within_root` against it,
+    failing closed on escapes. ``None`` refuses backup/restore outright.
+    """
 
     store: EventStore
     projector: GraphProjector
     service: KnowledgeService
     audit: AuditLog
+    ops_root: Path | None = None
 
     def close(self) -> None:
         self.store.close()
 
 
-def build_stack(store_path: str | Path, output_root: str | Path) -> LocalStack:
+def build_stack(store_path: str | Path, output_root: str | Path, *, ops_root: str | Path | None = None) -> LocalStack:
     """Open (or create) a local store and bind the service to it.
 
     Crash recovery runs before the stack accepts traffic: journals left
     ``in_progress`` by a dead process are reconciled exactly once (spec 7.8).
+    *ops_root* confines backup/restore paths; it defaults to the store's
+    directory and must be an existing directory (fail closed).
     """
     store = EventStore(store_path)
     projector = GraphProjector(store, output_root=output_root)
     audit = AuditLog(store)
+    root_candidate = Path(ops_root) if ops_root is not None else Path(store_path).resolve().parent
+    resolved_ops_root = resolve_within_root(root_candidate, ".")
 
     def _repair_projection() -> None:
         projector.repair_if_stale()
 
     audit.recover_incomplete(projection_repair=_repair_projection)
-    return LocalStack(store=store, projector=projector, service=KnowledgeService(store, projector), audit=audit)
+    return LocalStack(
+        store=store,
+        projector=projector,
+        service=KnowledgeService(store, projector),
+        audit=audit,
+        ops_root=resolved_ops_root,
+    )
 
 
 # ------------------------------------------------------------ payload schemas
@@ -273,12 +320,23 @@ def _call_rebuild(stack: LocalStack, request: _RebuildPayload, actor: str, idem:
     return stack.projector.rebuild(upto_knowledge_seq=request.upto_knowledge_seq)
 
 
+def _resolve_ops_path(stack: LocalStack, candidate: str) -> Path:
+    """Confine an operator-supplied backup/restore path to the stack's ops root."""
+    if stack.ops_root is None:
+        raise PathEscapeError("no ops root is configured; backup/restore paths are refused")
+    return resolve_within_root(stack.ops_root, candidate)
+
+
 def _call_backup(stack: LocalStack, request: _BackupPayload, actor: str, idem: str | None) -> Any:
-    return backup_store(stack.store, request.dest_path)
+    return backup_store(stack.store, _resolve_ops_path(stack, request.dest_path))
 
 
 def _call_restore(stack: LocalStack, request: _RestorePayload, actor: str, idem: str | None) -> Any:
-    return restore_store(request.backup_path, request.dest_path, overwrite=request.overwrite)
+    return restore_store(
+        _resolve_ops_path(stack, request.backup_path),
+        _resolve_ops_path(stack, request.dest_path),
+        overwrite=request.overwrite,
+    )
 
 
 def _call_health(stack: LocalStack, request: _EmptyPayload, actor: str, idem: str | None) -> Any:
@@ -398,6 +456,8 @@ _STATUS_BY_CODE: dict[str, int] = {
     "NOT_IMPLEMENTED": 501,
     "POLICY_HASH_MISMATCH": 500,
     "PAYLOAD_TOO_LARGE": 413,
+    "REQUEST_TIMEOUT": 408,
+    "UNSUPPORTED_MEDIA_TYPE": 415,
 }
 
 _STATUS_BY_TYPE: dict[str, int] = {
@@ -415,6 +475,8 @@ def status_for_error(error: BaseException) -> int:
     """Map a failure to its HTTP status; unknown failures are 500."""
     if isinstance(error, KnowledgeError):
         return _STATUS_BY_CODE.get(error.code, 400)
+    if isinstance(error, PathEscapeError):
+        return 400
     if isinstance(error, (HostNotAllowedError, UnauthorizedError)):
         return 403 if isinstance(error, HostNotAllowedError) else 401
     if isinstance(error, StoreError):
@@ -436,6 +498,8 @@ def error_envelope(error: BaseException) -> dict[str, Any]:
         code, retryable, audit_event_id = "UNAUTHORIZED", False, None
     elif isinstance(error, PayloadTooLarge):
         code, retryable, audit_event_id = "PAYLOAD_TOO_LARGE", False, None
+    elif isinstance(error, PathEscapeError):
+        code, retryable, audit_event_id = "PATH_ESCAPE", False, None
     elif isinstance(error, StoreError):
         code, retryable, audit_event_id = type(error).__name__, False, None
     else:
@@ -458,8 +522,15 @@ def _json_response(payload: Any, *, status: int = 200) -> Response:
 # --------------------------------------------------------------- http surface
 
 
-class _BoundaryMiddleware:
-    """Pure-ASGI boundary: Host allowlist, loopback policy, body size cap."""
+class BoundaryMiddleware:
+    """Pure-ASGI boundary: Host allowlist, API-key policy, streaming body cap.
+
+    A configured API key gates *every* client — loopback and unix-socket
+    peers included (wave-2 F1, fail-closed against browser drive-by CSRF).
+    Bodies are streamed in with a hard byte cap (cut at cap+1, never fully
+    buffered first — wave-2 F4) and a per-read timeout (slow-loris guard);
+    the buffered body is then replayed to the inner app.
+    """
 
     def __init__(
         self,
@@ -468,11 +539,25 @@ class _BoundaryMiddleware:
         api_key: str | None,
         host_allowlist: Sequence[str],
         max_body_bytes: int,
+        body_timeout_seconds: float = 10.0,
     ) -> None:
         self._app = app
         self._api_key = api_key
         self._host_allowlist = tuple(host_allowlist)
         self._max_body_bytes = max_body_bytes
+        self._body_timeout_seconds = body_timeout_seconds
+
+    def _authorize_local(self, presented_key: str | None) -> None:
+        """Gate local peers with the configured key (constant-time compare)."""
+        if self._api_key is None:
+            return
+        if presented_key is None:
+            raise UnauthorizedError("a configured API key is required, including from loopback/unix clients")
+        if not hmac.compare_digest(
+            hashlib.sha256(presented_key.encode("utf-8")).digest(),
+            hashlib.sha256(self._api_key.encode("utf-8")).digest(),
+        ):
+            raise UnauthorizedError("the presented API key is invalid")
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope["type"] != "http":
@@ -481,25 +566,24 @@ class _BoundaryMiddleware:
         headers = {name.lower(): value for name, value in scope.get("headers", [])}
         host_header = headers.get(b"host")
         host = host_header.decode("latin-1") if host_header is not None else None
-        presented_key = headers.get(b"x-api-key")
+        presented_raw = headers.get(b"x-api-key")
+        presented_key = presented_raw.decode("latin-1") if presented_raw is not None else None
         client = scope.get("client")
         # A unix-socket peer carries no address; it is a local (loopback) peer.
         remote_addr = str(client[0]) if client else "127.0.0.1"
         try:
             authorize_request(
-                RequestView(
-                    remote_addr=remote_addr,
-                    host=host,
-                    api_key=presented_key.decode("latin-1") if presented_key is not None else None,
-                ),
+                RequestView(remote_addr=remote_addr, host=host, api_key=presented_key),
                 api_key=self._api_key,
                 host_allowlist=self._host_allowlist,
             )
+            self._authorize_local(presented_key)
         except (HostNotAllowedError, UnauthorizedError) as error:
             response = _json_response(error_envelope(error), status=status_for_error(error))
             await response(scope, receive, send)
             return
         content_length = headers.get(b"content-length")
+        declared: int | None = None
         if content_length is not None:
             try:
                 declared = int(content_length.decode("latin-1"))
@@ -512,7 +596,50 @@ class _BoundaryMiddleware:
                 )
                 await response(scope, receive, send)
                 return
-        await self._app(scope, receive, send)
+        has_body = (declared is not None and declared > 0) or b"transfer-encoding" in headers
+        if not has_body:
+            await self._app(scope, receive, send)
+            return
+        # Stream the body in: cut at cap+1 (never buffer the whole attack)
+        # and bound every individual read by the body timeout.
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            try:
+                message = await asyncio.wait_for(receive(), timeout=self._body_timeout_seconds)
+            except TimeoutError:
+                response = _json_response(
+                    error_envelope(RequestBodyTimeout("request body was not received within the read timeout")),
+                    status=408,
+                )
+                await response(scope, receive, send)
+                return
+            if message["type"] == "http.disconnect":
+                return  # the client is gone; nothing to answer
+            if message["type"] != "http.request":
+                continue
+            total += len(message.get("body", b""))
+            if total > self._max_body_bytes:
+                response = _json_response(
+                    error_envelope(PayloadTooLarge("request body exceeds the size cap")),
+                    status=413,
+                )
+                await response(scope, receive, send)
+                return
+            chunks.append(message.get("body", b""))
+            if not message.get("more_body"):
+                break
+        buffered = b"".join(chunks)
+        delivered = False
+
+        async def replay_receive() -> dict[str, Any]:
+            nonlocal delivered
+            if not delivered:
+                delivered = True
+                return {"type": "http.request", "body": buffered, "more_body": False}
+            return await receive()
+
+        await self._app(scope, replay_receive, send)
 
 
 def create_app(
@@ -521,6 +648,7 @@ def create_app(
     api_key: str | None = None,
     host_allowlist: Sequence[str] = DEFAULT_HOST_ALLOWLIST,
     max_body_bytes: int = DEFAULT_MAX_PAYLOAD_BYTES,
+    body_timeout_seconds: float = 10.0,
 ) -> Any:
     """Build the versioned ``/v1`` ASGI app over *stack*."""
 
@@ -546,10 +674,25 @@ def create_app(
         Route("/v1/ops/{operation}", ops, methods=["POST"]),
     ]
     app = Starlette(routes=routes)
-    return _BoundaryMiddleware(app, api_key=api_key, host_allowlist=host_allowlist, max_body_bytes=max_body_bytes)
+    return BoundaryMiddleware(
+        app,
+        api_key=api_key,
+        host_allowlist=host_allowlist,
+        max_body_bytes=max_body_bytes,
+        body_timeout_seconds=body_timeout_seconds,
+    )
 
 
 async def _handle(stack: LocalStack, operation: str, request: Request, max_body_bytes: int) -> Response:
+    # CSRF guard (wave-2 F1): cross-origin forms cannot set application/json,
+    # so requiring it fails browser drive-bys closed before any dispatch.
+    content_type = request.headers.get("content-type")
+    media_type = content_type.split(";", 1)[0].strip().lower() if content_type else ""
+    if media_type != "application/json":
+        return _json_response(
+            error_envelope(UnsupportedMediaType("POST routes require Content-Type: application/json")),
+            status=415,
+        )
     body = await request.body()
     if len(body) > max_body_bytes:
         return _json_response(error_envelope(PayloadTooLarge("request body exceeds the size cap")), status=413)
@@ -560,11 +703,37 @@ async def _handle(stack: LocalStack, operation: str, request: Request, max_body_
             dispatch_text, stack, operation, body, actor=actor, idempotency_key=idempotency_key
         )
     except Exception as error:  # noqa: BLE001 - every failure uses the envelope
-        return _json_response(error_envelope(error), status=status_for_error(error))
+        envelope = error_envelope(error)
+        if envelope["error"]["code"] == "INTERNAL":
+            # Wave-2 F5: raw exception text (paths, OS errors) goes to the
+            # server log; the wire message is fixed.
+            logger.exception("unhandled internal error serving %s", operation)
+            envelope["error"]["message"] = "internal error"
+        return _json_response(envelope, status=status_for_error(error))
     return _json_response(to_jsonable(result))
 
 
 # --------------------------------------------------------------------- serve
+
+
+def _bind_unix_socket(socket_path: str | Path, *, backlog: int = 2048) -> socket.socket:
+    """Bind a unix socket with owner-only (``0o600``) permissions, race-free.
+
+    Uvicorn's own ``uds=`` path chmods the socket ``0o666`` after binding
+    (wave-2 F2); binding it ourselves, chmodding ``0o600`` immediately and
+    handing uvicorn the file descriptor closes the world-writable window
+    regardless of the ambient umask.
+    """
+    path = Path(socket_path)
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        sock.bind(str(path))
+        os.chmod(path, 0o600)
+        sock.listen(backlog)
+    except BaseException:
+        sock.close()
+        raise
+    return sock
 
 
 def serve(
@@ -576,22 +745,38 @@ def serve(
     host_allowlist: Sequence[str] = DEFAULT_HOST_ALLOWLIST,
     max_body_bytes: int = DEFAULT_MAX_PAYLOAD_BYTES,
     timeout_keep_alive: int = 5,
+    body_timeout_seconds: float = 10.0,
 ) -> None:
     """Serve the API: Unix socket by default, opt-in loopback HTTP.
 
     Anything beyond loopback fails closed through
     :func:`soul_knowledge.security.assert_bind_allowed` unless an API key is
-    configured. Uvicorn owns SIGINT/SIGTERM graceful shutdown; the store is
-    closed by the caller when ``serve`` returns.
+    configured. When a key is configured it gates every client, loopback and
+    unix-socket peers included (wave-2 F1). The unix socket is created
+    owner-only (``0o600``) via :func:`_bind_unix_socket` (wave-2 F2).
+    Uvicorn owns SIGINT/SIGTERM graceful shutdown; the store is closed by the
+    caller when ``serve`` returns.
     """
     if (socket_path is None) == (http is None):
         raise BindPolicyError("exactly one of socket_path or http is required")
     bind = f"unix:{socket_path}" if socket_path is not None else str(http)
     assert_bind_allowed(bind, api_key=api_key)
-    app = create_app(stack, api_key=api_key, host_allowlist=host_allowlist, max_body_bytes=max_body_bytes)
+    app = create_app(
+        stack,
+        api_key=api_key,
+        host_allowlist=host_allowlist,
+        max_body_bytes=max_body_bytes,
+        body_timeout_seconds=body_timeout_seconds,
+    )
+    listener: socket.socket | None = None
     if socket_path is not None:
-        config = uvicorn.Config(app, uds=str(socket_path), timeout_keep_alive=timeout_keep_alive)
+        listener = _bind_unix_socket(socket_path)
+        config = uvicorn.Config(app, fd=listener.fileno(), timeout_keep_alive=timeout_keep_alive)
     else:
         host, _, port_text = str(http).rpartition(":")
         config = uvicorn.Config(app, host=host, port=int(port_text), timeout_keep_alive=timeout_keep_alive)
-    uvicorn.Server(config).run()
+    try:
+        uvicorn.Server(config).run()
+    finally:
+        if listener is not None:
+            listener.close()
