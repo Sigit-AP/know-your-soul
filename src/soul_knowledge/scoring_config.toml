@@ -1,0 +1,62 @@
+# Scoring configuration — FROZEN scoring contract 1.0.0.
+#
+# Every value here is fixed by docs/mathematics/scoring-contract.md and
+# docs/mathematics/evidence-schema.md (both Status: FROZEN). Changing any
+# value requires a new scoring-contract version and operator approval
+# (spec section 9). Decimals are written as strings so no binary float can
+# enter the scoring pipeline.
+
+[meta]
+contract_version = "1.0.0"
+
+# Exponential recency half-lives per dimension (days): h_P=90, h_M=30, h_E=7.
+[half_life_days]
+p = "90"
+m = "30"
+e = "7"
+
+# P quality terms: p_j = 0.30*correctness + 0.25*((outcome+1)/2)
+#                  + 0.20*reproducibility + 0.15*scope_fit + 0.10*(1-contradiction)
+[p_weights]
+correctness = "0.30"
+outcome = "0.25"
+reproducibility = "0.20"
+scope_fit = "0.15"
+contradiction = "0.10"
+
+# M bin eligibility: >= 3 distinct independence groups and Q(u) >= 0.70.
+[m_bin]
+quality_gate = "0.70"
+min_independence_groups = 3
+
+# E cost: 0.4*min(2, latency_ms/1000) + 0.4*min(2, output_chars/4000)
+#         + 0.2*min(2, compute_ms/1000) — initial "default" workload class.
+[e_cost]
+latency_weight = "0.4"
+output_weight = "0.4"
+compute_weight = "0.2"
+latency_baseline_ms = "1000"
+output_baseline_chars = "4000"
+compute_baseline_ms = "1000"
+cap = "2"
+
+# Professional level: starts from P at the thresholds below, then caps.
+# group_caps: fewer than N distinct independence groups caps the level at L.
+# uncertainty_caps: U_P above the threshold caps the level at L.
+[level]
+thresholds = ["0.30", "0.50", "0.70", "0.85"]
+group_caps = [[5, 2], [10, 3], [20, 4]]
+uncertainty_caps = [["0.70", 2], ["0.50", 3], ["0.30", 4]]
+
+# Promotion: P >= 0.70, >= 10 distinct independence groups with q_P > 0,
+# and U_P <= 0.50.
+[promotion]
+quality_gate = "0.70"
+min_independence_groups = 10
+max_u_p = "0.50"
+
+# Composite: G = P^0.50 * M^0.30 * E^0.20 (only when P >= 0.70 and P,M,E > 0).
+[composite]
+p_exponent = "0.50"
+m_exponent = "0.30"
+e_exponent = "0.20"
