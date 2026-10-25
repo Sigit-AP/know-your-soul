@@ -398,6 +398,114 @@ def test_nl_question_routes_to_a_root_instead_of_no_match() -> None:
     assert outcome.root_node_id == "P3"
 
 
+def test_node_id_slug_segments_are_indexed_terms() -> None:
+    """A snake_case node id contributes its *segments* to the node_id field.
+
+    Bench 2026-10-25 (q05): ``tokenize`` keeps underscores inside ``\\w+``, so
+    a slug like ``07_calibration_bayes`` indexed as a single token and the
+    node_id field — the contract's strongest field — never fired for any real
+    corpus id. Segments must be indexed separately.
+    """
+    nodes = [
+        {"id": "07_calibration_bayes", "kind": "child", "domain": "P1", "label": "SOUL 07", "context_tags": []},
+        {"id": "nx", "kind": "child", "domain": "P1", "label": "calibration notes", "context_tags": []},
+    ]
+    index = LexicalIndex.from_graph_nodes(nodes)
+    assert index.document_frequency("calibration") == 2
+    hits = index.rank(("calibration",))
+    # Same term, same df: the node_id match (strongest field) beats the
+    # summary-only match.
+    assert [hit.node_id for hit in hits] == ["07_calibration_bayes", "nx"]
+    assert hits[0].score > hits[1].score
+
+
+def test_node_id_slug_segment_breaks_a_cross_root_tie_by_content() -> None:
+    """A tie between roots breaks on slug-segment content, never on order.
+
+    Bench 2026-10-25 (q05): two roots tied exactly — one child matched term X
+    in its summary, the other matched a different term Y of identical IDF in
+    its summary. The child whose stable id *names* term X carries a legitimate
+    node_id-field signal; that content signal must break the tie (spec 13.1
+    still forbids resolving ties to the first graph-order node).
+    """
+    nodes = [*_primary_nodes()]
+    links = [
+        GraphLink(source="P2", target="cat_heuristics_catalog", relation="parent_of"),
+        GraphLink(source="P7", target="plain_notes", relation="parent_of"),
+    ]
+    nodes.append(
+        {
+            "id": "cat_heuristics_catalog",
+            "kind": "child",
+            "domain": "P2",
+            "label": "Catalog — Heuristic digest",
+            "context_tags": [],
+        }
+    )
+    nodes.append(
+        {
+            "id": "plain_notes",
+            "kind": "child",
+            "domain": "P7",
+            "label": "Notes — why this protocol exists",
+            "context_tags": [],
+        }
+    )
+    router = PrimaryRouter(nodes, links)
+    # "heuristic" (df=1, child A) and "exist" (df=1, child B) have identical
+    # IDF; only the slug segment separates them.
+    outcome = router.route(domain=None, purpose="which heuristic explains why it exists", context_tags=())
+    assert outcome.status == "ranked"
+    assert outcome.root_node_id == "P2"
+
+
+def test_root_aggregation_discounts_supporting_hits_by_reciprocal_rank() -> None:
+    """One stronger hit beats a weaker hit padded by a weak secondary hit.
+
+    Bench 2026-10-25 (q16): a plain top-three sum let a root whose top hit was
+    *weaker* (14.17) win over a root with the single strongest hit (17.27)
+    merely because a second, single-common-term hit (3.51) padded the total.
+    Supporting hits now weigh 1/rank, so breadth only wins when it is strong.
+    """
+    nodes = [*_primary_nodes()]
+    links = [
+        GraphLink(source="P4", target="p4-child", relation="parent_of"),
+        GraphLink(source="P6", target="p6-child-strong", relation="parent_of"),
+        GraphLink(source="P6", target="p6-child-weak", relation="parent_of"),
+    ]
+    # All query terms share df=2, so every per-term score is identical t:
+    # P4 scores 3t, P6 scores 2t (top) + t (secondary).
+    nodes.append({"id": "p4-child", "kind": "child", "domain": "P4", "label": "alpha beta gamma", "context_tags": []})
+    nodes.append({"id": "p6-child-strong", "kind": "child", "domain": "P6", "label": "alpha beta", "context_tags": []})
+    nodes.append({"id": "p6-child-weak", "kind": "child", "domain": "P6", "label": "gamma", "context_tags": []})
+    router = PrimaryRouter(nodes, links)
+    outcome = router.route(domain=None, purpose="alpha beta gamma", context_tags=())
+    # Plain sum: P6 ties P4 at 3t (typed ambiguous). Discounted: P6 = 2.5t < 3t.
+    assert outcome.status == "ranked"
+    assert outcome.root_node_id == "P4"
+
+
+def test_root_aggregation_still_rewards_comparable_breadth() -> None:
+    """The discount damps weak padding; genuinely broad coverage still wins."""
+    nodes = [*_primary_nodes()]
+    links = [
+        GraphLink(source="P1", target="p1-child-a", relation="parent_of"),
+        GraphLink(source="P1", target="p1-child-b", relation="parent_of"),
+        GraphLink(source="P2", target="p2-child", relation="parent_of"),
+    ]
+    nodes.append({"id": "p1-child-a", "kind": "child", "domain": "P1", "label": "alpha beta gamma", "context_tags": []})
+    nodes.append(
+        {"id": "p1-child-b", "kind": "child", "domain": "P1", "label": "delta epsilon zeta", "context_tags": []}
+    )
+    nodes.append(
+        {"id": "p2-child", "kind": "child", "domain": "P2", "label": "alpha beta gamma delta", "context_tags": []}
+    )
+    router = PrimaryRouter(nodes, links)
+    outcome = router.route(domain=None, purpose="alpha beta gamma delta epsilon zeta", context_tags=())
+    assert outcome.status == "ranked"
+    assert outcome.root_node_id == "P1"
+
+
 def test_root_aggregation_is_bounded_by_its_three_strongest_hits() -> None:
     """Many weak hits in one domain must not outvote one strong hit in another.
 

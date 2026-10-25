@@ -492,7 +492,12 @@ class LexicalIndex:
             label = str(node.get("label") or node_id)
             tags = [str(tag) for tag in node.get("context_tags", []) if isinstance(tag, str)]
             fields = {
-                "node_id": frozenset(tokenize(node_id)),
+                # ``tokenize`` keeps underscores inside \w+, so a raw slug like
+                # "07_calibration_bayes" would index as a single token and the
+                # node_id field — the contract's strongest field — would never
+                # fire for any real corpus id. Stable ids are slugs; their
+                # underscore-separated segments are the indexable terms.
+                "node_id": frozenset(tokenize(node_id.replace("_", " "))),
                 "aliases": frozenset(aliases),
                 "summary": frozenset(tokenize(label)),
                 "context_tags": frozenset(term for tag in tags for term in tokenize(tag)),
@@ -654,17 +659,28 @@ class PrimaryRouter:
         terms = query_terms(purpose)
         for tag in context_tags:
             terms.extend(query_terms(str(tag)))
-        # Aggregate per root over its three strongest hits. A plain sum let a
-        # wide domain win on hit count alone; a plain max ignored breadth. The
-        # top-three sum is bounded on both sides (bench: 17/24 roots correct vs
-        # 16/24 for the sum, with the same typed ambiguity).
+        # Aggregate per root over its three strongest hits, discounted by
+        # reciprocal rank: the strongest hit weighs 1, the second 1/2, the
+        # third 1/3. A plain sum let a wide domain win on hit count alone; a
+        # plain max ignored breadth; and an *undiscounted* top-three sum let a
+        # root whose top hit was weaker win purely because a single-common-term
+        # secondary hit padded its total (bench 2026-10-25, q16). The discount
+        # keeps breadth meaningful only when the supporting hits are strong.
         per_root: dict[str, list[Decimal]] = {}
         for hit in self._index.rank(terms):
             root_id = self._primary_root(hit.node_id)
             if root_id is None:
                 continue
             per_root.setdefault(root_id, []).append(hit.score)
-        totals = {root_id: sum(sorted(scores, reverse=True)[:_ROOT_HIT_DEPTH]) for root_id, scores in per_root.items()}
+        with localcontext() as context:
+            context.prec = 34
+            totals = {
+                root_id: sum(
+                    score / Decimal(rank)
+                    for rank, score in enumerate(sorted(scores, reverse=True)[:_ROOT_HIT_DEPTH], start=1)
+                )
+                for root_id, scores in per_root.items()
+            }
         if not totals:
             return RouteOutcome(status="no_match")
         best = max(totals.values())
