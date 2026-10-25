@@ -36,7 +36,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from soul_knowledge.audit import AuditLog
+from soul_knowledge.audit import AuditLog, success_outcome
 from soul_knowledge.contracts import (
     ACCESS_ONLY_TOKEN_CAP,
     DEFAULT_MAX_TOKEN_BUDGET,
@@ -197,8 +197,14 @@ class KnowledgeService:
         self._cache_lock = threading.Lock()
         # Lifecycle engines (Tasks 5/6) share one evidence-scope hook so the
         # relearn quarantine excludes the same evidence from scoring and from
-        # review counts (Task 6 concern #2).
-        self._relearn_engine = RelearnEngine(store)
+        # review counts (Task 6 concern #2). The production engine is wired to
+        # the projector's generation root so its verified backup covers the
+        # whole protected set (SQLite + CURRENT pointer + generations/), not
+        # just the database file (relearn contract "Backup and rollback").
+        self._relearn_engine = RelearnEngine(
+            store,
+            generation_dir=projector._output_root,  # noqa: SLF001 - same-package wiring (mcp_server precedent)
+        )
         self._evidence_scope = self._relearn_scope
         self._score_engine = ScoreEngine(store, evidence_scope=self._evidence_scope)
         self._review_engine = ReviewEngine(
@@ -263,13 +269,17 @@ class KnowledgeService:
         return invocation
 
     def _finish_success(self, invocation: Invocation, started: float, result_references: dict[str, Any]) -> None:
+        # Spec 7.7 read path: the same shared outcome shape as the mutation
+        # paths (audit.success_outcome, c5792f9). A read never moves the
+        # projection, so its projection outcome is "unchanged" — distinct from
+        # a mutation's "appended" and a failure's "skipped".
         self._audit.complete(
             invocation.invocation_id,
-            InvocationOutcome(
-                status="success",
+            success_outcome(
+                invocation,
+                started,
                 result_references=result_references,
-                duration_ms=int((time.monotonic() - started) * 1000),
-                correlation_id=invocation.invocation_id,
+                projection_outcome="unchanged",
             ),
         )
 
@@ -280,6 +290,7 @@ class KnowledgeService:
             InvocationOutcome(
                 status="failure",
                 error=code,
+                projection_outcome="skipped",
                 duration_ms=int((time.monotonic() - started) * 1000),
                 correlation_id=invocation.invocation_id,
             ),
@@ -1188,7 +1199,14 @@ class KnowledgeService:
             typed = self._map_lifecycle_error(error)
             typed.audit_event_id = record.audit_event_id
             raise typed from error
-        return ProposalResponse(**meta, proposal=record.proposal)
+        return ProposalResponse(
+            **meta,
+            proposal=record.proposal,
+            domain_event_id=record.domain_event_id,
+            audit_event_seq=record.audit_event_seq,
+            node_version=record.node_version,
+            knowledge_seq=record.knowledge_seq,
+        )
 
     def apply_improvement(
         self,
@@ -1242,6 +1260,10 @@ class KnowledgeService:
             status=receipt.status,
             content_sha256=receipt.content_sha256,
             idempotent_replay=receipt.idempotent_replay,
+            domain_event_id=receipt.domain_event_id,
+            audit_event_seq=receipt.audit_event_seq,
+            node_version=receipt.node_version,
+            knowledge_seq=receipt.knowledge_seq,
         )
 
     def rollback(
@@ -1317,4 +1339,8 @@ class KnowledgeService:
             status=receipt.status,
             content_sha256=receipt.content_sha256,
             idempotent_replay=receipt.idempotent_replay,
+            domain_event_id=receipt.domain_event_id,
+            audit_event_seq=receipt.audit_event_seq,
+            node_version=receipt.node_version,
+            knowledge_seq=receipt.knowledge_seq,
         )
