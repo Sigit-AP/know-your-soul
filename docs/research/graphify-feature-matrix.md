@@ -19,6 +19,7 @@ spec: `docs/superpowers/specs/2026-10-24-superpower-knowledge-soul-design.md` se
 | Coverage formula | `verified_adopted_applicable_features / 40` |
 | Coverage ceiling before any implementation | 37/40 = **92.5%** |
 | Verified adopted coverage at Task 1 | **0/40 = 0%** — no adapter exists yet |
+| Verified adopted coverage at Task 3 | **34/40 = 85%** — rows 1–22, 24, 26–35 and 39 pass their named contract tests (Task 3). Row 23's named test passes, but its residual (whole-set durability / power-loss recovery, owner Task 9) stays open, so the row is not counted |
 | Release gate (spec acceptance criterion 9) | ≥ 90% (≥ 36/40) with exclusions and calculation shown |
 
 Rules that bound every later coverage claim:
@@ -52,63 +53,65 @@ Verdict legend: **Direct** = usable as-is with configuration; **Adapter** = mand
 
 | # | Feature | Verdict | Adaptation for SOUL | Owner | Named contract test | Covered? |
 |---|---|---|---|---|---|---|
-| 1 | Code AST extraction, deterministic, no LLM | Direct | Markdown/document scope only; language grammars beyond markdown are excluded (§4). Grammar set pinned and asserted importable | Task 3 | `tests/test_fragment_generator.py::test_pinned_grammar_set_imports` | no |
-| 2 | Markdown/document structural extraction | Direct | Baseline file/document layer for imported sources; concept facts come from A1 | Task 3 | `tests/test_fragment_generator.py::test_markdown_structure_nodes` | no |
-| 3 | Model-backed semantic extraction | **Adapter** | Replaced by A1 (deterministic fragment generator), routed through Graphify validate + sanitize; no model backend importable or reachable | Task 3 | `tests/test_fragment_generator.py::test_schema_parity_without_model_import` | no |
-| 4 | Content-hash extraction cache | Direct | Cache keyed on content hash + relative path salt; one process per root, never shared across generations | Task 3 | `tests/test_projection.py::test_cache_keyed_on_content_hash_not_stat` | no |
-| 5 | AST cache version/schema/grammar namespacing | Direct | Cache namespace pinned to the generator build; a bump is a logged full re-derivation | Task 3 | `tests/test_projection.py::test_cache_namespace_pins_generator_version` | no |
-| 6 | Semantic prompt/mode cache namespaces | Direct | Stable synthetic prompt fingerprint so every deterministic fragment is attributable | Task 3 | `tests/test_projection.py::test_fragment_fingerprint_is_stable` | no |
-| 7 | Partial/truncated extraction invalidation | Direct | Generator stamps `partial` on truncation; a truncated source is never served from cache | Task 3 | `tests/test_projection.py::test_truncated_source_is_not_served_from_cache` | no |
-| 8 | Cache portability across checkouts/hosts | Direct | `root` = corpus root, `cache_root` = product output; cache moved between absolute paths still hits | Task 3 | `tests/test_projection.py::test_cache_is_portable_across_roots` | no |
-| 9 | Semantic cache liveness prune | Direct | Prune per generation; entry count bounded by live documents × fingerprints | Task 3 | `tests/test_projection.py::test_cache_prune_bounded_by_live_documents` | no |
-| 10 | Manifest-driven incremental detection | Direct | Manifest anchored to the corpus root and asserted before incremental eviction is trusted | Task 3 | `tests/test_importer.py::test_manifest_anchored_incremental_import` | no |
-| 11 | Watch: code changes rebuild immediately | Direct | Kept as the rebuild trigger for structured sources, with the OS integration probe | Task 3 | `tests/test_projection.py::test_source_change_triggers_rebuild` | no |
-| 12 | Watch: document changes only flag `needs_update` | **Adapter** | A2: product driver runs the deterministic pipeline on a docs-only batch | Task 3 | `tests/test_projection.py::test_doc_change_triggers_deterministic_update` | no |
-| 13 | Per-repo rebuild lock + pending-change queue | Direct | Single serialized writer process; readers never publish; queued work is drained | Task 3 | `tests/test_projection.py::test_single_writer_lock_and_pending_drain` | no |
-| 14 | Graph-invariance contract | Direct | Rebuild invariant across checkout path, CRLF, edge endpoints; run with the pinned grammar set | Task 3 | `tests/test_projection.py::test_rebuild_invariant_across_roots_and_eols` | no |
-| 15 | Extraction schema validation | Direct | Plus A4: product read-model validation of the published generation; build warnings become gate failures | Task 3 | `tests/test_read_model_validator.py::test_rejects_bad_endpoints_and_unknown_keys` | no |
-| 16 | Untrusted semantic fragment sanitizer | Direct | Every generated fragment passes `validate_semantic_fragment` + `sanitize_semantic_fragment` | Task 3 | `tests/test_fragment_generator.py::test_sanitizer_bounds_ids_and_sizes` | no |
-| 17 | Build canonicalization + validation | Direct | Legacy aliases folded, ids re-derived from source file; warnings are gate failures | Task 3 | `tests/test_projection.py::test_build_warning_fails_the_gate` | no |
-| 18 | Per-tier replace on re-extraction | Direct | Explicit `ast_sources`/extracted provenance so a code re-extract cannot wipe the document layer | Task 3 | `tests/test_projection.py::test_explicit_provenance_prevents_cross_file_wipes` | no |
-| 19 | Shrink guard / explicit-overwrite refusal | Direct | `dedup=False` on the guarded build so the shrink guard stays meaningful | Task 3 | `tests/test_projection.py::test_shrink_guard_blocks_silent_loss` | no |
-| 20 | Entity/label deduplication | Direct | Off the default deterministic path; any dedup pass is audited and pinned | Task 3 | `tests/test_projection.py::test_dedup_disabled_on_guarded_build` | no |
-| 21 | Orphan/stale-source sweep | Direct | Plus a product junk-node classifier as the last build step | Task 3 | `tests/test_read_model_validator.py::test_junk_node_classifier` | no |
+| 1 | Code AST extraction, deterministic, no LLM | Direct | Markdown/document scope only; language grammars beyond markdown are excluded (§4). Grammar set pinned and asserted importable | Task 3 | `tests/test_fragment_generator.py::test_pinned_grammar_set_imports` | yes |
+| 2 | Markdown/document structural extraction | Direct | Baseline file/document layer for imported sources; concept facts come from A1 | Task 3 | `tests/test_fragment_generator.py::test_markdown_structure_nodes` | yes |
+| 3 | Model-backed semantic extraction | **Adapter** | Replaced by A1 (deterministic fragment generator), routed through Graphify validate + sanitize; no model backend importable or reachable | Task 3 | `tests/test_fragment_generator.py::test_schema_parity_without_model_import` | yes |
+| 4 | Content-hash extraction cache | Direct | Cache keyed on content hash + relative path salt; one process per root, never shared across generations | Task 3 | `tests/test_projection.py::test_cache_keyed_on_content_hash_not_stat` | yes |
+| 5 | AST cache version/schema/grammar namespacing | Direct | Cache namespace pinned to the generator build; a bump is a logged full re-derivation | Task 3 | `tests/test_projection.py::test_cache_namespace_pins_generator_version` | yes |
+| 6 | Semantic prompt/mode cache namespaces | Direct | Stable synthetic prompt fingerprint so every deterministic fragment is attributable | Task 3 | `tests/test_projection.py::test_fragment_fingerprint_is_stable` | yes |
+| 7 | Partial/truncated extraction invalidation | Direct | Generator stamps `partial` on truncation; a truncated source is never served from cache | Task 3 | `tests/test_projection.py::test_truncated_source_is_not_served_from_cache` | yes |
+| 8 | Cache portability across checkouts/hosts | Direct | `root` = corpus root, `cache_root` = product output; cache moved between absolute paths still hits | Task 3 | `tests/test_projection.py::test_cache_is_portable_across_roots` | yes |
+| 9 | Semantic cache liveness prune | Direct | Prune per generation; entry count bounded by live documents × fingerprints | Task 3 | `tests/test_projection.py::test_cache_prune_bounded_by_live_documents` | yes |
+| 10 | Manifest-driven incremental detection | Direct | Manifest anchored to the corpus root and asserted before incremental eviction is trusted | Task 3 | `tests/test_importer.py::test_manifest_anchored_incremental_import` | yes |
+| 11 | Watch: code changes rebuild immediately | Direct | Kept as the rebuild trigger for structured sources, with the OS integration probe | Task 3 | `tests/test_projection.py::test_source_change_triggers_rebuild` | yes |
+| 12 | Watch: document changes only flag `needs_update` | **Adapter** | A2: product driver runs the deterministic pipeline on a docs-only batch | Task 3 | `tests/test_projection.py::test_doc_change_triggers_deterministic_update` | yes |
+| 13 | Per-repo rebuild lock + pending-change queue | Direct | Single serialized writer process; readers never publish; queued work is drained | Task 3 | `tests/test_projection.py::test_single_writer_lock_and_pending_drain` | yes |
+| 14 | Graph-invariance contract | Direct | Rebuild invariant across checkout path, CRLF, edge endpoints; run with the pinned grammar set | Task 3 | `tests/test_projection.py::test_rebuild_invariant_across_roots_and_eols` | yes |
+| 15 | Extraction schema validation | Direct | Plus A4: product read-model validation of the published generation; build warnings become gate failures | Task 3 | `tests/test_read_model_validator.py::test_rejects_bad_endpoints_and_unknown_keys` | yes |
+| 16 | Untrusted semantic fragment sanitizer | Direct | Every generated fragment passes `validate_semantic_fragment` + `sanitize_semantic_fragment` | Task 3 | `tests/test_fragment_generator.py::test_sanitizer_bounds_ids_and_sizes` | yes |
+| 17 | Build canonicalization + validation | Direct | Legacy aliases folded, ids re-derived from source file; warnings are gate failures | Task 3 | `tests/test_projection.py::test_build_warning_fails_the_gate` | yes |
+| 18 | Per-tier replace on re-extraction | Direct | Explicit `ast_sources`/extracted provenance so a code re-extract cannot wipe the document layer | Task 3 | `tests/test_projection.py::test_explicit_provenance_prevents_cross_file_wipes` | yes |
+| 19 | Shrink guard / explicit-overwrite refusal | Direct | `dedup=False` on the guarded build so the shrink guard stays meaningful | Task 3 | `tests/test_projection.py::test_shrink_guard_blocks_silent_loss` | yes |
+| 20 | Entity/label deduplication | Direct | Off the default deterministic path; any dedup pass is audited and pinned | Task 3 | `tests/test_projection.py::test_dedup_disabled_on_guarded_build` | yes |
+| 21 | Orphan/stale-source sweep | Direct | Plus a product junk-node classifier as the last build step | Task 3 | `tests/test_read_model_validator.py::test_junk_node_classifier` | yes |
 
 ### 3.2 Graph construction, schema and atomic writes
 
 | # | Feature | Verdict | Adaptation for SOUL | Owner | Named contract test | Covered? |
 |---|---|---|---|---|---|---|
-| 22 | Graph schema/version provenance | **Partial** | Accepted `schema_version` range pinned, unknown version fails closed, manifest binds schema + content hash, `built_at_commit`/date stripped before hashing. **Residual:** Graphify ships no reader-side migration code — a future incompatible schema needs a product migration path | Task 3 (row), residual owner Task 3 | `tests/test_read_model_validator.py::test_unknown_schema_version_fails_closed` | no |
-| 23 | Deterministic serialization + atomic writes | **Partial** | Canonical one-line JSON, sorted nodes/links/hyperedges, same-directory temp + `os.replace`, plus fsync and a CAS manifest for the whole generation. **Residual:** Graphify guarantees atomicity per artifact and no durability; whole-set durability and power-loss recovery remain product-owned | Task 3 (row), residual owner Task 9 | `tests/test_projection.py::test_atomic_activation_is_fsynced_and_manifest_gated` | no |
-| 24 | Idempotent export writes | Direct | Every product artifact goes through the idempotent atomic writer (unchanged artifacts keep mtime/inode) | Task 3 | `tests/test_projection.py::test_unchanged_artifact_is_not_rewritten` | no |
+| 22 | Graph schema/version provenance | **Partial** | Accepted `schema_version` range pinned, unknown version fails closed, manifest binds schema + content hash, `built_at_commit`/date stripped before hashing. **Residual:** Graphify ships no reader-side migration code — a future incompatible schema needs a product migration path | Task 3 (row), residual owner Task 3 | `tests/test_read_model_validator.py::test_unknown_schema_version_fails_closed` | yes |
+| 23 | Deterministic serialization + atomic writes | **Partial** | Canonical one-line JSON, sorted nodes/links/hyperedges, same-directory temp + `os.replace`, plus fsync and a CAS manifest for the whole generation. **Residual:** Graphify guarantees atomicity per artifact and no durability; whole-set durability and power-loss recovery remain product-owned | Task 3 (row), residual owner Task 9 | `tests/test_projection.py::test_atomic_activation_is_fsynced_and_manifest_gated` | no (test passes at Task 3; residual open with Task 9) |
+| 24 | Idempotent export writes | Direct | Every product artifact goes through the idempotent atomic writer (unchanged artifacts keep mtime/inode) | Task 3 | `tests/test_projection.py::test_unchanged_artifact_is_not_rewritten` | yes |
 | 25 | Protected-artifact backup before overwrite | Direct | Back up the whole generation and verify it before replacing the live pointer | Task 9 | `tests/test_operations.py::test_pre_apply_backup_is_verified` | no |
 
 ### 3.3 Clustering and communities
 
 | # | Feature | Verdict | Adaptation for SOUL | Owner | Named contract test | Covered? |
 |---|---|---|---|---|---|---|
-| 26 | Leiden → graspologic → Louvain fallback | Direct | One pinned partitioner per generation recorded in the manifest; `graspologic` extras stay out of the locked environment | Task 3 | `tests/test_projection.py::test_pinned_partitioner_recorded_in_manifest` | no |
-| 27 | Canonical partition input | Direct | Canonical node/edge ordering with `PYTHONHASHSEED=0`; cross-seed determinism asserted | Task 3 | `tests/test_projection.py::test_partition_input_canonical_across_hash_seeds` | no |
-| 28 | Stable community IDs and remap | Direct | Community ids stay internal; published membership signatures and labels only | Task 3 | `tests/test_projection.py::test_community_ids_internal_and_signed` | no |
-| 29 | Deterministic hub labels + membership signatures | Direct | Curated labels only; hub labels are placeholders kept out of the reviewed file | Task 3 | `tests/test_projection.py::test_hub_labels_are_placeholders` | no |
-| 30 | Hub exclusion + AMBIGUOUS-edge downweight | Direct | One documented policy per generation, recorded in the manifest; ambiguity scaling for low-confidence relations | Task 3 | `tests/test_projection.py::test_hub_policy_is_recorded` | no |
-| 31 | Cohesion scoring | Direct | Structural diagnostic only, never presented as knowledge quality | Task 3 | `tests/test_projection.py::test_cohesion_is_not_a_quality_score` | no |
+| 26 | Leiden → graspologic → Louvain fallback | Direct | One pinned partitioner per generation recorded in the manifest; `graspologic` extras stay out of the locked environment | Task 3 | `tests/test_projection.py::test_pinned_partitioner_recorded_in_manifest` | yes |
+| 27 | Canonical partition input | Direct | Canonical node/edge ordering with `PYTHONHASHSEED=0`; cross-seed determinism asserted | Task 3 | `tests/test_projection.py::test_partition_input_canonical_across_hash_seeds` | yes |
+| 28 | Stable community IDs and remap | Direct | Community ids stay internal; published membership signatures and labels only | Task 3 | `tests/test_projection.py::test_community_ids_internal_and_signed` | yes |
+| 29 | Deterministic hub labels + membership signatures | Direct | Curated labels only; hub labels are placeholders kept out of the reviewed file | Task 3 | `tests/test_projection.py::test_hub_labels_are_placeholders` | yes |
+| 30 | Hub exclusion + AMBIGUOUS-edge downweight | Direct | One documented policy per generation, recorded in the manifest; ambiguity scaling for low-confidence relations | Task 3 | `tests/test_projection.py::test_hub_policy_is_recorded` | yes |
+| 31 | Cohesion scoring | Direct | Structural diagnostic only, never presented as knowledge quality | Task 3 | `tests/test_projection.py::test_cohesion_is_not_a_quality_score` | yes |
 
 ### 3.4 Report, export and retrieval
 
 | # | Feature | Verdict | Adaptation for SOUL | Owner | Named contract test | Covered? |
 |---|---|---|---|---|---|---|
-| 32 | Human-readable audit report | **Adapter** | Date/commit/token placeholders stripped before hashing; thin/shown counts recomputed by the validator | Task 3 | `tests/test_projection.py::test_report_bytes_are_date_independent` | no |
-| 33 | Portable report/export headers | Direct | No absolute checkout path in any published artifact | Task 3 | `tests/test_read_model_validator.py::test_no_absolute_checkout_paths` | no |
-| 34 | `graph.json` read model | Direct | Always loaded through the pinned Graphify loader so arc direction and confidence backfill are restored | Task 3 | `tests/test_read_model_validator.py::test_direction_and_confidence_restored` | no |
-| 35 | HTML/Obsidian/wiki export | Direct | Derived, generation-keyed views only; never a source of truth | Task 3 | `tests/test_projection.py::test_html_view_is_generation_keyed` | no |
+| 32 | Human-readable audit report | **Adapter** | Date/commit/token placeholders stripped before hashing; thin/shown counts recomputed by the validator | Task 3 | `tests/test_projection.py::test_report_bytes_are_date_independent` | yes |
+| 33 | Portable report/export headers | Direct | No absolute checkout path in any published artifact | Task 3 | `tests/test_read_model_validator.py::test_no_absolute_checkout_paths` | yes |
+| 34 | `graph.json` read model | Direct | Always loaded through the pinned Graphify loader so arc direction and confidence backfill are restored | Task 3 | `tests/test_read_model_validator.py::test_direction_and_confidence_restored` | yes |
+| 35 | HTML/Obsidian/wiki export | Direct | Derived, generation-keyed views only; never a source of truth | Task 3 | `tests/test_projection.py::test_html_view_is_generation_keyed` | yes |
 | 36 | GraphML/Cypher/SVG/canvas/DB push | Direct (DB push excluded) | GraphML/SVG may be published into the generation; DB sinks and credential-on-argv paths are excluded and asserted absent | Task 9 | `tests/test_security.py::test_no_db_sink_and_no_credentials_on_argv` | no |
 | 37 | Query / path / explain retrieval | Direct | A5: root-scoped adapter over library primitives; deterministic ranking, ambiguity refusal, bounded traversal, own byte/token budget; never CLI text | Task 4 | `tests/test_retrieval.py::test_bounded_traversal_and_typed_ambiguity` | no |
 | 38 | Token-reduction benchmark | **Partial** | Frozen `ceil(utf8_bytes/4)` estimator over the complete canonical payload, response truncation and no-match accounting preserved. **Residual:** Graphify's module has no latency, quality, repeat-trial or interval suite | Task 4 (row), residual owner Task 10 | `tests/test_service.py::test_canonical_token_parity` | no |
-| 39 | Parallel-edge / multigraph compatibility | Direct | Explicit simple-graph decision for the knowledge graph; parallel-edge behaviour probed, not version-guessed | Task 3 | `tests/test_read_model_validator.py::test_multigraph_probe_and_parallel_edges` | no |
+| 39 | Parallel-edge / multigraph compatibility | Direct | Explicit simple-graph decision for the knowledge graph; parallel-edge behaviour probed, not version-guessed | Task 3 | `tests/test_read_model_validator.py::test_multigraph_probe_and_parallel_edges` | yes |
 | 40 | Security / path / size / redaction guards | Direct | A7: containment, per-generation size caps, control/bidi/zero-width sanitization and a secret scan over the published generation; redaction treated as defense-in-depth, never a guarantee | Task 9 | `tests/test_security.py::test_containment_caps_and_generation_secret_scan` | no |
 
 Owner totals (primary owner per row): **Task 3 = 35 rows**, **Task 4 = 2 rows** (37, 38), **Task 9 = 3 rows** (25, 36, 40). Task 8 co-owns three rows as the MCP-parity surface (22, 36, 40) in addition to mandatory adapter A6. Rows 22, 23 and 38 are the three partials: they carry the row owner and an explicit residual owner (Task 3, Task 9, Task 10) and are excluded from the 37 verified rows until the residual is closed and the named contract test passes.
+
+Task 3 verification (2026-10-25): rows 1–22, 24, 26–35 and 39 pass their named contract tests. Row 22's residual is **closed at Task 3**: the event log is the source of truth, so an incompatible future schema is migrated by a deterministic rebuild from zero into a new content-addressed generation (spec section 7.10), while readers fail closed on unknown schema versions. Row 23's residual (whole-set durability and power-loss recovery) remains open with Task 9.
 
 MCP parity rows for Task 8 (the same ten operations through MCP, no extra surface): `tests/test_mcp_server.py::test_exactly_ten_tools_with_strict_schemas`, `tests/test_mcp_server.py::test_fixed_root_containment_rejects_project_path`, `tests/test_mcp_server.py::test_capabilities_are_exactly_tools_and_resources`, `tests/test_mcp_server.py::test_no_sampling_prompts_logging_or_completion_handlers`.
 
