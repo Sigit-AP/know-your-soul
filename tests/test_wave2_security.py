@@ -298,6 +298,26 @@ def test_f1_backup_restore_inside_ops_root_still_work(stack: Any) -> None:
     assert (Path(stack.ops_root) / "legit-restored.sqlite3").exists()
 
 
+def test_f1_path_escape_message_does_not_leak_ops_root(stack: Any, tmp_path: Path) -> None:
+    """Re-review observation: the PATH_ESCAPE wire message must not disclose
+    the server's absolute ops_root; naming the caller's own candidate is
+    enough diagnostics for a legitimate client."""
+    app = create_app(stack)
+    ops_root_text = str(Path(stack.ops_root).resolve())
+    # relative traversal variant
+    status, out = _post(app, "/v1/ops/backup", {"dest_path": "../wave2-escape.sqlite3"})
+    assert status == 400
+    assert out["error"]["code"] == "PATH_ESCAPE"
+    assert ops_root_text not in out["error"]["message"], "the absolute ops_root must not leak onto the wire"
+    assert "wave2-escape.sqlite3" in out["error"]["message"], "the caller's candidate must remain for diagnostics"
+    # absolute-path variant
+    outside = str(tmp_path.parent / "wave2-abs-escape.sqlite3")
+    status, out = _post(app, "/v1/ops/backup", {"dest_path": outside})
+    assert status == 400
+    assert out["error"]["code"] == "PATH_ESCAPE"
+    assert ops_root_text not in out["error"]["message"]
+
+
 # ------------------------------------------------------ F2: unix socket mode
 
 
@@ -406,6 +426,63 @@ def test_f4_normal_body_within_cap_still_works(stack: Any) -> None:
     status, out = _post(app, "/v1/knowledge/query", {"purpose": "gates", "domain": "P1", "token_budget": 512})
     assert status == 200
     assert out["audit_event_id"]
+
+
+def test_f4_sub_timeout_dribble_cut_by_total_body_deadline(stack: Any) -> None:
+    """F4 residual (re-review): a dribble whose every gap stays *under* the
+    timeout must still be cut — the timeout is a total body deadline, not
+    merely per-read. Six 0.4s gaps against a 1.0s budget must die at ~1.0s,
+    not complete at ~2.4s and hold the connection for the whole dribble."""
+    app = create_app(stack, body_timeout_seconds=1.0)
+    chunks = [b"x"] * 6
+    calls = 0
+
+    async def dribble_receive() -> dict[str, Any]:
+        nonlocal calls
+        await asyncio.sleep(0.4)  # every gap below the per-read budget
+        body = chunks[calls]
+        calls += 1
+        return {"type": "http.request", "body": body, "more_body": calls < len(chunks)}
+
+    started = time.monotonic()
+    status, _, raw = asgi_call(
+        app,
+        "POST",
+        "/v1/knowledge/query",
+        headers=[(b"transfer-encoding", b"chunked")],
+        receive_override=dribble_receive,
+    )
+    elapsed = time.monotonic() - started
+    assert status == 408
+    assert json.loads(raw.decode("utf-8"))["error"]["code"] == "REQUEST_TIMEOUT"
+    assert elapsed < 1.8, f"sub-timeout dribble held the connection for {elapsed:.2f}s; the total deadline must cut it"
+    assert calls < len(chunks), "the full dribble was consumed before any cut"
+
+
+def test_f4_chunked_normal_upload_within_deadline_still_works(stack: Any) -> None:
+    """Non-vacuous positive control: a streamed multi-chunk body that keeps
+    inside the total deadline is served normally."""
+    app = create_app(stack, body_timeout_seconds=5.0)
+    parts = [b'{"purpose": "gates", ', b'"domain": "P1", ', b'"token_budget": 512}']
+    calls = 0
+
+    async def chunked_receive() -> dict[str, Any]:
+        nonlocal calls
+        await asyncio.sleep(0.01)
+        body = parts[calls]
+        calls += 1
+        return {"type": "http.request", "body": body, "more_body": calls < len(parts)}
+
+    status, _, raw = asgi_call(
+        app,
+        "POST",
+        "/v1/knowledge/query",
+        headers=[(b"transfer-encoding", b"chunked"), (b"content-type", b"application/json")],
+        receive_override=chunked_receive,
+    )
+    assert status == 200
+    out = json.loads(raw.decode("utf-8"))
+    assert "n-gates" in {node["node_id"] for node in out["results"]}
 
 
 # -------------------------------------------- F5: INTERNAL envelope sanitation

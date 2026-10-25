@@ -378,15 +378,28 @@ class RelearnEngine:
 
     # ----------------------------------------------------------------- backup
 
+    @staticmethod
+    def _fsync_dir(directory: Path) -> None:
+        fd = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
     def _verified_backup(self, relearn_id: str, at: datetime) -> BackupManifest:
         """Verified atomic backup of the full protected set via the shared helper.
 
-        Delegates to :func:`soul_knowledge.backup.backup_protected_artifacts`
-        (wave-1 residual): the SQLite store through the online backup API, the
+        Delegates the protected-set copy and its verification to
+        :func:`soul_knowledge.backup.backup_protected_artifacts` (wave-1
+        residual): the SQLite store through the online backup API, the
         ``CURRENT`` pointer, and the generation directory verified against the
-        *manifest-declared* hashes — staged in a sibling temp directory and
-        activated with one atomic rename. ``generation_dir`` is the projection
-        root (the directory holding ``CURRENT`` and ``generations/``).
+        *manifest-declared* hashes. Activation is two-phase (wave-2 re-review
+        minor): the helper stages into a hidden sibling directory, the relearn
+        ``manifest.json`` is written into that stage *before* activation, and
+        one atomic rename then publishes the complete backup — a crash can
+        never leave an activated backup without its manifest (the pre-fix
+        pattern). ``generation_dir`` is the projection root (the directory
+        holding ``CURRENT`` and ``generations/``).
         """
         if self._backup_root is None or self._store.db_path == ":memory:":
             raise BackupUnavailable("a verified relearn backup requires a file-backed store")
@@ -395,47 +408,61 @@ class RelearnEngine:
         projection_root = (
             self._generation_dir if self._generation_dir is not None else self._backup_root / ".projection-absent"
         )
-        receipt = backup_protected_artifacts(self._store, projection_root=projection_root, dest_dir=final)
-        artifacts: list[BackupArtifact] = []
-        for artifact in receipt.artifacts:
-            if artifact.kind == "generation_file":
-                # Manifest paths stay relative to the generation directory.
-                artifacts.append(
-                    BackupArtifact(
-                        kind="generation_file",
-                        path=artifact.path.removeprefix("generation/"),
-                        sha256=artifact.sha256,
-                        byte_length=artifact.byte_length,
+        staging = final.with_name(f".{final.name}.tmp-{os.getpid()}")
+        if staging.exists():
+            shutil.rmtree(staging)
+        try:
+            receipt = backup_protected_artifacts(self._store, projection_root=projection_root, dest_dir=staging)
+            artifacts: list[BackupArtifact] = []
+            for artifact in receipt.artifacts:
+                if artifact.kind == "generation_file":
+                    # Manifest paths stay relative to the generation directory.
+                    artifacts.append(
+                        BackupArtifact(
+                            kind="generation_file",
+                            path=artifact.path.removeprefix("generation/"),
+                            sha256=artifact.sha256,
+                            byte_length=artifact.byte_length,
+                        )
                     )
-                )
-            elif artifact.kind == "current_pointer":
-                artifacts.append(
-                    BackupArtifact(
-                        kind="current_pointer",
-                        path=artifact.path,
-                        sha256=artifact.sha256,
-                        byte_length=artifact.byte_length,
+                elif artifact.kind == "current_pointer":
+                    artifacts.append(
+                        BackupArtifact(
+                            kind="current_pointer",
+                            path=artifact.path,
+                            sha256=artifact.sha256,
+                            byte_length=artifact.byte_length,
+                        )
                     )
-                )
-            else:
-                artifacts.append(
-                    BackupArtifact(
-                        kind="sqlite",
-                        path=artifact.path,
-                        sha256=artifact.sha256,
-                        byte_length=artifact.byte_length,
+                else:
+                    artifacts.append(
+                        BackupArtifact(
+                            kind="sqlite",
+                            path=artifact.path,
+                            sha256=artifact.sha256,
+                            byte_length=artifact.byte_length,
+                        )
                     )
-                )
-        manifest = BackupManifest(
-            relearn_id=relearn_id,
-            created_at=at,
-            artifacts=tuple(artifacts),
-            scoring_contract_version=self._scoring_contract_version,
-            verified=receipt.verified,
-        )
-        (final / "manifest.json").write_text(
-            json.dumps(manifest.model_dump(mode="json"), indent=1, sort_keys=True), encoding="utf-8"
-        )
+            manifest = BackupManifest(
+                relearn_id=relearn_id,
+                created_at=at,
+                artifacts=tuple(artifacts),
+                scoring_contract_version=self._scoring_contract_version,
+                verified=receipt.verified,
+            )
+            (staging / "manifest.json").write_text(
+                json.dumps(manifest.model_dump(mode="json"), indent=1, sort_keys=True), encoding="utf-8"
+            )
+            self._fsync_dir(staging)  # the manifest is durable before activation
+            if final.is_dir():
+                shutil.rmtree(final)
+            elif final.exists():
+                final.unlink()
+            os.replace(staging, final)  # one atomic rename activates the complete backup
+            self._fsync_dir(final.parent)
+        except BaseException:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise
         return manifest
 
     # ------------------------------------------------------------------ apply

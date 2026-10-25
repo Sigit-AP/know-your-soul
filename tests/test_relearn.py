@@ -15,12 +15,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
 import pytest
 
+from soul_knowledge.backup import BackupError
 from soul_knowledge.domain import (
     Event,
     EventKind,
@@ -401,6 +403,55 @@ def test_memory_store_cannot_backup(fx: RelearnFixture) -> None:
     with pytest.raises(BackupUnavailable):
         engine.apply("RESET", approve(offer.offer_id, "RESET"))
     assert memory_registry.relearn_state() == RELEARN_PENDING  # nothing applied
+
+
+def test_backup_manifest_is_staged_before_activation(fx: RelearnFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Re-review minor: the relearn manifest.json must sit inside the staged
+    backup directory *before* the atomic rename activates it (the pre-fix
+    pattern) — a post-activation write leaves an active-but-unusable backup
+    if the process crashes in between."""
+    backup_root = fx.tmp_path / "backups"
+    real_replace = os.replace
+
+    def spy_replace(src: object, dst: object) -> None:
+        dst_path = Path(str(dst))
+        if dst_path.parent == backup_root and not dst_path.name.startswith("."):
+            assert (Path(str(src)) / "manifest.json").is_file(), (
+                "the relearn manifest must be staged before the backup directory is activated"
+            )
+        real_replace(src, dst)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(os, "replace", spy_replace)
+    offer = fx.make_offer()
+    receipt = fx.engine.apply("RESET", approve(offer.offer_id, "RESET"), at=NOW)
+    backup_dir = backup_root / receipt.relearn_id
+    assert (backup_dir / "manifest.json").is_file()  # sanity: activated backup is complete
+
+
+def test_backup_crash_leaves_no_activated_backup_without_manifest(
+    fx: RelearnFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A crash after the protected-set copy but before activation must leave
+    no activated backup directory lacking its manifest (fail-closed debris in
+    a hidden staging dir is acceptable; a live partial backup is not)."""
+    from soul_knowledge import relearn as relearn_module
+
+    real_helper = relearn_module.backup_protected_artifacts
+
+    def crash_after_copy(*args: object, **kwargs: object) -> object:
+        receipt = real_helper(*args, **kwargs)  # type: ignore[arg-type]
+        raise BackupError(f"simulated crash after staging {receipt.backup_path}")
+
+    monkeypatch.setattr(relearn_module, "backup_protected_artifacts", crash_after_copy)
+    offer = fx.make_offer()
+    with pytest.raises(BackupError, match="simulated crash"):
+        fx.engine.apply("RESET", approve(offer.offer_id, "RESET"), at=NOW)
+    backup_root = fx.tmp_path / "backups"
+    activated = (
+        [child for child in backup_root.iterdir() if not child.name.startswith(".")] if backup_root.exists() else []
+    )
+    for child in activated:
+        assert (child / "manifest.json").is_file(), f"activated backup {child.name} has no manifest"
 
 
 # ------------------------------------------------------------------ rollback

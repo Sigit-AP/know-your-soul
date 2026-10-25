@@ -19,7 +19,7 @@ Audit discipline (spec 7.7):
 
 Boundaries: the Starlette app enforces the Host allowlist and the
 loopback/Unix-socket policy from :mod:`soul_knowledge.security`, caps request
-bodies (streaming, with a read timeout), requires ``application/json`` on
+bodies (streaming, under one total body deadline), requires ``application/json`` on
 POST routes (CSRF drive-by rejection), and exposes only versioned ``/v1``
 routes. ``serve`` binds a Unix socket by default — created owner-only
 (``0o600``) via :func:`_bind_unix_socket`; loopback HTTP is opt-in and wider
@@ -145,7 +145,7 @@ class PayloadTooLarge(KnowledgeError):
 
 
 class RequestBodyTimeout(KnowledgeError):
-    """The request body was not fully received within the read timeout."""
+    """The request body was not fully received within the total body deadline."""
 
     code = "REQUEST_TIMEOUT"
 
@@ -321,10 +321,19 @@ def _call_rebuild(stack: LocalStack, request: _RebuildPayload, actor: str, idem:
 
 
 def _resolve_ops_path(stack: LocalStack, candidate: str) -> Path:
-    """Confine an operator-supplied backup/restore path to the stack's ops root."""
+    """Confine an operator-supplied backup/restore path to the stack's ops root.
+
+    The surfaced message names only the caller-supplied candidate — never the
+    server's absolute root (wave-2 re-review observation): the typed code
+    (``PATH_ESCAPE``) is unchanged, the full detail stays in ``__cause__``
+    for server-side diagnostics.
+    """
     if stack.ops_root is None:
         raise PathEscapeError("no ops root is configured; backup/restore paths are refused")
-    return resolve_within_root(stack.ops_root, candidate)
+    try:
+        return resolve_within_root(stack.ops_root, candidate)
+    except PathEscapeError as error:
+        raise PathEscapeError(f"path {candidate!r} is outside the permitted operations root") from error
 
 
 def _call_backup(stack: LocalStack, request: _BackupPayload, actor: str, idem: str | None) -> Any:
@@ -528,8 +537,9 @@ class BoundaryMiddleware:
     A configured API key gates *every* client — loopback and unix-socket
     peers included (wave-2 F1, fail-closed against browser drive-by CSRF).
     Bodies are streamed in with a hard byte cap (cut at cap+1, never fully
-    buffered first — wave-2 F4) and a per-read timeout (slow-loris guard);
-    the buffered body is then replayed to the inner app.
+    buffered first — wave-2 F4) and one total body deadline (slow-loris
+    guard: a sub-timeout dribble cannot pin the connection — wave-2 F4
+    residual); the buffered body is then replayed to the inner app.
     """
 
     def __init__(
@@ -601,15 +611,21 @@ class BoundaryMiddleware:
             await self._app(scope, receive, send)
             return
         # Stream the body in: cut at cap+1 (never buffer the whole attack)
-        # and bound every individual read by the body timeout.
+        # and bound the whole body by one total deadline — a per-read timeout
+        # alone lets a sub-timeout dribble pin the connection indefinitely
+        # (wave-2 F4 residual).
         chunks: list[bytes] = []
         total = 0
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self._body_timeout_seconds
         while True:
             try:
-                message = await asyncio.wait_for(receive(), timeout=self._body_timeout_seconds)
+                message = await asyncio.wait_for(receive(), timeout=max(deadline - loop.time(), 0.0))
             except TimeoutError:
                 response = _json_response(
-                    error_envelope(RequestBodyTimeout("request body was not received within the read timeout")),
+                    error_envelope(
+                        RequestBodyTimeout("request body was not fully received within the total body deadline")
+                    ),
                     status=408,
                 )
                 await response(scope, receive, send)
