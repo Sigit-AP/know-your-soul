@@ -28,7 +28,7 @@ import pytest
 
 from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, canonical_json
 from soul_knowledge.events import Invocation
-from soul_knowledge.projection import GraphProjector, ProjectionValidationError
+from soul_knowledge.projection import GraphProjector
 from soul_knowledge.read_model_validator import ReadModelValidator
 from soul_knowledge.security import PathEscapeError
 from soul_knowledge.source_registry import ParserVersions, SourceKind, SourceRegistry
@@ -127,14 +127,34 @@ def test_f4_validator_fails_closed_on_jwt_bearer_and_github_pat(tmp_path: Path) 
 
 
 def test_f4_publish_fails_closed_on_secret_shaped_summary(tmp_path: Path) -> None:
-    """A node carrying a JWT/bearer/github_pat never reaches an activated generation."""
+    """A node carrying a JWT/bearer/github_pat never reaches an activated generation.
+
+    Wave-2 F7 semantics: fail closed *per node* — the poisoned node is
+    quarantined from the extraction, the rest of the graph still publishes,
+    and the whole-generation validator remains as the backstop. The invariant
+    is unchanged and stronger: no secret-shaped string ever reaches a read
+    surface (previously the whole publish failed, taking all reads down).
+    """
     for index, secret in enumerate((JWT, BEARER, GITHUB_PAT)):
         store = EventStore(tmp_path / f"soul-{index}.sqlite3")
         upsert(store, build_node("n-secret", summary=f"token leak: {secret}"), f"leak-{index}")
         projector = GraphProjector(store, output_root=tmp_path / f"out-{index}")
-        with pytest.raises(ProjectionValidationError):
-            projector.rebuild()
-        assert projector.active_manifest() is None  # nothing activated
+        receipt = projector.rebuild()
+        assert receipt.node_count == 0, "the poisoned node must be quarantined, not published"
+        manifest = projector.active_manifest()
+        assert manifest is not None, "the rest of the graph still activates (F7 blast-radius fix)"
+        assert int(manifest["node_count"]) == 0
+        generation = projector.active_generation_dir()
+        assert generation is not None
+        for artifact in generation.iterdir():
+            text = artifact.read_text(encoding="utf-8")
+            assert secret not in text, f"{artifact.name} leaks the secret"
+            assert "n-secret" not in text, f"{artifact.name} still carries the quarantined node"
+        rows = store.execute_raw(
+            "SELECT payload_json FROM event_log WHERE event_type = 'security.projection_quarantine'"
+        ).fetchall()
+        assert len(rows) == 1, "the quarantine leaves exactly one typed audit event"
+        assert secret not in str(rows[0]["payload_json"])
         store.close()
 
 

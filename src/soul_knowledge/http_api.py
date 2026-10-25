@@ -42,6 +42,7 @@ import os
 import socket
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, is_dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +50,7 @@ import uvicorn
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
-from starlette.requests import Request
+from starlette.requests import ClientDisconnect, Request
 from starlette.responses import Response
 from starlette.routing import Route
 
@@ -64,7 +65,7 @@ from soul_knowledge.contracts import (
     ReviewRequest,
     RollbackRequest,
 )
-from soul_knowledge.domain import Evidence, Node, canonical_json
+from soul_knowledge.domain import Evidence, Node, canonical_json, new_id
 from soul_knowledge.events import Invocation, InvocationOutcome
 from soul_knowledge.observability import check_readiness
 from soul_knowledge.projection import GraphProjector
@@ -79,6 +80,7 @@ from soul_knowledge.security import (
     authorize_request,
     redact_text,
     resolve_within_root,
+    sanitize_text,
 )
 from soul_knowledge.service import KnowledgeService
 from soul_knowledge.store import EventStore, StoreError
@@ -154,6 +156,18 @@ class UnsupportedMediaType(KnowledgeError):
     """A POST route was called with a non-JSON Content-Type (CSRF guard)."""
 
     code = "UNSUPPORTED_MEDIA_TYPE"
+
+
+class ClientDisconnected(KnowledgeError):
+    """The client vanished before its request body finished arriving.
+
+    Wave-2 F9(b): a dropped connection is routine network noise, so it maps
+    to a typed 400 instead of an uncaught ``starlette.requests.ClientDisconnect``
+    traceback per disconnect. No invocation is journaled — the request never
+    existed as far as the service is concerned (spec 7.7).
+    """
+
+    code = "CLIENT_DISCONNECTED"
 
 
 # ---------------------------------------------------------------------- stack
@@ -370,7 +384,30 @@ _OPERATIONS: dict[str, _OpSpec] = {
 }
 
 
-def _journal_validation_failure(stack: LocalStack, operation: str, raw: bytes, error: BaseException, actor: str) -> str:
+def _validation_summary(error: ValidationError, *, max_errors: int = 3) -> str:
+    """Field/type summary of a pydantic failure — never raw input values.
+
+    Mirrors the MCP adapter's ``_validation_summary`` (wave-2 F8): pydantic's
+    own ``str()`` rendering embeds ``input_value=...``, which would echo
+    attacker-supplied values back onto the wire; the ``loc`` + ``msg`` pair
+    carries the diagnostic without the value.
+    """
+    entries = error.errors()
+    parts: list[str] = []
+    for entry in entries[:max_errors]:
+        location = ".".join(str(part) for part in entry.get("loc", ()))
+        message = str(entry.get("msg", "invalid value"))
+        parts.append(f"{location}: {message}" if location else message)
+    if not parts:
+        return "invalid structured payload"
+    summary = "; ".join(parts)
+    remaining = len(entries) - len(parts)
+    return f"{summary} (+{remaining} more)" if remaining > 0 else summary
+
+
+def _journal_validation_failure(
+    stack: LocalStack, operation: str, raw: bytes, error: BaseException, actor: str, *, message: str | None = None
+) -> str:
     """Append the one completion audit record for adapter-rejected input."""
     invocation = Invocation.create(
         f"knowledge.{operation}",
@@ -378,7 +415,7 @@ def _journal_validation_failure(stack: LocalStack, operation: str, raw: bytes, e
         actor=actor,
     )
     stack.audit.begin(invocation)
-    message = redact_text(str(error))[:_MAX_ERROR_MESSAGE]
+    message = (message if message is not None else redact_text(str(error)))[:_MAX_ERROR_MESSAGE]
     receipt = stack.audit.complete(
         invocation.invocation_id,
         InvocationOutcome(
@@ -409,10 +446,15 @@ def dispatch(
         error.audit_event_id = _journal_validation_failure(stack, operation, raw, error, actor)
         raise
     except (ValidationError, ValueError, TypeError) as error:
-        audit_event_id = _journal_validation_failure(stack, operation, raw, error, actor)
-        raise AdapterValidationError(
-            redact_text(str(error))[:_MAX_ERROR_MESSAGE], audit_event_id=audit_event_id
-        ) from error
+        # Wave-2 F8: pydantic errors surface a value-free loc/msg summary; the
+        # same summary is journaled so wire and audit agree. ValueError and
+        # TypeError carry no structured form, so they keep the redacted text.
+        if isinstance(error, ValidationError):
+            message = redact_text(_validation_summary(error))[:_MAX_ERROR_MESSAGE]
+        else:
+            message = redact_text(str(error))[:_MAX_ERROR_MESSAGE]
+        audit_event_id = _journal_validation_failure(stack, operation, raw, error, actor, message=message)
+        raise AdapterValidationError(message, audit_event_id=audit_event_id) from error
     return spec.call(stack, request, actor, idempotency_key)
 
 
@@ -467,6 +509,7 @@ _STATUS_BY_CODE: dict[str, int] = {
     "PAYLOAD_TOO_LARGE": 413,
     "REQUEST_TIMEOUT": 408,
     "UNSUPPORTED_MEDIA_TYPE": 415,
+    "CLIENT_DISCONNECTED": 400,
 }
 
 _STATUS_BY_TYPE: dict[str, int] = {
@@ -531,6 +574,45 @@ def _json_response(payload: Any, *, status: int = 200) -> Response:
 # --------------------------------------------------------------- http surface
 
 
+def _now_iso() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def _record_security_denial(stack: LocalStack, scope: Mapping[str, Any], error: BaseException) -> None:
+    """Append one tamper-evident audit event for a boundary security denial.
+
+    Wave-2 F9(a): a 401/403 rejection is not an invocation (spec 7.7), so it
+    never opens an invocation journal — but it is security-relevant, so it
+    appends a standalone ``security.boundary_denial`` event to the store's
+    hash-chained event log through the existing public ``insert_event`` API.
+    The payload carries reason, peer, host, method and path — never any
+    presented key material.
+    """
+    reason = "host_not_allowed" if isinstance(error, HostNotAllowedError) else "unauthorized"
+    client = scope.get("client")
+    headers = {name.lower(): value for name, value in scope.get("headers", [])}
+    raw_host = headers.get(b"host")
+    host = sanitize_text(raw_host.decode("latin-1"), max_length=253) if raw_host is not None else None
+    payload: dict[str, Any] = {
+        "reason": reason,
+        "remote_addr": str(client[0]) if client else "local",
+        "host": host,
+        "method": str(scope.get("method", "")),
+        "path": str(scope.get("path", "")),
+    }
+    with stack.store.transaction() as conn:
+        stack.store.insert_event(
+            conn,
+            event_id=new_id(),
+            kind="audit",
+            event_type="security.boundary_denial",
+            knowledge_affecting=False,
+            actor="boundary",
+            occurred_at=_now_iso(),
+            payload=payload,
+        )
+
+
 class BoundaryMiddleware:
     """Pure-ASGI boundary: Host allowlist, API-key policy, streaming body cap.
 
@@ -540,6 +622,10 @@ class BoundaryMiddleware:
     buffered first — wave-2 F4) and one total body deadline (slow-loris
     guard: a sub-timeout dribble cannot pin the connection — wave-2 F4
     residual); the buffered body is then replayed to the inner app.
+
+    ``denial_recorder`` (wave-2 F9(a)) is invoked once per 401/403 boundary
+    rejection so security denials leave a tamper-evident audit trail; a
+    recorder failure is logged and never weakens or delays the denial.
     """
 
     def __init__(
@@ -550,12 +636,14 @@ class BoundaryMiddleware:
         host_allowlist: Sequence[str],
         max_body_bytes: int,
         body_timeout_seconds: float = 10.0,
+        denial_recorder: Callable[[Mapping[str, Any], BaseException], None] | None = None,
     ) -> None:
         self._app = app
         self._api_key = api_key
         self._host_allowlist = tuple(host_allowlist)
         self._max_body_bytes = max_body_bytes
         self._body_timeout_seconds = body_timeout_seconds
+        self._denial_recorder = denial_recorder
 
     def _authorize_local(self, presented_key: str | None) -> None:
         """Gate local peers with the configured key (constant-time compare)."""
@@ -589,6 +677,11 @@ class BoundaryMiddleware:
             )
             self._authorize_local(presented_key)
         except (HostNotAllowedError, UnauthorizedError) as error:
+            if self._denial_recorder is not None:
+                try:
+                    self._denial_recorder(scope, error)
+                except Exception:  # noqa: BLE001 - an audit failure never weakens the denial
+                    logger.warning("security-denial audit write failed for %s", type(error).__name__)
             response = _json_response(error_envelope(error), status=status_for_error(error))
             await response(scope, receive, send)
             return
@@ -696,6 +789,7 @@ def create_app(
         host_allowlist=host_allowlist,
         max_body_bytes=max_body_bytes,
         body_timeout_seconds=body_timeout_seconds,
+        denial_recorder=lambda scope, error: _record_security_denial(stack, scope, error),
     )
 
 
@@ -709,7 +803,16 @@ async def _handle(stack: LocalStack, operation: str, request: Request, max_body_
             error_envelope(UnsupportedMediaType("POST routes require Content-Type: application/json")),
             status=415,
         )
-    body = await request.body()
+    try:
+        body = await request.body()
+    except ClientDisconnect:
+        # Wave-2 F9(b): a dropped connection is one operator log line, never
+        # a per-disconnect traceback out of the handler.
+        logger.info("client disconnected while reading the request body for %s", operation)
+        return _json_response(
+            error_envelope(ClientDisconnected("the client disconnected before the request body arrived")),
+            status=400,
+        )
     if len(body) > max_body_bytes:
         return _json_response(error_envelope(PayloadTooLarge("request body exceeds the size cap")), status=413)
     actor = request.headers.get("x-actor", "operator")

@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import unicodedata
@@ -51,7 +52,7 @@ from typing import Any
 from graphify.ids import make_id
 from pydantic import BaseModel, ConfigDict
 
-from soul_knowledge.domain import Event, EventKind, Node, RelationKind, canonical_json, quantize_score
+from soul_knowledge.domain import Event, EventKind, Node, RelationKind, canonical_json, new_id, quantize_score
 from soul_knowledge.fragment_generator import file_scoped_id, slugify
 from soul_knowledge.graphify_adapter import (
     ADAPTER_VERSION,
@@ -62,7 +63,7 @@ from soul_knowledge.graphify_adapter import (
     GraphifyAdapter,
 )
 from soul_knowledge.read_model_validator import ReadModelValidator
-from soul_knowledge.security import DEFAULT_MAX_TEXT_LENGTH, redact_text, sanitize_text
+from soul_knowledge.security import DEFAULT_MAX_TEXT_LENGTH, SECRET_PATTERNS, redact_text, sanitize_text
 from soul_knowledge.store import EventStore
 
 try:
@@ -98,6 +99,8 @@ ARTIFACT_NAMES = (
     "manifest.json",
 )
 HASHED_ARTIFACTS = ARTIFACT_NAMES[:-1]
+
+logger = logging.getLogger(__name__)
 
 _MANIFEST_VERSION = 1
 
@@ -516,6 +519,91 @@ class GraphProjector:
 
     # ------------------------------------------------------------- replay
 
+    @staticmethod
+    def _secret_category(text: str) -> str | None:
+        """The shared SECRET_PATTERNS category matching *text*, or ``None``."""
+        for name, pattern in SECRET_PATTERNS:
+            if pattern.search(text) is not None:
+                return name
+        return None
+
+    def _quarantine_secret_nodes(self, node_dicts: dict[str, dict[str, Any]]) -> list[tuple[str, str, str]]:
+        """Wave-2 F7: fail closed *per node*, not per generation.
+
+        A node whose publish-bound fields carry a secret-shaped string is
+        removed from the extraction (its edges drop with it via the ``_edge``
+        membership check), so one poisoned write can never take down every
+        read behind the whole-generation validator gate. The removal is the
+        strongest form of the invariant: the secret never reaches any
+        artifact. Returns ``(node_id, field, category)`` triples for the
+        typed audit/warning — never any secret material.
+        """
+        quarantined: list[tuple[str, str, str]] = []
+        for node_id in sorted(node_dicts):
+
+            def _scan(value: Any) -> str | None:
+                if isinstance(value, str):
+                    return self._secret_category(value)
+                if isinstance(value, (list, tuple)):
+                    for item in value:
+                        hit = _scan(item)
+                        if hit is not None:
+                            return hit
+                if isinstance(value, Mapping):
+                    for item in value.values():
+                        hit = _scan(item)
+                        if hit is not None:
+                            return hit
+                return None
+
+            offending_field: str | None = None
+            offending_category: str | None = None
+            for field, value in node_dicts[node_id].items():
+                hit = _scan(value)
+                if hit is not None:
+                    offending_field = field
+                    offending_category = hit
+                    break
+            if offending_field is not None and offending_category is not None:
+                del node_dicts[node_id]
+                quarantined.append((node_id, offending_field, offending_category))
+        return quarantined
+
+    def _record_quarantine(
+        self, quarantined: list[tuple[str, str, str]], *, projection_version: str, watermark: int
+    ) -> None:
+        """One typed, hash-chained audit event per quarantining rebuild.
+
+        Rides the store's append-only event log (``kind='audit'``,
+        ``knowledge_affecting=False``) through the existing public
+        ``insert_event`` API — tamper-evident, and never an invocation
+        journal (spec 7.7). The payload names node ids, fields and secret
+        *categories* only; secret material is never persisted.
+        """
+        entries = [
+            {"node_id": node_id, "field": field, "category": category} for node_id, field, category in quarantined
+        ]
+        logger.warning(
+            "projection quarantined %d node(s) carrying secret-shaped content: %s",
+            len(entries),
+            ", ".join(entry["node_id"] for entry in entries),
+        )
+        with self._store.transaction() as conn:
+            self._store.insert_event(
+                conn,
+                event_id=new_id(),
+                kind="audit",
+                event_type="security.projection_quarantine",
+                knowledge_affecting=False,
+                actor="projector",
+                occurred_at=_now_iso(),
+                payload={
+                    "projection_version": projection_version,
+                    "source_knowledge_high_watermark": watermark,
+                    "quarantined": entries,
+                },
+            )
+
     def _knowledge_events(self, upto_knowledge_seq: int) -> list[Event]:
         with self._store.read() as conn:
             rows = conn.execute(
@@ -525,7 +613,7 @@ class GraphProjector:
             ).fetchall()
         return [Event.model_validate(json.loads(str(row["payload_json"]))) for row in rows]
 
-    def _extraction(self, events: list[Event]) -> dict[str, Any]:
+    def _extraction(self, events: list[Event]) -> tuple[dict[str, Any], list[tuple[str, str, str]]]:
         nodes: dict[str, Node] = {}
         versions: dict[str, int] = {}
         relations = []
@@ -582,6 +670,13 @@ class GraphProjector:
                 "professional_level": node.professional_level,
             }
 
+        # Wave-2 F7(a): per-node fail-closed. A node whose publish-bound
+        # fields carry a secret-shaped string is quarantined from the
+        # extraction *before* any artifact exists — the rest of the graph
+        # keeps publishing and serving reads. The whole-generation validator
+        # stays as the backstop for anything that slips past this scan.
+        quarantined = self._quarantine_secret_nodes(node_dicts)
+
         edges: list[dict[str, Any]] = []
         seen: set[tuple[str, str, str]] = set()
 
@@ -610,7 +705,7 @@ class GraphProjector:
         for relation in relations:
             _edge(relation.source_node_id, relation.target_node_id, relation.kind.value)
 
-        return {"nodes": list(node_dicts.values()), "edges": edges, "hyperedges": []}
+        return {"nodes": list(node_dicts.values()), "edges": edges, "hyperedges": []}, quarantined
 
     # ----------------------------------------------------------------- build
 
@@ -620,6 +715,7 @@ class GraphProjector:
         watermark: int,
         *,
         allow_shrink: bool,
+        quarantined_count: int = 0,
     ) -> tuple[Path, dict[str, Any], int, int]:
         errors = self._adapter.validate_extraction_strict(extraction)
         if errors:
@@ -628,7 +724,11 @@ class GraphProjector:
         node_count = len(extraction["nodes"])
         if not allow_shrink:
             active = self.active_manifest()
-            if active is not None and node_count < int(active["node_count"]):
+            # Wave-2 F7(a): security-quarantined nodes are deliberate, loudly
+            # audited removals — they are accounted into the shrink budget so
+            # one poisoned node cannot wedge publication behind ShrinkGuard
+            # either. Shrinkage *beyond* the quarantine still fails closed.
+            if active is not None and node_count + quarantined_count < int(active["node_count"]):
                 raise ShrinkGuardError(
                     f"refusing to publish {node_count} nodes over the active generation's "
                     f"{active['node_count']} without an explicit allow_shrink"
@@ -809,16 +909,25 @@ class GraphProjector:
         """Replay, build, validate and (by default) activate a generation."""
         with self.hold_lock():
             watermark = self._store.knowledge_high_watermark() if upto_knowledge_seq is None else upto_knowledge_seq
-            extraction = self._extraction(self._knowledge_events(watermark))
+            extraction, quarantined = self._extraction(self._knowledge_events(watermark))
             generation_dir, manifest, node_count, edge_count = self._build_generation(
                 extraction,
                 watermark,
                 allow_shrink=self._allow_shrink if allow_shrink is None else allow_shrink,
+                quarantined_count=len(quarantined),
             )
             report = self._validator.validate(generation_dir, manifest)
             if not report.ok:
                 raise ProjectionValidationError(
                     "generation failed the read-model validator: " + "; ".join(report.errors)
+                )
+            if quarantined:
+                # The generation passed every gate with the poisoned nodes
+                # excluded — the security event is real, so it is journaled.
+                self._record_quarantine(
+                    quarantined,
+                    projection_version=str(manifest["projection_version"]),
+                    watermark=watermark,
                 )
             if activate:
                 self._activate(manifest, generation_dir)

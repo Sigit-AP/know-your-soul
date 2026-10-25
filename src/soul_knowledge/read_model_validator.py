@@ -260,10 +260,15 @@ class ReadModelValidator:
             match = _ABS_PATH_RE.search(text)
             if match is not None:
                 errors.append(f"artifact {name} contains an absolute path {match.group(0)!r}")
-            for _secret_name, pattern in SECRET_PATTERNS:
+            for secret_name, pattern in SECRET_PATTERNS:
                 secret = pattern.search(text)
                 if secret is not None:
-                    errors.append(f"artifact {name} contains a secret-shaped string {secret.group(0)[:8]}…")
+                    # Wave-2 F7(b): never echo secret material — not even an
+                    # 8-char prefix. Category + node location is enough.
+                    errors.append(
+                        f"artifact {name} contains a secret-shaped string (category: {secret_name})"
+                        + self._secret_node_location(name, graph, pattern)
+                    )
                     break
 
         return ValidationReport(
@@ -273,6 +278,35 @@ class ReadModelValidator:
             edge_count=edge_count,
             collapsed_links=tuple(collapsed),
         )
+
+    @staticmethod
+    def _secret_node_location(artifact: str, graph: dict[str, Any] | None, pattern: re.Pattern[str]) -> str:
+        """Name the node(s) carrying the secret shape (never the secret itself).
+
+        Only ``graph.json`` carries per-node fields; other artifacts get no
+        location suffix. Node ids are identifiers, not secret material.
+        """
+        if artifact != "graph.json" or graph is None:
+            return ""
+        raw_nodes: Any = graph.get("nodes")
+        if not isinstance(raw_nodes, list):
+            return ""
+
+        def _hits(value: Any) -> bool:
+            if isinstance(value, str):
+                return pattern.search(value) is not None
+            if isinstance(value, (list, tuple)):
+                return any(_hits(item) for item in value)
+            if isinstance(value, Mapping):
+                return any(_hits(item) for item in value.values())
+            return False
+
+        ids = [str(node.get("id")) for node in raw_nodes if isinstance(node, dict) and _hits(node)]
+        if not ids:
+            return ""
+        shown = sorted(str(node_id) for node_id in ids)[:3]
+        suffix = f"; node(s): {', '.join(shown)}"
+        return suffix + (f" (+{len(ids) - 3} more)" if len(ids) > 3 else "")
 
     def _junk_node_reasons(self, node: Mapping[str, Any]) -> list[str]:
         """The product junk-node classifier (matrix row 21)."""
