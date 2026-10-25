@@ -53,6 +53,7 @@ __all__ = [
     "AuditOutcomeMismatch",
     "EventRow",
     "EventStore",
+    "IdempotencyConflict",
     "InvalidRelation",
     "StoreError",
     "VersionConflict",
@@ -79,6 +80,14 @@ class InvalidRelation(StoreError):
 
 class AuditOutcomeMismatch(StoreError):
     """The final audit receipt does not record the outcome the caller requested."""
+
+
+class IdempotencyConflict(StoreError):
+    """An idempotency key was reused for a semantically different request.
+
+    Replaying the first write's receipt here would silently drop the new
+    write (audit wave-1 finding F3), so the reuse fails loud instead.
+    """
 
 
 @dataclass(frozen=True)
@@ -138,6 +147,26 @@ def _hash_input(
 
 def _digest(payload: Mapping[str, Any]) -> str:
     return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
+
+
+# Per-attempt identity and environmental context drift between attempts of one
+# logical request: a genuine retry rebuilds the Event (fresh ``event_id`` /
+# ``occurred_at``), and a re-assertion such as ``SeedImporter.ensure_roots``
+# runs under a newer source version (or provenance URI) with fresh record
+# timestamps. The request fingerprint below strips exactly these drift fields
+# and keeps the request's substance: kind, target node, domain, actor and the
+# node/evidence/relation content.
+_EVENT_DRIFT_FIELDS = frozenset({"event_id", "occurred_at", "source_version_id"})
+_NODE_DRIFT_FIELDS = frozenset({"created_at", "updated_at", "version", "source_version_id", "provenance"})
+
+
+def _event_request_fingerprint(payload: Mapping[str, Any]) -> str:
+    """Retry-stable request fingerprint for idempotency-conflict detection."""
+    content = {key: value for key, value in payload.items() if key not in _EVENT_DRIFT_FIELDS}
+    node = content.get("node")
+    if isinstance(node, Mapping):
+        content["node"] = {key: value for key, value in node.items() if key not in _NODE_DRIFT_FIELDS}
+    return _digest(storage_payload(content))
 
 
 class EventStore:
@@ -412,11 +441,16 @@ class EventStore:
         """Append one domain event, deduplicating on *idempotency_key*."""
         with self.transaction() as conn:
             existing = conn.execute(
-                "SELECT event_id, event_seq, node_version, knowledge_seq FROM event_log "
+                "SELECT event_id, event_seq, node_version, knowledge_seq, payload_json FROM event_log "
                 "WHERE idempotency_key = ? AND kind = 'domain'",
                 (idempotency_key,),
             ).fetchone()
             if existing is not None:
+                if self._conflicting_reuse(conn, idempotency_key, event, str(existing["payload_json"])):
+                    raise IdempotencyConflict(
+                        f"idempotency key {idempotency_key!r} is already bound to a different request "
+                        f"(stored event {str(existing['event_id'])!r}); refusing to silently drop this write"
+                    )
                 return DomainReceipt(
                     domain_event_id=str(existing["event_id"]),
                     event_seq=int(existing["event_seq"]),
@@ -463,6 +497,36 @@ class EventStore:
                 knowledge_seq=row.knowledge_seq,
                 idempotent_replay=False,
             )
+
+    @staticmethod
+    def _conflicting_reuse(
+        conn: sqlite3.Connection, idempotency_key: str, event: Event, stored_payload_json: str
+    ) -> bool:
+        """Decide whether an idempotency-key hit is a genuine retry or a collision.
+
+        The request fingerprint (``_event_request_fingerprint``) strips
+        per-attempt identity and environmental context — source version,
+        record timestamps, node version — so a genuine retry and a deliberate
+        re-assertion like ``ensure_roots`` under a newer source version replay.
+        Identical fingerprints replay.
+
+        Some callers legitimately retry with drifting *substance* — an
+        improvement re-apply re-derives the node from its new version. Those
+        flows journal every attempt, so a retry is proven when two or more
+        audited invocations under this key (the stored write's and the current
+        one) carry a single identical ``request_hash``. Anything else — raw
+        writes with no journals, or journals that disagree — is a collision
+        and must fail loud rather than silently drop the write (finding F3).
+        """
+        stored = json.loads(stored_payload_json)
+        if _event_request_fingerprint(stored) == _event_request_fingerprint(event.model_dump(mode="python")):
+            return False
+        rows = conn.execute(
+            "SELECT request_hash FROM invocation_journal WHERE effective_idempotency_key = ?",
+            (idempotency_key,),
+        ).fetchall()
+        distinct_hashes = {str(row["request_hash"]) for row in rows}
+        return len(rows) < 2 or len(distinct_hashes) != 1
 
     def _materialize(self, conn: sqlite3.Connection, event: Event, *, node_version: int, event_seq: int) -> None:
         if event.kind is EventKind.NODE_UPSERT and event.node is not None:

@@ -51,7 +51,7 @@ from soul_knowledge.source_registry import (
     SourceKind,
     SourceRegistry,
 )
-from soul_knowledge.store import EventStore, StoreError
+from soul_knowledge.store import EventStore, IdempotencyConflict, StoreError
 
 __all__ = [
     "BackupArtifact",
@@ -440,8 +440,20 @@ class RelearnEngine:
         actor: str = "operator",
         idempotency_key: str | None = None,
     ) -> RelearnReceipt:
-        """Apply an operator-approved mode against the pending offer."""
+        """Apply an operator-approved mode against the pending offer.
+
+        The idempotent-replay lookup runs *before* the pending-offer gate: a
+        retried apply after success finds ``relearn_state=CLEAR`` and must
+        return the original receipt, not raise ``NoPendingRelearn`` (spec 7.9,
+        audit wave-1 finding F2). A key reused for a different mode is an
+        idempotency collision and fails loud.
+        """
         at = at or _utcnow()
+        audit = AuditLog(self._store)
+        if idempotency_key is not None:
+            replayed = self._replay_receipt(idempotency_key, mode=mode, actor=actor, audit=audit)
+            if replayed is not None:
+                return replayed
         offer = self._pending_offer()
         if approval is None or approval.offer_id != offer.offer_id or approval.mode != mode:
             raise OperatorDecisionRequired(
@@ -454,42 +466,29 @@ class RelearnEngine:
         request_hash = hashlib.sha256(
             canonical_json({"relearn_apply": offer.offer_id, "mode": mode}).encode()
         ).hexdigest()
-        audit = AuditLog(self._store)
         invocation = Invocation.create(
             "knowledge.relearn_apply", request_hash, actor=actor, idempotency_key=idempotency_key
         )
         effective_key = idempotency_key or invocation.invocation_id
-        with self._store.read() as conn:
-            existing = conn.execute(
-                "SELECT payload_json FROM event_log WHERE kind = 'domain' AND idempotency_key = ?",
-                (effective_key,),
-            ).fetchone()
+        relearn_id = new_id()
         audit_begun = False
         try:
-            if existing is not None:
-                stored = json.loads(str(existing["payload_json"]))
-                record = stored.get("relearn") or (stored.get("payload") or {}).get("relearn") or {}
-                relearn_id = str(record["relearn_id"])
-                replay, backup = True, self._load_backup_manifest(relearn_id)
-            else:
-                # The verified backup precedes every write of this invocation,
-                # so its hashes capture the exact pre-relearn state.
-                relearn_id = new_id()
-                backup = self._verified_backup(relearn_id, at)
-                audit.begin(invocation)
-                audit_begun = True
-                self._apply_mutation(
-                    effective_key,
-                    relearn_id=relearn_id,
-                    backup=backup,
-                    offer=offer,
-                    mode=mode,
-                    carried=carried,
-                    quarantined=quarantined,
-                    actor=actor,
-                    at=at,
-                )
-                replay = False
+            # The verified backup precedes every write of this invocation,
+            # so its hashes capture the exact pre-relearn state.
+            backup = self._verified_backup(relearn_id, at)
+            audit.begin(invocation)
+            audit_begun = True
+            self._apply_mutation(
+                effective_key,
+                relearn_id=relearn_id,
+                backup=backup,
+                offer=offer,
+                mode=mode,
+                carried=carried,
+                quarantined=quarantined,
+                actor=actor,
+                at=at,
+            )
         except Exception as error:
             if not audit_begun:
                 audit.begin(invocation)
@@ -518,7 +517,72 @@ class RelearnEngine:
             backup=backup,
             audit_event_id=final.audit_event_id,
             audit_event_seq=final.event_seq,
-            idempotent_replay=replay,
+            idempotent_replay=False,
+        )
+
+    def _replay_receipt(
+        self,
+        idempotency_key: str,
+        *,
+        mode: Literal["RESET", "ACCUMULATE"],
+        actor: str,
+        audit: AuditLog,
+    ) -> RelearnReceipt | None:
+        """Rebuild the original receipt for a retried apply, or ``None`` if never applied.
+
+        The retry is its own audited invocation (exactly one final audit event
+        each); the receipt fields come from the stored relearn record because
+        the pending offer no longer exists once the first apply cleared it.
+        """
+        with self._store.read() as conn:
+            row = conn.execute(
+                "SELECT payload_json FROM event_log WHERE kind = 'domain' AND idempotency_key = ?",
+                (idempotency_key,),
+            ).fetchone()
+        if row is None:
+            return None
+        stored = json.loads(str(row["payload_json"]))
+        record = stored.get("relearn") or (stored.get("payload") or {}).get("relearn")
+        if not isinstance(record, dict) or "relearn_id" not in record:
+            raise IdempotencyConflict(
+                f"idempotency key {idempotency_key!r} is already bound to a non-relearn write"
+            )
+        if str(record.get("mode")) != mode:
+            raise IdempotencyConflict(
+                f"idempotency key {idempotency_key!r} replayed with mode {mode} "
+                f"but the stored relearn applied {record.get('mode')!r}"
+            )
+        relearn_id = str(record["relearn_id"])
+        backup = self._load_backup_manifest(relearn_id)
+        request_hash = hashlib.sha256(
+            canonical_json({"relearn_apply": record["offer_id"], "mode": mode}).encode()
+        ).hexdigest()
+        invocation = Invocation.create(
+            "knowledge.relearn_apply", request_hash, actor=actor, idempotency_key=idempotency_key
+        )
+        audit.begin(invocation)
+        final = audit.complete(
+            invocation.invocation_id,
+            InvocationOutcome(status="success", duration_ms=0, result_references={"relearn_id": relearn_id}),
+        )
+        carried = [str(evidence_id) for evidence_id in record["carried_evidence_ids"]]
+        return RelearnReceipt(
+            relearn_id=relearn_id,
+            offer_id=str(record["offer_id"]),
+            mode=mode,
+            previous_source_version_id=record.get("previous_source_version_id"),
+            new_source_version_id=str(record["new_source_version_id"]),
+            carried_evidence_ids=tuple(carried),
+            quarantined_evidence_ids=tuple(str(evidence_id) for evidence_id in record["quarantined_evidence_ids"]),
+            old_evidence_carried=len(carried),
+            scores_after=record.get("scores_after"),
+            promotion_blocked=True,
+            evidence_weight=0,
+            knowledge_seq=None,
+            backup=backup,
+            audit_event_id=final.audit_event_id,
+            audit_event_seq=final.event_seq,
+            idempotent_replay=True,
         )
 
     def _apply_mutation(
