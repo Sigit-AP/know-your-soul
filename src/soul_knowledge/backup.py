@@ -20,7 +20,9 @@ the projection before closing stale journals.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
+import shutil
 import sqlite3
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -39,7 +41,10 @@ __all__ = [
     "BackupReceipt",
     "ProjectionDiagnosis",
     "ProjectionState",
+    "ProtectedArtifact",
+    "ProtectedBackupReceipt",
     "RecoveryReport",
+    "backup_protected_artifacts",
     "backup_store",
     "diagnose_projection",
     "inspect_backup",
@@ -206,6 +211,121 @@ def inspect_backup(backup_path: str | Path) -> dict[str, Any]:
         "size_bytes": path.stat().st_size,
         "sha256": _sha256(path),
     }
+
+
+# ----------------------------------------------- protected-artifact backup
+
+
+@dataclass(frozen=True)
+class ProtectedArtifact:
+    """One hash-verified artifact inside a protected-set backup."""
+
+    kind: str  # "sqlite" | "current_pointer" | "generation_file"
+    path: str  # relative to the backup directory
+    sha256: str
+    byte_length: int
+
+
+@dataclass(frozen=True)
+class ProtectedBackupReceipt:
+    """The verified identity of one protected-set backup directory."""
+
+    database: BackupReceipt
+    artifacts: tuple[ProtectedArtifact, ...]
+    current_pointer: str | None  # the generation name CURRENT pointed at
+    backup_path: str
+    verified: bool
+
+
+def _sha256_of(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def backup_protected_artifacts(
+    store: EventStore, *, projection_root: str | Path, dest_dir: str | Path
+) -> ProtectedBackupReceipt:
+    """Verified, atomic backup of the whole protected set (matrix row 25).
+
+    The relearn contract ("Backup and rollback") protects the SQLite store, the
+    generation directory, the manifest, the ``CURRENT`` pointer, the source
+    registry (rows inside the SQLite store) and the scoring-contract version
+    (pinned in the generation manifest). Everything is staged in a
+    sibling temporary directory and hash-verified — generation artifacts
+    against the *manifest-declared* hashes, not merely copy-equality — before a
+    single ``os.replace`` activates the backup directory, so the protected set
+    is captured (and provably intact) before the live pointer may be replaced.
+    With no ``CURRENT`` pointer the backup is the verified database alone.
+    """
+    root = Path(projection_root)
+    dest = Path(dest_dir)
+    stage = dest.with_name(f".{dest.name}.tmp-{os.getpid()}")
+    if stage.exists():
+        shutil.rmtree(stage)
+    stage.mkdir(parents=True)
+    artifacts: list[ProtectedArtifact] = []
+    current_pointer: str | None = None
+    database: BackupReceipt | None = None
+    try:
+        database = backup_store(store, stage / "soul.db")
+        artifacts.append(ProtectedArtifact("sqlite", "soul.db", database.sha256, database.size_bytes))
+        pointer = root / "CURRENT"
+        if pointer.is_file():
+            current_pointer = pointer.read_text(encoding="utf-8").strip()
+            staged_pointer = stage / "CURRENT"
+            shutil.copyfile(pointer, staged_pointer)
+            pointer_digest = _sha256_of(pointer)
+            if _sha256_of(staged_pointer) != pointer_digest:
+                raise BackupError("staged CURRENT pointer does not hash-match the live pointer")
+            artifacts.append(
+                ProtectedArtifact("current_pointer", "CURRENT", pointer_digest, staged_pointer.stat().st_size)
+            )
+            generation = root / "generations" / current_pointer
+            if generation.is_dir():
+                declared_raw = json.loads((generation / "manifest.json").read_text(encoding="utf-8")).get(
+                    "artifacts", {}
+                )
+                declared = dict(declared_raw) if isinstance(declared_raw, dict) else {}
+                generation_copy = stage / "generation"
+                shutil.copytree(generation, generation_copy)
+                for name in sorted(declared):
+                    copied = generation_copy / str(name)
+                    if not copied.is_file():
+                        raise BackupError(f"manifest-declared artifact {name!r} is missing from the generation")
+                    digest = _sha256_of(copied)
+                    if digest != str(declared[name]):
+                        raise BackupError(f"generation artifact {name!r} does not match its manifest hash")
+                    artifacts.append(
+                        ProtectedArtifact("generation_file", f"generation/{name}", digest, copied.stat().st_size)
+                    )
+                manifest_digest = _sha256_of(generation / "manifest.json")
+                if _sha256_of(generation_copy / "manifest.json") != manifest_digest:
+                    raise BackupError("staged manifest.json does not hash-match the live manifest")
+                artifacts.append(
+                    ProtectedArtifact(
+                        "generation_file",
+                        "generation/manifest.json",
+                        manifest_digest,
+                        (generation_copy / "manifest.json").stat().st_size,
+                    )
+                )
+        _fsync_dir(stage)
+        if dest.is_dir():
+            shutil.rmtree(dest)
+        elif dest.exists():
+            dest.unlink()
+        os.replace(stage, dest)  # one atomic rename activates the backup
+        _fsync_dir(dest.parent)
+    except BaseException:
+        shutil.rmtree(stage, ignore_errors=True)
+        raise
+    assert database is not None  # set before any later step can raise
+    return ProtectedBackupReceipt(
+        database=database,
+        artifacts=tuple(artifacts),
+        current_pointer=current_pointer,
+        backup_path=str(dest),
+        verified=True,
+    )
 
 
 def restore_store(backup_path: str | Path, dest_path: str | Path, *, overwrite: bool = False) -> BackupReceipt:

@@ -27,6 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from soul_knowledge.domain import canonical_json
 from soul_knowledge.graphify_adapter import ACCEPTED_SCHEMA_VERSIONS, GraphifyAdapter
+from soul_knowledge.security import SECRET_PATTERNS
 
 __all__ = [
     "HASHED_ARTIFACTS",
@@ -62,14 +63,10 @@ _ID_RE = re.compile(r"^[\w.:-]+$", re.UNICODE)
 # before the leading slash must not be a scheme/authority character).
 _ABS_PATH_RE = re.compile(r"(?<![\w@:+/.-])/(?:[\w@.+-]+/){2,}[\w@.+-]+")
 _DRIVE_RE = re.compile(r"(?<![\w@:+/.-])[A-Za-z]:[\\/]")
-_SECRET_RES = (
-    re.compile(r"sk-[A-Za-z0-9_\-]{16,}"),
-    re.compile(r"AKIA[0-9A-Z]{16}"),
-    re.compile(r"ghp_[A-Za-z0-9]{20,}"),
-    re.compile(r"xox[bap]-[A-Za-z0-9\-]{10,}"),
-    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
-    re.compile(r"(?i)(?:api[_-]?key|secret|password)\s*[:=]\s*[\"']?[A-Za-z0-9_\-]{16,}"),
-)
+# Secret shapes come from ``soul_knowledge.security.SECRET_PATTERNS`` (audit
+# wave-1 finding F4): one shared list covers JWT, bearer, github_pat, Slack
+# xox[r/s], private-key blocks and credential assignments — the validator can
+# never drift narrower than the redaction surface.
 
 
 class CollapsedLink(BaseModel):
@@ -263,7 +260,7 @@ class ReadModelValidator:
             match = _ABS_PATH_RE.search(text)
             if match is not None:
                 errors.append(f"artifact {name} contains an absolute path {match.group(0)!r}")
-            for pattern in _SECRET_RES:
+            for _secret_name, pattern in SECRET_PATTERNS:
                 secret = pattern.search(text)
                 if secret is not None:
                     errors.append(f"artifact {name} contains a secret-shaped string {secret.group(0)[:8]}…")

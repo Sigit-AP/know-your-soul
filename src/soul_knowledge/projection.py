@@ -58,6 +58,7 @@ from soul_knowledge.graphify_adapter import (
     GraphifyAdapter,
 )
 from soul_knowledge.read_model_validator import ReadModelValidator
+from soul_knowledge.security import sanitize_text
 from soul_knowledge.store import EventStore
 
 try:
@@ -275,12 +276,19 @@ class GraphProjector:
         node_dicts: dict[str, dict[str, Any]] = {}
         for node_id in sorted(nodes):
             node = nodes[node_id]
-            source_file = str(
-                node.payload.get("source_file") or (node.provenance[-1] if node.provenance else "soul://store")
+            # Publish-time sanitization (audit wave-1 finding F6): free text is
+            # stripped of control/bidi/zero-width characters through
+            # ``security.sanitize_text`` so no published artifact (graph.json,
+            # graph.html, GRAPH_REPORT.md) can carry trojan-source glyphs raw.
+            # Identifiers are untouched; the read-model validator already fails
+            # closed on ids outside the semantic charset.
+            summary = sanitize_text(node.summary) if node.summary else ""
+            source_file = sanitize_text(
+                str(node.payload.get("source_file") or (node.provenance[-1] if node.provenance else "soul://store"))
             )
             node_dicts[node_id] = {
                 "id": node.node_id,
-                "label": node.summary or node.node_id,
+                "label": summary or node.node_id,
                 "file_type": "document",
                 "source_file": source_file,
                 "_origin": "semantic",
@@ -289,8 +297,8 @@ class GraphProjector:
                 "lifecycle_status": node.lifecycle_status.value,
                 "version": versions.get(node_id, node.version),
                 "source_version_id": node.source_version_id,
-                "provenance": list(node.provenance),
-                "context_tags": list(node.context_tags),
+                "provenance": [sanitize_text(entry) for entry in node.provenance],
+                "context_tags": [sanitize_text(tag) for tag in node.context_tags],
                 "scores": node.scores.quantized(),
                 "confidence": str(quantize_score(node.scores.confidence)),
                 "professional_level": node.professional_level,

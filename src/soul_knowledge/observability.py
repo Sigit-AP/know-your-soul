@@ -16,9 +16,10 @@ projection whose knowledge watermark matches the store).
 
 from __future__ import annotations
 
+import json
 import sys
 import threading
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
     from soul_knowledge.projection import GraphProjector
 
 __all__ = [
+    "QUERY_AUDIT_OPERATIONS",
     "HealthReport",
     "MetricsRegistry",
     "StructuredLogger",
@@ -39,6 +41,7 @@ __all__ = [
     "check_health",
     "check_readiness",
     "collect_store_metrics",
+    "export_query_audit",
 ]
 
 
@@ -119,6 +122,66 @@ def collect_store_metrics(store: EventStore, registry: MetricsRegistry) -> Metri
     metrics.set_gauge("event_high_watermark", store.event_high_watermark())
     metrics.set_gauge("pending_journals", len(store.incomplete_journals()))
     return metrics
+
+
+# ------------------------------------------------------------- query audit
+
+#: The read-only operations whose invocations make up the query-audit trail
+#: (task-9 brief: query-audit export). Mutations are covered by the domain
+#: event log itself; this export answers "who queried what, when, and how did
+#: it end" without exposing request payloads.
+QUERY_AUDIT_OPERATIONS: tuple[str, ...] = ("knowledge.query", "knowledge.get_node", "knowledge.get_subtree")
+
+
+def export_query_audit(store: EventStore, *, operations: Sequence[str] = QUERY_AUDIT_OPERATIONS) -> str:
+    """Export the completed query-operation audit trail as canonical JSON lines.
+
+    One record per completed invocation of a query operation, ordered by the
+    final audit event sequence — deterministic for equal store state (safe for
+    diff-based review and golden fixtures). Records carry the audit identity
+    (``audit_event_id``/``audit_event_seq``/``invocation_id``), the operation,
+    actor, request hash, idempotency key, timestamps, outcome status and
+    duration — never request payloads — and every field passes through
+    :func:`soul_knowledge.security.redact_value` so a secret-shaped fragment
+    (for example inside an error message) cannot ride out on the export.
+    In-progress journals are excluded: they are a readiness concern, not yet
+    audit history.
+    """
+    ops = tuple(operations)
+    if not ops:
+        return ""
+    placeholders = ", ".join("?" for _ in ops)
+    with store.read() as conn:
+        rows = conn.execute(
+            "SELECT invocation_id, audit_event_id, audit_event_seq, operation, request_hash, actor, "
+            "idempotency_key, started_at, completed_at, outcome_json FROM invocation_journal "
+            f"WHERE status = 'complete' AND operation IN ({placeholders}) ORDER BY audit_event_seq",
+            ops,
+        ).fetchall()
+    lines: list[str] = []
+    for row in rows:
+        outcome: Mapping[str, Any] = {}
+        if row["outcome_json"] is not None:
+            parsed = json.loads(str(row["outcome_json"]))
+            if isinstance(parsed, Mapping):
+                outcome = parsed
+        record: dict[str, Any] = {
+            "audit_event_seq": row["audit_event_seq"],
+            "audit_event_id": row["audit_event_id"],
+            "invocation_id": row["invocation_id"],
+            "operation": row["operation"],
+            "actor": row["actor"],
+            "request_hash": row["request_hash"],
+            "idempotency_key": row["idempotency_key"],
+            "started_at": row["started_at"],
+            "completed_at": row["completed_at"],
+            "status": outcome.get("status"),
+            "duration_ms": outcome.get("duration_ms", 0),
+        }
+        if outcome.get("error"):
+            record["error"] = outcome["error"]
+        lines.append(canonical_json(redact_value(record)))
+    return "".join(line + "\n" for line in lines)
 
 
 # -------------------------------------------------------------------- logs

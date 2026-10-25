@@ -9,14 +9,19 @@ bind/host/key policy functions that Task 7 wires into the API server.
 
 from __future__ import annotations
 
+import ast
+import hashlib
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
-from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain
+from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, canonical_json
 from soul_knowledge.events import Invocation
+from soul_knowledge.projection import GraphProjector
+from soul_knowledge.read_model_validator import ReadModelValidator
 from soul_knowledge.security import (
     DEFAULT_MAX_PAYLOAD_BYTES,
     BindPolicyError,
@@ -332,3 +337,140 @@ def test_middleware_factories_for_task7_wiring() -> None:
     authorizer(RequestView(remote_addr="127.0.0.1", host="api.internal", api_key=None))
     with pytest.raises(UnauthorizedError):
         authorizer(RequestView(remote_addr="10.1.1.1", host="api.internal", api_key="bad"))
+
+
+# ------------------------------------------- matrix row 36: no DB sink, no
+# ------------------------------------------- credentials on argv
+
+_SRC_ROOT = Path(__file__).resolve().parents[1] / "src" / "soul_knowledge"
+
+# External database / graph-push drivers a "DB sink" would import. The product
+# excludes DB push entirely (matrix row 36); the runtime guard already bans
+# these roots at import time, this test asserts no source module imports them.
+_DB_SINK_IMPORT_ROOTS = frozenset(
+    {
+        "neo4j",
+        "falkordb",
+        "psycopg",
+        "psycopg2",
+        "pymysql",
+        "mysql",
+        "pymongo",
+        "cassandra",
+        "sqlalchemy",
+        "redis",
+    }
+)
+
+# Argparse option names that would carry credential material on the process
+# command line. ``--api-key`` (cli.py / mcp_server.py) is the single
+# sanctioned auth-bearing serve flag documented in docs/operations.md
+# (Task 7); this set pins it as the only one so any new credential-on-argv
+# surface fails here.
+_CREDENTIAL_ARGV_RE = re.compile(
+    r"^--(api[-_]?key|password|passwd|secret|auth[-_]?token|access[-_]?key|secret[-_]?key|"
+    r"credentials?|db[-_]?url|dsn)$"
+)
+_ALLOWED_CREDENTIAL_ARGV = frozenset({"--api-key"})
+
+
+def _imported_roots(tree: ast.AST) -> set[str]:
+    roots: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            roots.update(alias.name.split(".", 1)[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            roots.add(node.module.split(".", 1)[0])
+    return roots
+
+
+def _argv_options(tree: ast.AST) -> set[str]:
+    options: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (isinstance(func, ast.Attribute) and func.attr == "add_argument"):
+            continue
+        for arg in node.args:
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value.startswith("--"):
+                options.add(arg.value)
+    return options
+
+
+def test_no_db_sink_and_no_credentials_on_argv() -> None:
+    """Matrix row 36: DB sinks and credential-on-argv paths are excluded and
+    asserted absent across every committed source module."""
+    sources = sorted(_SRC_ROOT.rglob("*.py"))
+    assert sources  # the scan must actually cover the package
+    for path in sources:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        leaked_imports = _imported_roots(tree) & _DB_SINK_IMPORT_ROOTS
+        assert not leaked_imports, f"{path.name} imports DB-sink driver(s): {sorted(leaked_imports)}"
+        credential_options = {option for option in _argv_options(tree) if _CREDENTIAL_ARGV_RE.match(option)}
+        assert credential_options <= _ALLOWED_CREDENTIAL_ARGV, (
+            f"{path.name} puts credentials on argv: {sorted(credential_options - _ALLOWED_CREDENTIAL_ARGV)}"
+        )
+
+
+# ----------------------------------------------------------- matrix row 40
+
+
+def test_containment_caps_and_generation_secret_scan(tmp_path: Path) -> None:
+    """Matrix row 40: containment, size caps, control/bidi/zero-width
+    sanitization, and a secret scan over the published generation."""
+    root = tmp_path / "root"
+    (root / "sub").mkdir(parents=True)
+    outside = tmp_path / "outside.md"
+    outside.write_text("nope", encoding="utf-8")
+    (root / "link").symlink_to(tmp_path, target_is_directory=True)
+
+    # containment: traversal, absolute-outside and symlink escape all fail closed
+    assert resolve_within_root(root, "sub") == (root / "sub").resolve()
+    with pytest.raises(PathEscapeError):
+        resolve_within_root(root, "../outside.md")
+    with pytest.raises(PathEscapeError):
+        resolve_within_root(root, outside)
+    with pytest.raises(PathEscapeError):
+        resolve_within_root(root, "link/outside.md")
+
+    # size caps fail closed
+    assert ensure_text_size("x" * 1024, max_bytes=1024) == 1024
+    with pytest.raises(OversizedPayloadError):
+        ensure_text_size("x" * 1025, max_bytes=1024)
+    with pytest.raises(OversizedPayloadError):
+        ensure_payload_size({"blob": "x" * (DEFAULT_MAX_PAYLOAD_BYTES + 1)})
+
+    # control/bidi/zero-width sanitization
+    assert sanitize_text("a‮b​c\x00d") == "abcd"
+
+    # generation secret scan: a real published generation passes, and every
+    # audit wave-1 secret shape injected into it fails the validator closed.
+    store = EventStore(tmp_path / "soul.sqlite3")
+    upsert(store, build_node("n-row40"), "row40")
+    projector = GraphProjector(store, output_root=tmp_path / "out")
+    receipt = projector.rebuild()
+    generation = Path(receipt.generation_dir)
+    manifest = json.loads((generation / "manifest.json").read_text(encoding="utf-8"))
+    validator = ReadModelValidator()
+    assert validator.validate(generation, manifest).ok
+
+    secret_shapes = (
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJVadQssw5c",
+        "bearer abcdef0123456789abcdef0123456789",
+        "github_pat_11ABCDEFGHIJ0123456789abcd",
+        "sk-" + "a" * 24,
+    )
+    for secret in secret_shapes:
+        graph_path = generation / "graph.json"
+        graph = json.loads(graph_path.read_text(encoding="utf-8"))
+        graph["nodes"][0]["label"] = f"leaked {secret}"
+        graph_path.write_text(canonical_json(graph), encoding="utf-8")
+        tampered = dict(manifest)
+        tampered["artifacts"] = dict(manifest["artifacts"])
+        tampered["artifacts"]["graph.json"] = hashlib.sha256(graph_path.read_bytes()).hexdigest()
+        (generation / "manifest.json").write_text(canonical_json(tampered) + "\n", encoding="utf-8")
+        report = validator.validate(generation, tampered)
+        assert not report.ok, f"validator accepted {secret[:12]}…"
+        assert any("secret" in error.lower() for error in report.errors)
+    store.close()

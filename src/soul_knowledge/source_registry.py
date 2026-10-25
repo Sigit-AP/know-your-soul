@@ -30,6 +30,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from soul_knowledge.domain import canonical_json, new_id
+from soul_knowledge.security import PathEscapeError, resolve_within_root
 from soul_knowledge.store import EventStore
 
 __all__ = [
@@ -171,22 +172,49 @@ class SourceRegistry:
     # -------------------------------------------------------------- observing
 
     def _scan(self, path: Path, kind: SourceKind) -> tuple[list[SourceFileEntry], bytes, int]:
-        """Return per-file entries (sorted by path), concatenated bytes and char length."""
+        """Return per-file entries (sorted by path), concatenated bytes and char length.
+
+        Containment (audit wave-1 finding F5): every candidate is resolved
+        through :func:`soul_knowledge.security.resolve_within_root` against the
+        scanned root. A symlink that resolves outside the root fails closed —
+        its bytes are never read, the file is skipped, and the scan raises a
+        typed :class:`PathEscapeError` recording every escaped path. Symlinks
+        whose targets stay inside the root scan normally.
+        """
         if kind is SourceKind.SOUL_CORPUS or path.is_dir():
-            targets = sorted((item for item in path.rglob("*") if item.is_file()), key=lambda item: item.as_posix())
-            entries_root = path
+            root = path
+            candidates = sorted(path.rglob("*"), key=lambda item: item.as_posix())
         else:
-            targets = [path]
-            entries_root = path.parent
+            root = path.parent
+            candidates = [path]
+        skipped: list[str] = []
+        targets: list[Path] = []
+        for item in candidates:
+            try:
+                resolved = resolve_within_root(root, item)
+            except PathEscapeError:
+                try:
+                    skipped.append(item.relative_to(root).as_posix())
+                except ValueError:
+                    skipped.append(str(item))
+                continue
+            if not resolved.is_file():
+                continue  # directories and in-root symlinked directories
+            targets.append(item)
+        if skipped:
+            raise PathEscapeError(
+                f"source scan of {str(path)!r} refused {len(skipped)} path(s) escaping the corpus root: "
+                + ", ".join(skipped)
+            )
         entries: list[SourceFileEntry] = []
         concatenated = bytearray()
         char_length = 0
         for target in targets:
-            raw = target.read_bytes()
+            raw = resolve_within_root(root, target).read_bytes()
             text = raw.decode("utf-8")
             entries.append(
                 SourceFileEntry(
-                    path=target.relative_to(entries_root).as_posix(),
+                    path=target.relative_to(root).as_posix(),
                     sha256=_sha256(raw),
                     byte_length=len(raw),
                     line_count=len(text.splitlines()),

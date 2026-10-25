@@ -19,6 +19,7 @@ from soul_knowledge.audit import AuditLog
 from soul_knowledge.backup import (
     BackupError,
     ProjectionState,
+    backup_protected_artifacts,
     backup_store,
     diagnose_projection,
     inspect_backup,
@@ -26,7 +27,7 @@ from soul_knowledge.backup import (
     restore_store,
 )
 from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain
-from soul_knowledge.events import Invocation
+from soul_knowledge.events import Invocation, InvocationOutcome
 from soul_knowledge.importer import SeedImporter
 from soul_knowledge.observability import (
     MetricsRegistry,
@@ -34,6 +35,7 @@ from soul_knowledge.observability import (
     check_health,
     check_readiness,
     collect_store_metrics,
+    export_query_audit,
 )
 from soul_knowledge.projection import GraphProjector
 from soul_knowledge.store import EventStore
@@ -439,4 +441,102 @@ def test_recover_via_audit_log_hook(tmp_path: Path) -> None:
     assert diagnose_projection(store, projector).state is ProjectionState.CURRENT
     assert len(report.audit_receipts) == 1
     assert report.audit_receipts[0].status == "failure"  # interrupted before the domain commit
+    store.close()
+
+
+# ------------------------------------------------- protected-artifact backup
+
+
+def test_pre_apply_backup_is_verified(tmp_path: Path) -> None:
+    """Matrix row 25: the whole protected set — SQLite, the active generation,
+    and the ``CURRENT`` pointer — is backed up and hash-verified before the
+    live pointer may be replaced (relearn-contract ``Backup and rollback``)."""
+    import hashlib
+
+    store, projector = populated(tmp_path)
+    projector.rebuild()
+    output_root = tmp_path / "out"
+    pointer = output_root / "CURRENT"
+    assert pointer.is_file()
+    pointer_bytes_before = pointer.read_bytes()
+    generation = projector.active_generation_dir()
+    assert generation is not None
+    manifest = json.loads((generation / "manifest.json").read_text(encoding="utf-8"))
+
+    dest = tmp_path / "protected-backup"
+    receipt = backup_protected_artifacts(store, projection_root=output_root, dest_dir=dest)
+    assert receipt.verified
+    assert receipt.database.event_count == store.event_count()
+    assert receipt.current_pointer == pointer_bytes_before.decode("utf-8").strip()
+    kinds = {artifact.kind for artifact in receipt.artifacts}
+    assert {"sqlite", "current_pointer", "generation_file"} <= kinds
+
+    # Every staged byte hash-verifies: the DB against its own backup receipt,
+    # the pointer against the live pointer, and generation artifacts against
+    # the *manifest-declared* hashes (not just copy-equality).
+    def sha256_of(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    assert sha256_of(dest / "soul.db") == receipt.database.sha256
+    assert (dest / "CURRENT").read_bytes() == pointer_bytes_before
+    assert sha256_of(dest / "CURRENT") == sha256_of(pointer)
+    declared = manifest["artifacts"]
+    for name in sorted(declared):
+        assert sha256_of(dest / "generation" / name) == declared[name], name
+    assert sha256_of(dest / "generation" / "manifest.json") == sha256_of(generation / "manifest.json")
+
+    # The backup precedes any pointer replacement: after a new generation
+    # activates, the staged set still holds the pre-apply pointer and bytes.
+    upsert(store, "n-after-backup", "post-backup")
+    projector.rebuild()
+    assert pointer.read_bytes() != pointer_bytes_before
+    assert (dest / "CURRENT").read_bytes() == pointer_bytes_before
+    store.close()
+
+
+def test_protected_backup_without_projection_records_db_only(tmp_path: Path) -> None:
+    """No CURRENT pointer yet: the backup is still verified, DB-only."""
+    store = EventStore(tmp_path / "soul.sqlite3")
+    upsert(store, "n-1", "pb-1")
+    receipt = backup_protected_artifacts(store, projection_root=tmp_path / "out", dest_dir=tmp_path / "bak")
+    assert receipt.verified
+    assert receipt.current_pointer is None
+    assert {artifact.kind for artifact in receipt.artifacts} == {"sqlite"}
+    store.close()
+
+
+# ------------------------------------------------------------ query audit
+
+
+def test_query_audit_export(tmp_path: Path) -> None:
+    """Task-9 brief L18: the query-audit export is a deterministic, redacted
+    JSON-lines view of the completed query-operation audit trail."""
+    store = EventStore(tmp_path / "soul.sqlite3")
+    audit = AuditLog(store)
+    query = Invocation.create("knowledge.query", request_hash="rh:q1", idempotency_key="q1")
+    audit.begin(query)
+    audit.complete(query.invocation_id, InvocationOutcome(status="success", duration_ms=12))
+    upsert(store, "n-1", "w1")  # knowledge.log_event — not a query operation
+    read = Invocation.create("knowledge.get_node", request_hash="rh:q2", idempotency_key="q2")
+    audit.begin(read)
+    audit.complete(
+        read.invocation_id,
+        InvocationOutcome(status="failure", error="node missing; api_key=«redacted:sk-…»", duration_ms=3),
+    )
+
+    text = export_query_audit(store)
+    assert text == export_query_audit(store)  # deterministic for equal state
+    lines = [json.loads(line) for line in text.splitlines()]
+    assert [line["operation"] for line in lines] == ["knowledge.query", "knowledge.get_node"]
+    assert [line["status"] for line in lines] == ["success", "failure"]
+    seqs = [line["audit_event_seq"] for line in lines]
+    assert seqs == sorted(seqs)
+    assert lines[0]["duration_ms"] == 12
+    assert lines[1]["error"].startswith("node missing")
+    # redaction: the secret-shaped error fragment never leaves the process raw
+    assert "«redacted:sk-…»" not in text
+    assert "[REDACTED" in lines[1]["error"]
+    # every exported row carries its audit identity and request hash
+    for line in lines:
+        assert line["audit_event_id"] and line["invocation_id"] and line["request_hash"]
     store.close()

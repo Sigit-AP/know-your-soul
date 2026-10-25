@@ -44,6 +44,7 @@ from soul_knowledge.domain import canonical_json
 __all__ = [
     "DEFAULT_MAX_PAYLOAD_BYTES",
     "DEFAULT_MAX_TEXT_LENGTH",
+    "SECRET_PATTERNS",
     "BindPolicyError",
     "HostNotAllowedError",
     "OversizedPayloadError",
@@ -115,7 +116,9 @@ def sanitize_text(text: str, *, max_length: int = DEFAULT_MAX_TEXT_LENGTH) -> st
 
 # ---------------------------------------------------------------- redaction
 
-_SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+# The single source of truth for secret shapes: the read-model validator
+# (publish gate) scans artifacts with exactly this list — no second copy.
+SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("openai-style key", re.compile(r"sk-[A-Za-z0-9_\-]{16,}")),
     ("aws access key", re.compile(r"AKIA[0-9A-Z]{16}")),
     ("github token", re.compile(r"(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}")),
@@ -143,7 +146,7 @@ _CREDENTIAL_KEY_RE = re.compile(r"(?i)(api[_-]?key|secret|password|passwd|token|
 def redact_text(text: str) -> str:
     """Replace every known secret shape and basic PII with a redaction marker."""
     redacted = text
-    for name, pattern in (*_SECRET_PATTERNS, *_PII_PATTERNS):
+    for name, pattern in (*SECRET_PATTERNS, *_PII_PATTERNS):
         redacted = pattern.sub(f"[REDACTED:{name}]", redacted)
     return redacted
 
