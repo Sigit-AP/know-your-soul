@@ -713,10 +713,21 @@ def test_supersede_and_delete_retain_the_old_version(store: EventStore, tmp_path
 def test_concurrent_sqlite_readers_and_writers(tmp_path: Path) -> None:
     db_path = tmp_path / "concurrent.sqlite3"
     seed = EventStore(db_path)
-    seed.close()
+    try:
+        # Seed one committed domain event so readers never observe an empty
+        # log: an empty replay is the correct store state before any writer
+        # commits, and asserting otherwise is inherently racy.
+        seed.append_domain(
+            node_event(build_node("seed")),
+            idempotency_key="seed",
+            expected_version=None,
+        )
+    finally:
+        seed.close()
 
     writers = 4
     per_writer = 20
+    seeded = 1
     failures: list[BaseException] = []
 
     def writer(index: int) -> None:
@@ -758,7 +769,7 @@ def test_concurrent_sqlite_readers_and_writers(tmp_path: Path) -> None:
     assert failures == []
     final = EventStore(db_path)
     try:
-        total = writers * per_writer
+        total = writers * per_writer + seeded
         assert final.domain_event_count() == total
         assert final.event_count() == total
         assert final.knowledge_high_watermark() == total
