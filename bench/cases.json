@@ -1,0 +1,225 @@
+{
+  "cases_version": "1.0.0",
+  "status": "FROZEN (2026-10-25)",
+  "derived_from": "bench/corpus (pinned snapshot of /root/.hermes/knowledge/soul, see bench/corpus/manifest.json)",
+  "estimator": "estimated_tokens = ceil(utf8_byte_length / 4)",
+  "quality_gate": "a case that loses quality against the raw-SOUL baseline is rejected even when it saves tokens",
+  "cases": [
+    {
+      "id": "q01-evidence-labels",
+      "question": "What evidence labels exist for claims, and which claims may never be presented as fact?",
+      "expected_primary_domain": "P1",
+      "rubric_terms": ["FAKTA", "ASUMSI", "TIDAK DIKETAHUI"],
+      "source_files": ["07-calibration-bayes.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q02-base-rate-rule",
+      "question": "What must I state before making any predictive estimate, and what example base rate does the corpus use?",
+      "expected_primary_domain": "P1",
+      "rubric_terms": ["base rate", "30%", "prior"],
+      "source_files": ["07-calibration-bayes.md", "02-state-ledger.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q03-overconfidence-countermeasure",
+      "question": "What is the countermeasure when a confidence claim has no external evidence behind it?",
+      "expected_primary_domain": "P1",
+      "rubric_terms": ["overconfidence", "one tier", "external evidence"],
+      "source_files": ["07-calibration-bayes.md", "08-anti-bias.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q04-blind-verification",
+      "question": "How is the completeness of this corpus checked independently without handing the checker SOUL.md?",
+      "expected_primary_domain": "P1",
+      "rubric_terms": ["blind verification", "subagent", "never receives SOUL.md"],
+      "source_files": ["25-measured-facts.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q05-chestertons-fence",
+      "question": "Which heuristic forbids removing something before understanding why it exists?",
+      "expected_primary_domain": "P2",
+      "rubric_terms": ["Chesterton's Fence", "why it exists"],
+      "source_files": ["06-heuristics-catalog.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q06-heuristic-count",
+      "question": "How many verbatim heuristics does the SOUL catalog list, and which two derived heuristics extend it?",
+      "expected_primary_domain": "P2",
+      "rubric_terms": ["18", "blast radius", "reversibility", "Occam"],
+      "source_files": ["06-heuristics-catalog.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q07-goodhart",
+      "question": "What does Goodhart's Law warn about when a metric becomes a target?",
+      "expected_primary_domain": "P2",
+      "rubric_terms": ["Goodhart", "target", "stops"],
+      "source_files": ["06-heuristics-catalog.md", "24-metrics-and-levels.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q08-kill-criteria-format",
+      "question": "What is the required format of a kill criterion, and what does mitigation M3 say about reasoning loops?",
+      "expected_primary_domain": "P3",
+      "rubric_terms": ["Jika", "hentikan", "3 iterations", "artifact"],
+      "source_files": ["10-kill-criteria.md", "19-mitigations.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q09-token-budget-kill",
+      "question": "When does the token-budget kill criterion M9 force a stop, and what happens next?",
+      "expected_primary_domain": "P3",
+      "rubric_terms": ["2x", "estimate", "re-summarise"],
+      "source_files": ["10-kill-criteria.md", "19-mitigations.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q10-execution-phases",
+      "question": "Which five execution phases exist, and may a heavy L3 task skip any of them?",
+      "expected_primary_domain": "P3",
+      "rubric_terms": ["P1", "P5", "no phase skipping", "L3"],
+      "source_files": ["20-execution-cycle.md", "11-effort-router.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q11-l1-no-query",
+      "question": "Why must an L1 task such as a greeting never fire a graph query?",
+      "expected_primary_domain": "P3",
+      "rubric_terms": ["L1", "over-thinking", "waste"],
+      "source_files": ["22-query-playbook.md", "11-effort-router.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q12-effort-classification",
+      "question": "Which triggers classify a task as at least L3 heavy effort?",
+      "expected_primary_domain": "P3",
+      "rubric_terms": ["irreversible", "cost", "blast radius"],
+      "source_files": ["11-effort-router.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q13-decision-matrix",
+      "question": "How are decisions classified by reversibility and cost, and what does an irreversible high-cost decision require?",
+      "expected_primary_domain": "P4",
+      "rubric_terms": ["irreversible", "tinggi", "confirm", "user"],
+      "source_files": ["04-decision-taxonomy.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q14-assumption-format",
+      "question": "What is the mandatory assumption format before execution, and what rule governs unverified assumptions?",
+      "expected_primary_domain": "P4",
+      "rubric_terms": ["Asumsi", "Alasan", "Cara verifikasi", "irreversible"],
+      "source_files": ["05-assumptions-tradeoffs.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q15-tradeoff-fields",
+      "question": "Which fields must every trade-off articulation name?",
+      "expected_primary_domain": "P4",
+      "rubric_terms": ["Kalah", "Mitigasi", "Reversal", "Alasan"],
+      "source_files": ["05-assumptions-tradeoffs.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q16-premortem-steelman",
+      "question": "What two gates run before any delivery, and what happens to a pre-mortem cause without a mitigation?",
+      "expected_primary_domain": "P4",
+      "rubric_terms": ["pre-mortem", "steelman", "mitigation", "not finished"],
+      "source_files": ["09-premortem-steelman.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q17-reasoning-modes",
+      "question": "Name the seven reasoning modes and the steps of the DIAGNOSIS chain.",
+      "expected_primary_domain": "P5",
+      "rubric_terms": ["DEDUKTIF", "INDUKTIF", "ABDUKTIF", "BAYESIAN"],
+      "source_files": ["03-reasoning-modes.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q18-confirmation-bias",
+      "question": "What is the concrete countermeasure for confirmation bias and for anchoring?",
+      "expected_primary_domain": "P5",
+      "rubric_terms": ["contradict", "independent estimate"],
+      "source_files": ["08-anti-bias.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q19-synthesis-questions",
+      "question": "Which three synthesis questions run before concluding on a cross-domain task?",
+      "expected_primary_domain": "P5",
+      "rubric_terms": ["pattern", "another profession", "senior"],
+      "source_files": ["26-reasoning-synthesis.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q20-ledger-fields",
+      "question": "Which fields does the mandatory per-task state ledger carry, and how often is it updated?",
+      "expected_primary_domain": "P6",
+      "rubric_terms": ["OBJECTIVE", "VERIFIED", "KILL_CRIT", "every 3 steps"],
+      "source_files": ["02-state-ledger.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q21-communication-format",
+      "question": "What delivery format is required, and which communication habits are forbidden?",
+      "expected_primary_domain": "P6",
+      "rubric_terms": ["BLUF", "fluff", "weasel", "Limitasi"],
+      "source_files": ["12-communication.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q22-subagent-soul",
+      "question": "Why do delegated subagents never inherit SOUL.md, and what mechanism enforces it?",
+      "expected_primary_domain": "P6",
+      "rubric_terms": ["skip_context_files", "parent identity", "never"],
+      "source_files": ["01-identity-compliance.md", "25-measured-facts.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q23-p1-metrics",
+      "question": "Which metrics define the P1 Coding Engineer profession, and what is DORA lead time?",
+      "expected_primary_domain": "P7",
+      "rubric_terms": ["DORA", "lead time", "MTTR", "change fail rate"],
+      "source_files": ["13-p1-coding-engineer.md", "24-metrics-and-levels.md"],
+      "token_budget": 1024,
+      "depth": 2
+    },
+    {
+      "id": "q24-card-schema",
+      "question": "What are the eight fields of a profession card, and what evidence is required to claim a professional level?",
+      "expected_primary_domain": "P7",
+      "rubric_terms": ["Mental Model", "Junior Traps", "knowledge", "practice", "hours"],
+      "source_files": ["27-part4-usage-and-schema.md", "24-metrics-and-levels.md"],
+      "token_budget": 1024,
+      "depth": 2
+    }
+  ]
+}

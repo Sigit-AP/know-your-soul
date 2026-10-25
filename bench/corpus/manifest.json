@@ -1,0 +1,209 @@
+{
+  "estimator": "estimated_tokens = ceil(utf8_byte_length / 4)",
+  "file_count": 28,
+  "files": [
+    {
+      "bytes": 2237,
+      "estimated_tokens": 560,
+      "expected_primary_domain": "P6",
+      "file": "01-identity-compliance.md",
+      "sha256": "2d38d30862f3629710781ea5384f19215f9b55d3dcf7ac22f01af92034fc0f7d"
+    },
+    {
+      "bytes": 1676,
+      "estimated_tokens": 419,
+      "expected_primary_domain": "P6",
+      "file": "02-state-ledger.md",
+      "sha256": "e1123b905138df055809cce768388fdbfbf9899e0b541fc4418d8a3184176e1e"
+    },
+    {
+      "bytes": 1200,
+      "estimated_tokens": 300,
+      "expected_primary_domain": "P5",
+      "file": "03-reasoning-modes.md",
+      "sha256": "52aedf13348bd08b7f1ea07d471148335bc1429aaf491fb256e9ede9e0433641"
+    },
+    {
+      "bytes": 1343,
+      "estimated_tokens": 336,
+      "expected_primary_domain": "P4",
+      "file": "04-decision-taxonomy.md",
+      "sha256": "51310e5133ee2063311c0ad4d45a38a981f6d59bec36558bb616df8745b65c1f"
+    },
+    {
+      "bytes": 1031,
+      "estimated_tokens": 258,
+      "expected_primary_domain": "P4",
+      "file": "05-assumptions-tradeoffs.md",
+      "sha256": "f5fe803e0da85558eaf8c45faeadab5af01bef04bfb16fb51ffca1fee5fc840b"
+    },
+    {
+      "bytes": 3262,
+      "estimated_tokens": 816,
+      "expected_primary_domain": "P2",
+      "file": "06-heuristics-catalog.md",
+      "sha256": "39e7a5f2aa6bb752b6d00aa8b5db136930db943afffd4927c42617f22ddf352d"
+    },
+    {
+      "bytes": 1537,
+      "estimated_tokens": 385,
+      "expected_primary_domain": "P1",
+      "file": "07-calibration-bayes.md",
+      "sha256": "26c3a917679a560ad2f8d2c4c46f7a706313ccb84192fc3f2f63f180ee513011"
+    },
+    {
+      "bytes": 826,
+      "estimated_tokens": 207,
+      "expected_primary_domain": "P5",
+      "file": "08-anti-bias.md",
+      "sha256": "22f9a4bf09834657289a6d992f5c927129017422611326788b492e8c395c9593"
+    },
+    {
+      "bytes": 882,
+      "estimated_tokens": 221,
+      "expected_primary_domain": "P4",
+      "file": "09-premortem-steelman.md",
+      "sha256": "ad41307cd5f0e77826871aa67c8c5ee5f2a5e791808c90be36445115023a06af"
+    },
+    {
+      "bytes": 796,
+      "estimated_tokens": 199,
+      "expected_primary_domain": "P3",
+      "file": "10-kill-criteria.md",
+      "sha256": "d10c813cf8bd55daf924fcc76e88a78182b8b78d93769a69011917d55feb51aa"
+    },
+    {
+      "bytes": 4029,
+      "estimated_tokens": 1008,
+      "expected_primary_domain": "P3",
+      "file": "11-effort-router.md",
+      "sha256": "127720a18849ab8a027b24877e2ba049b28f4e0a27171cf2f2751c7e5bf4c04a"
+    },
+    {
+      "bytes": 990,
+      "estimated_tokens": 248,
+      "expected_primary_domain": "P6",
+      "file": "12-communication.md",
+      "sha256": "d9012169e262cd28442c70b88a0a84b77f9b9e0f6e46ca2493a4535afbcc1c7c"
+    },
+    {
+      "bytes": 1385,
+      "estimated_tokens": 347,
+      "expected_primary_domain": "P7",
+      "file": "13-p1-coding-engineer.md",
+      "sha256": "4f660ed9cd3bf7ddc3069cfac3a223bb9e842aef6d6aea213028f965aac0b250"
+    },
+    {
+      "bytes": 1353,
+      "estimated_tokens": 339,
+      "expected_primary_domain": "P7",
+      "file": "14-p2-strategic-planner.md",
+      "sha256": "226fc9cf90630bbe4d29873fce09990523e17e575f7e6d694137bf5b9ce38568"
+    },
+    {
+      "bytes": 1435,
+      "estimated_tokens": 359,
+      "expected_primary_domain": "P7",
+      "file": "15-p3-system-designer.md",
+      "sha256": "9e9d4a46739ad299aeed3bfb7e2d3caf08d6103542f58b81890f6cde2865cedb"
+    },
+    {
+      "bytes": 1424,
+      "estimated_tokens": 356,
+      "expected_primary_domain": "P7",
+      "file": "16-p4-system-auditor.md",
+      "sha256": "5431533d998c2045c47f2cf8f1f61fd431a52d84331604d46c6fc01fb39ea006"
+    },
+    {
+      "bytes": 1461,
+      "estimated_tokens": 366,
+      "expected_primary_domain": "P7",
+      "file": "17-p5-security-engineer.md",
+      "sha256": "b2153c261dca7c358f3bb1fda3f69b291be765c7139e8538bc8d36e28b04e911"
+    },
+    {
+      "bytes": 1491,
+      "estimated_tokens": 373,
+      "expected_primary_domain": "P7",
+      "file": "18-p6-system-architect.md",
+      "sha256": "a57d9d30cc5359dcd09b9320ae757d5dac8234323096660e61b85bdc69301a8f"
+    },
+    {
+      "bytes": 1164,
+      "estimated_tokens": 291,
+      "expected_primary_domain": "P3",
+      "file": "19-mitigations.md",
+      "sha256": "f21b03a19cd32adc9f37d5a6c1fb623e3eb92457fc7fd5ae83f88f38b99ef14c"
+    },
+    {
+      "bytes": 1062,
+      "estimated_tokens": 266,
+      "expected_primary_domain": "P3",
+      "file": "20-execution-cycle.md",
+      "sha256": "9d99a08542abc630238865061d4b575799e6ba6668982e4fe482e39d2ce4fe45"
+    },
+    {
+      "bytes": 929,
+      "estimated_tokens": 233,
+      "expected_primary_domain": "P6",
+      "file": "21-completion-criteria.md",
+      "sha256": "082125b164187c4e46c1b1a02ed440306e3fa26833bca3a4a9e732c621bf6c88"
+    },
+    {
+      "bytes": 3079,
+      "estimated_tokens": 770,
+      "expected_primary_domain": "P6",
+      "file": "22-query-playbook.md",
+      "sha256": "daa180d06f4bf3cc2c6dff1b51381f773bbe020ad31c184dbcaa7d32f63162b7"
+    },
+    {
+      "bytes": 5026,
+      "estimated_tokens": 1257,
+      "expected_primary_domain": "P6",
+      "file": "23-glossary-bilingual.md",
+      "sha256": "613ff4708793361187912e90f1368043bceff4d35c5ea05ef47039c438647908"
+    },
+    {
+      "bytes": 2747,
+      "estimated_tokens": 687,
+      "expected_primary_domain": "P7",
+      "file": "24-metrics-and-levels.md",
+      "sha256": "98f871ac62031fd8f976b772da3dc31c5a6d1c2cedbf75b6bad9aa3e600145f8"
+    },
+    {
+      "bytes": 3136,
+      "estimated_tokens": 784,
+      "expected_primary_domain": "P1",
+      "file": "25-measured-facts.md",
+      "sha256": "9e408fdd07263c9b2f4ed76c7301315903c5e1302d29f1284f93de72a782e7e9"
+    },
+    {
+      "bytes": 1536,
+      "estimated_tokens": 384,
+      "expected_primary_domain": "P5",
+      "file": "26-reasoning-synthesis.md",
+      "sha256": "bf5df4e5ef18e369c1f82fff420f5fd8a3d4f43fa2e215629109d38e88ca742d"
+    },
+    {
+      "bytes": 2986,
+      "estimated_tokens": 747,
+      "expected_primary_domain": "P7",
+      "file": "27-part4-usage-and-schema.md",
+      "sha256": "6331c339b0ec54381004a913251a27bcd094fc1067dd7238286dec3776280047"
+    },
+    {
+      "bytes": 2581,
+      "estimated_tokens": 646,
+      "expected_primary_domain": "P6",
+      "file": "28-operating-stack.md",
+      "sha256": "2a3dd5d8eac0c63d7ca9b2bcf596b539017606d07f66f40a4ccca04ee309611a"
+    }
+  ],
+  "frozen_at": "2026-10-25T11:03:15Z",
+  "manifest_version": "1.0.0",
+  "source_access": "read-only",
+  "source_dir": "/root/.hermes/knowledge/soul",
+  "token_budget_contract": "docs/mathematics/token-budget-contract.md",
+  "total_bytes": 52604,
+  "total_estimated_tokens": 13151
+}

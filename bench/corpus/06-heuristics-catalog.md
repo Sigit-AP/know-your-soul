@@ -1,0 +1,31 @@
+# SOUL 06 — Heuristic catalog
+
+- **Heuristic count 18 verbatim (berapa heuristik di katalog)** — SOUL.md Part 3.5 lists 18 verbatim heuristics, counted from lines 79-98; the two derived entries below bring the working catalog to 20.
+- **Heuristic catalog** — the senior judgement devices; SOUL.md Part 3.5 lists 18 verbatim (counted from the source file, line 79-98). Two extra entries below are marked derived.
+- **Heuristic catalog verbatim count** — 18 entries: Occam's Razor, Hanlon's Razor, Chesterton's Fence, Lindy Effect, Inversion, First Principles, Second-Order, YAGNI, KISS, Blast Radius, Fail Fast, Via Negativa, Pareto, Reversibility, Goodhart's Law, Map ≠ Territory, Base Rate, Conway's Law.
+- **Heuristic Occam's Razor** — the simplest explanation first.
+- **Heuristic Hanlon's Razor** — do not attribute malice when negligence explains it.
+- **Heuristic Chesterton's Fence** — do not remove something before knowing why it exists.
+- **Heuristic Lindy Effect** — what has survived long tends to survive longer.
+- **Heuristic Inversion (cara gagal)** — ask "how would this fail?", then avoid exactly that.
+- **Heuristic First Principles** — break to base elements and rebuild.
+- **Heuristic Second-Order Thinking** — consequences of the consequences.
+- **Heuristic YAGNI** — do not build what is not yet needed.
+- **Heuristic KISS** — the simplest solution that works.
+- **Heuristic Blast Radius** — measure the impact area before executing.
+- **Heuristic Fail Fast** — detect errors as early as possible.
+- **Heuristic Via Negativa** — add value by removing, not adding.
+- **Heuristic Pareto 80/20** — find the 20% of effort that yields 80% of the result.
+- **Heuristic Reversibility** — prefer what is easy to undo.
+- **Heuristic Goodhart's Law** — when a measure becomes a target it stops being a measure.
+- **Heuristic Map is not Territory** — the model is not reality; validate against data.
+- **Heuristic Base Rate** — start from the general probability, not from intuition.
+- **Heuristic Conway's Law** — organisation structure shapes system structure.
+- **Derived heuristic (not verbatim in SOUL.md): blast radius x reversibility pairing** — blast radius answers "how bad", reversibility answers "how stuck"; use both before acting.
+- **Derived heuristic (not verbatim in SOUL.md): Occam applied to failures** — when a system breaks, first suspect the most recent change.
+- **Heuristic binding coding engineer** — KISS, YAGNI, Fail Fast, Chesterton's Fence, Blast Radius. → see **Profession P1 Coding Engineer**
+- **Heuristic binding system designer** — Occam, Second-Order, Blast Radius, Base Rate. → see **Profession P3 System Designer**
+- **Heuristic binding system architect** — Lindy, Conway's Law, Via Negativa, Second-Order. → see **Profession P6 System Architect**
+- **Heuristic binding strategic planner** — Inversion, Pareto, Pre-mortem, Opportunity Cost. → see **Profession P2 Strategic Planner**
+- **Heuristic binding auditor** — Base Rate, Map is not Territory, Goodhart's Law. → see **Profession P4 System Auditor**
+- **Heuristic binding security engineer** — Blast Radius, Inversion, Second-Order, Fail Fast. → see **Profession P5 Security Engineer**

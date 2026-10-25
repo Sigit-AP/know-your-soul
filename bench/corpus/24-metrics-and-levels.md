@@ -1,0 +1,22 @@
+# SOUL 24 — Metrics and professional levels
+
+- **Profession metrics index** — one lookup table from profession to its metrics.
+- **Metric selection rule** — choose at most 3 metrics per task; a metric that cannot be measured this task is not a metric for this task.
+- **Goodhart warning** — once a metric becomes the target it stops measuring the thing.
+- **Professional level junior** — follows instructions; needs the checklist; errors cluster on edge cases and error paths.
+- **Professional level mid** — owns a task end to end; knows the traps; still needs review on trade-offs.
+- **Professional level senior (10 tahun)** — the SOUL target level: knows which rule to bend, names the trade-off before being asked, predicts the failure mode, chooses boring solutions deliberately, verifies independently.
+- **Professional level expert** — sets the standard for others; defines the metric; the failure modes of the field are their research agenda.
+- **Professional level evidence rule** — a level is claimed only with artefacts: knowledge (can explain), practice (has executed with measured results), understanding (can predict and debug), and hours (repeated real use).
+- **Level assessment of this agent** — knowledge and practice for the SOUL protocol are high after building this corpus; practice on real varied tasks and hours are the weak axis. → see **Level assessment evidence**
+- **Level assessment evidence** — the proxy for this task: corpus node coverage vs SOUL.md sections, retrieval benchmark pass rate, and a blind test by an independent subagent.
+- **P1 metrics (Coding Engineer)** — DORA lead time, deploy frequency, MTTR, change fail rate; test coverage; cyclomatic complexity; error rate; latency p50/p95/p99.
+- **P1 metric DORA lead time** — time from commit to production for one change.
+- **P1 metric change fail rate** — share of deploys that need remediation after release.
+- **P1 metric MTTR** — mean time to restore service after a failure.
+- **P1 metric latency p95 p99** — the tail latency the user actually feels, not the average.
+- **P4 metrics (System Auditor)** — findings per audit-hour, false positive rate, remediation rate, time to closure, repeat findings, coverage percent.
+- **P4 metric coverage percent** — share of the in-scope items actually examined.
+- **P4 metric repeat findings** — the same defect found again in a later audit; the strongest signal that remediation was theatre.
+- **Alias metrik P1 (metrik coding engineer)** — Indonesian metric query for the coding engineer card → see **P1 metrics (Coding Engineer)**
+- **Alias metrik P4 (metrik system auditor)** — Indonesian metric query for the auditor card → see **P4 metrics (System Auditor)**

@@ -1,0 +1,139 @@
+{
+  "baseline": {
+    "bytes": 52604,
+    "description": "Reading the whole raw frozen corpus answers every question (quality 1.0 by construction) at full corpus token cost.",
+    "estimated_tokens": 13151,
+    "kind": "raw-soul-corpus",
+    "quality": 1.0
+  },
+  "cases": [
+    {
+      "expected_primary_domain": "P1",
+      "id": "q01-evidence-labels",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P1",
+      "id": "q02-base-rate-rule",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P1",
+      "id": "q03-overconfidence-countermeasure",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P1",
+      "id": "q04-blind-verification",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P2",
+      "id": "q05-chestertons-fence",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P2",
+      "id": "q06-heuristic-count",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P2",
+      "id": "q07-goodhart",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P3",
+      "id": "q08-kill-criteria-format",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P3",
+      "id": "q09-token-budget-kill",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P3",
+      "id": "q10-execution-phases",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P3",
+      "id": "q11-l1-no-query",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P3",
+      "id": "q12-effort-classification",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P4",
+      "id": "q13-decision-matrix",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P4",
+      "id": "q14-assumption-format",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P4",
+      "id": "q15-tradeoff-fields",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P4",
+      "id": "q16-premortem-steelman",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P5",
+      "id": "q17-reasoning-modes",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P5",
+      "id": "q18-confirmation-bias",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P5",
+      "id": "q19-synthesis-questions",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P6",
+      "id": "q20-ledger-fields",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P6",
+      "id": "q21-communication-format",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P6",
+      "id": "q22-subagent-soul",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P7",
+      "id": "q23-p1-metrics",
+      "status": "pending-integration"
+    },
+    {
+      "expected_primary_domain": "P7",
+      "id": "q24-card-schema",
+      "status": "pending-integration"
+    }
+  ],
+  "corpus_manifest_sha256": "08e16148fc787174a44f614c79abc7e59679358a6558cc202e91537de52ff3c1",
+  "estimator": "estimated_tokens = ceil(utf8_byte_length / 4)",
+  "generated_at": "2026-10-25T11:23:25Z",
+  "ledger_version": "1.0.0",
+  "repeats": 2,
+  "skip_reason": "integration pending: missing adapters soul_knowledge.cli, soul_knowledge.http_api, soul_knowledge.mcp_server",
+  "status": "skipped",
+  "token_budget_contract": "docs/mathematics/token-budget-contract.md (1.0.0)"
+}

@@ -1,0 +1,36 @@
+# SOUL 23 — Glossary bilingual
+
+- **Glossary bilingual ID-EN** — the alias table that makes Indonesian queries hit English labels; every alias carries an explicit edge to its concept, because an alias node without an edge is a dead end.
+- **Alias berat (tugas berat)** — Indonesian word for a heavy task → see **Effort level L3 berat (heavy task)** → see **Effort router L1-L4**
+- **Alias ringan (tugas ringan)** — Indonesian word for a light task → see **Effort level L1 ringan (light task)** → see **Effort router L1-L4**
+- **Alias sedang (tugas sedang)** — Indonesian word for a medium task → see **Effort level L2 sedang (medium task)** → see **Effort router L1-L4**
+- **Alias riset (tugas riset)** — Indonesian word for a research task → see **Effort level L4 riset (research task)** → see **Effort router L1-L4**
+- **Alias kritis (tugas kritis)** — a critical task → see **Effort level L3 berat (heavy task)**
+- **Alias kedalaman (seberapa dalam)** — how deep the process should go → see **Effort router L1-L4**
+- **Alias profesi (profesi mana)** — which profession to activate → see **Profession metrics index** → see **Profession P1 Coding Engineer** → see **Profession P3 System Designer** → see **Profession P4 System Auditor**
+- **Alias bug produksi (production bug)** — a production defect → see **Profession P1 Coding Engineer** → see **P1 junior traps**
+- **Alias metrik (angka ukur)** — measured numbers → see **P1 metrics** → see **Metric selection rule**
+- **Alias jebakan (kesalahan junior)** — junior failure mode → see **P1 junior traps**
+- **Alias pengalaman senior (judgment)** — senior judgement → see **P1 senior judgment** → see **Professional level senior (10 tahun)**
+- **Alias kegagalan historis (insiden)** — historical failure case study → see **P1 historical failures**
+- **Alias asumsi** — assumption with a verification path → see **Assumption surfacing protocol (wajib)** → see **Assumption format**
+- **Alias trade-off (pertukaran)** — what is gained and lost → see **Trade-off articulation format** → see **Trade-off field Kalah (what is sacrificed)**
+- **Alias heuristik** — a reusable judgement device → see **Heuristic Inversion (cara gagal)** → see **Heuristic Base Rate**
+- **Alias kalibrasi (confidence, yakin)** — evidence tiers → see **Confidence tier Tinggi** → see **Evidence label FAKTA** → see **Rule: what would change my belief**
+- **Alias prasangka (bias)** — anti-bias countermeasure → see **Bias Confirmation** → see **Bias Sunk Cost**
+- **Alias berhenti (stop, batal, cukup)** — stop condition → see **Kill criteria (kapan berhenti)** → see **Mitigasi M3 anti-reasoning-loop**
+- **Alias selesai (tuntas, selesai)** — completion checklist → see **Kriteria selesai (definition of done)** → see **DoD: no loose ends**
+- **Alias tidak tahu (unknown, unverified, ragu)** — honest-unknown stance → see **Ledger field UNVERIFIED** → see **Evidence label TIDAK DIKETAHUI**
+- **Alias pra-mortem (pre-mortem)** — failure anticipation → see **Pre-mortem (wajib sebelum deliver)**
+- **Alias graf pengetahuan (knowledge graph)** — the queryable graph at graphify-out/graph.json → see **Automatic trigger rule**
+- **Alias laporan (deliver, jawaban, format)** — the delivery format → see **BLUF (bottom line up front)** → see **Output header format (Part 8)**
+- **Alias verifikasi (cek ulang, audit)** — the verification pass → see **Gate P4 verification** → see **Blind verification protocol** → see **Profession P4 System Auditor**
+- **Alias siklus (fase, tahapan)** — the execution phases → see **Fase P1 (baca & klarifikasi)** → see **Fase P4 (verifikasi)**
+- **Alias mitigasi (pencegahan)** — the trigger to playbook pairs → see **Mitigasi M7 anti-prompt-injection** → see **Mitigation trigger mapping**
+- **Alias ledger** — the mandatory per-task ledger → see **State Ledger (wajib tiap tugas)**
+- **Alias alasan gagal (cara gagal)** — inversion framing → see **Heuristic Inversion (cara gagal)** → see **Ledger field PRE_MORTEM**
+- **cross-discipline / lintas disiplin / lintas bidang** — hyphenated English token the literal matcher will not stem → see **Part 4 usage rule: lintas disiplin pakai sintesis** → see **Reasoning synthesis (lintas domain)**
+- **berpikir seperti senior / think like a senior / CIRI SENIOR** — the senior tell → see **Reasoning synthesis (lintas domain)** → see **Professional level senior (10 tahun)**
+- **DoD gates / kriteria selesai dijalankan** — the final-pass gate check → see **DoD: gates executed** → see **Gate P4 verification**
+- **format berhenti / aturan stop** — the shape a stop condition must take → see **Kill criteria format** → see **Kill criteria (kapan berhenti)**
+- **jam terbang / hours / pengalaman bertahun** — the experience axis of a level → see **Professional level senior (10 tahun)** → see **Professional level evidence rule**

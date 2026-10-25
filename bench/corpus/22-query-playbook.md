@@ -1,0 +1,22 @@
+# SOUL 22 — Query playbook
+
+- **Matcher has no stemming** — `graphify query` matches case-folded substrings + IDF; there is no stemming and no synonyms inside the binary.
+- **Matcher has no cross-language match** — an Indonesian query will not match an English label; therefore query using tokens that exist in the labels. → see **Glossary bilingual ID-EN**
+- **Vocabulary expansion step** — dump labels to `.vocab.txt` first, then pick up to 12 tokens that exist in that list; never invent tokens.
+- **Empty result is a valid answer** — if no vocabulary token matches, say the corpus has no relevant vocabulary; do not fabricate a search.
+- **Exit codes** — `query`/`path`/`explain` exit 0 with an answer, 3 on an ambiguous name (candidates listed), 4 when no node matches.
+- **Query: effort level of a task** — `cd /root/.hermes/knowledge && graphify query "effort level ringan sedang berat kritis depth"` → returns L1–L4 and the activation sets.
+- **Query: which profession to activate** — `graphify query "profession activation metrics"` → returns the profession cards and the metrics index.
+- **Query: how deep to verify** — `graphify query "verification pre-mortem steelman confidence"` → returns part 3.8/3.6 and the DoD.
+- **Query: stop condition for a path** — `graphify query "kill criteria berhenti"` → returns Part 3.9.
+- **Query: what heuristic for this situation** — `graphify query "heuristic inversion blast radius base rate"`.
+- **Path query: effort to profession** — `graphify path "Effort level L3 berat (heavy task)" "Profession P4 System Auditor"`.
+- **Explain query: one concept** — `graphify explain "Mitigasi M3 anti-reasoning-loop"`.
+- **Work memory feedback loop graphify** — after answering, save it back: `graphify save-result --question Q --answer A --type query --nodes NODE1 NODE2 --outcome useful|dead_end|corrected`.
+- **Skill graphify-soul-router** — the Hermes skill that carries this retrieval procedure, so the corpus loads only when a task touches process, depth, profession choice, verification or delivery format.
+- **Skill wiring rule** — a skill triggers on its description; the corpus is therefore automatic for the right task class without loading on every turn.
+- **Reflect before starting** — run `graphify reflect --if-stale` then read `graphify-out/reflections/LESSONS.md` for preferred sources, known dead ends and corrections.
+- **Rebuild after editing the corpus** — `cd /root/.hermes/knowledge && graphify update .` then, for new concept edges, a semantic extraction pass.
+- **Automatic trigger rule** — any task that touches process, depth, profession choice, verification or communication of a decision triggers a SOUL corpus query before answering.
+- **Do NOT query for L1 tasks** — a greeting or a single fact lookup must not fire a graph query; that is over-thinking. → see **Over-thinking is waste**
+- **Skill wiring** — the retrieval procedure lives in the Hermes skill `graphify-soul-router` so it loads only when relevant. → see **Skill graphify-soul-router**
