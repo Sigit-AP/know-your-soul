@@ -337,11 +337,13 @@ def test_budget_below_128_is_budget_too_small_without_payload(tmp_path: Path) ->
 
 def test_complete_canonical_payload_satisfies_the_budget(tmp_path: Path) -> None:
     _, _, service = _seeded(tmp_path)
-    # The complete canonical QueryResponse has a mandatory-metadata floor above
-    # 128 tokens (measured: 134), and the frozen token-budget contract says an
-    # unfittable mandatory metadata set is an error, never an over-budget
-    # success. At the floor budget the typed error is therefore contract-legal;
-    # every accepted budget above it must fit exactly.
+    # Precision note (final review F-1): the mandatory-metadata size depends on
+    # the response shape. This seeded fixture's complete payload measures 134
+    # est. tokens, so at budget 128 the typed error is contract-legal here; a
+    # minimal no_match response measures ~120 and SUCCEEDS at 128 — also
+    # contract-legal (success only when the payload fits). 134 is the fixture
+    # floor, not a universal fail-closed floor. Every accepted budget must fit
+    # exactly.
     with pytest.raises(MetadataExceedsBudget) as excinfo:
         service.query(QueryRequest(purpose="gates", domain="P1", token_budget=MINIMUM_TOKEN_BUDGET))
     assert excinfo.value.code == "METADATA_EXCEEDS_BUDGET"

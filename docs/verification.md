@@ -24,7 +24,7 @@ audit, `python bench/run.py`, then the Graphify coverage calculation.
 | Acceptance e2e | `.venv/bin/pytest tests/test_acceptance_e2e.py -q` | **0** | 48 passed, 1 skipped (1 skip = external Hermes-install check); last verified at integration, and the full-suite row above re-runs it fresh | 2026-10-25 |
 | Type checking | `.venv/bin/pyright` | **0** | `0 errors, 0 warnings, 0 informations` | 2026-10-25 |
 | Lint | `.venv/bin/ruff check .` | **0** | `All checks passed!` | 2026-10-25 |
-| Format | `.venv/bin/ruff format --check .` | **1 (pre-existing)** | `138 files already formatted`; the single offender is `docs/mathematics/scoring.md` — committed drift reproduced at clean HEAD (verified via stash), not introduced by this change; `bench/run.py` itself is format-clean | 2026-10-25 |
+| Format | `.venv/bin/ruff format --check .` | **1 (pre-existing)** | `139 files already formatted`; the single offender is `docs/mathematics/scoring.md` — committed drift reproduced at clean HEAD (verified via stash), not introduced by this change; `bench/run.py` itself is format-clean | 2026-10-25 |
 | Dependency audit | `/root/.local/bin/uv lock --check` | **0** | `Resolved 73 packages in 2ms` (lock consistent; zero forbidden distributions — `TestLockedNoProviderEnvironment`) | 2026-10-25 |
 
 Pre-existing issues found and fixed by the full-tree gates at integration

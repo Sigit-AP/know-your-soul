@@ -3,7 +3,9 @@
 #
 # The runtime needs no outbound network (the runtime guard denies provider
 # imports, credentials and sockets); network access is only used at build time
-# to resolve the locked dependencies from pyproject.toml/uv.lock.
+# to install dependencies. NOTE: `pip install .` resolves dependency ranges
+# from pyproject.toml only — pip does not read uv.lock. For bit-exact locked
+# builds, generate a constraints file from uv.lock (`uv export`) or use uv.
 
 FROM python:3.14-slim AS build
 WORKDIR /app
@@ -24,7 +26,6 @@ USER soul
 VOLUME ["/data"]
 # Default store location inside the container; projections live next to it.
 ENV SOUL_STORE=/data/soul.sqlite3
-# The `soul-knowledge` console script is delivered by Task 7 (cli.py); until
-# that lands, run modules explicitly, e.g.:
-#   docker run --rm <image> python -c "from soul_knowledge.store import EventStore; print('ok')"
+# The `soul-knowledge` console script is delivered by Task 7 (cli.py) and is
+# installed by the build above; e.g.: docker run --rm <image> soul-knowledge --help
 ENTRYPOINT ["soul-knowledge"]
