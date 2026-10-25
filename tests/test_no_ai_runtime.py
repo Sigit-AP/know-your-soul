@@ -296,6 +296,36 @@ def test_outbound_tcp_connections_are_denied() -> None:
             datagram.close()
 
 
+def test_outbound_sendmsg_is_denied() -> None:
+    """Item 2: sendmsg is patched by the guard and must be tested like the rest."""
+    with runtime_guard.deny_outbound_sockets():
+        datagram = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            with pytest.raises(runtime_guard.OutboundSocketDenied):
+                datagram.sendmsg([b"x"], [], 0, TEST_NET)
+        finally:
+            datagram.close()
+
+
+def test_unix_sendmsg_still_works_while_guarded() -> None:
+    """AF_UNIX sendmsg must keep working under the guard (local IPC is allowed)."""
+    with runtime_guard.deny_outbound_sockets():
+        left, right = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            left.sendmsg([b"ok"])
+            assert right.recv(2) == b"ok"
+        finally:
+            left.close()
+            right.close()
+
+
+def test_sendmsg_patch_is_restored_after_uninstall() -> None:
+    original = socket.socket.sendmsg
+    with runtime_guard.deny_outbound_sockets():
+        assert socket.socket.sendmsg is not original
+    assert socket.socket.sendmsg is original
+
+
 def test_outbound_http_clients_are_denied() -> None:
     with runtime_guard.deny_outbound_sockets():
         with pytest.raises(runtime_guard.OutboundSocketDenied):
@@ -493,6 +523,52 @@ def test_product_sources_never_scrape_the_graphify_cli() -> None:
     assert offenders == [], offenders
 
 
+# -------------------------------------------------- shell-out scan (item 1)
+#
+# The scan above only saw subprocess-style calls with a literal "graphify"
+# argument. os.system/os.popen/os.exec*/eval/exec and any non-literal argv were
+# holes: the reviewer's deferred minor. cli_scraping_violations closes them.
+
+
+def test_static_scan_fails_closed_on_every_shell_out_family() -> None:
+    hostile = {
+        "os.system": "import os\nos.system('graphify query x')\n",
+        "os.popen": "import os\nos.popen('graphify dump').read()\n",
+        "os.spawnlp": "import os\nos.spawnlp(os.P_WAIT, 'graphify', 'graphify', 'query')\n",
+        "os.execvp": "import os\nos.execvp('graphify', ['graphify', 'query'])\n",
+        "subprocess.Popen": "import subprocess\nsubprocess.Popen(['graphify', 'query'])\n",
+        "from-import": "from subprocess import run\nrun(['graphify', 'query'])\n",
+        "aliased import": "import subprocess as sp\nsp.check_output(['graphify', 'query'])\n",
+        "os.system without graphify": "import os\nos.system('anything')\n",
+        "exec": "exec('import os; os.system(\\'graphify query\\')')\n",
+        "eval": "eval('__import__(\\'os\\')')\n",
+        "non-literal argv": "import subprocess\nargv = build_argv()\nsubprocess.run(argv)\n",
+    }
+    for label, source in hostile.items():
+        violations = runtime_guard.cli_scraping_violations(source, filename=f"<{label}>")
+        assert violations, f"the scanner missed the {label} shell-out hole"
+
+
+def test_static_scan_allows_pure_library_use() -> None:
+    clean = (
+        "import os\nimport graphify\nfrom graphify import cache\n"
+        "os.path.join('a', 'b')\nos.replace('a', 'b')\ncache.get('x')\n"
+    )
+    assert runtime_guard.cli_scraping_violations(clean) == []
+
+
+def test_product_sources_never_shell_out_at_all() -> None:
+    """Stronger form of the anti-CLI-scraping scan over every product source."""
+    offenders: list[str] = []
+    for path in _product_sources():
+        offenders.extend(
+            runtime_guard.cli_scraping_violations(
+                path.read_text(encoding="utf-8"), filename=str(path.relative_to(REPO_ROOT))
+            )
+        )
+    assert offenders == [], offenders
+
+
 # --------------------------------------------------- scrubbed subprocess
 
 
@@ -616,6 +692,107 @@ def test_entry_point_policy_fails_closed_on_the_pinned_wheel_script() -> None:
         runtime_guard.assert_no_forbidden_entry_points()
     # Only the recorded pinned-wheel boundary is tolerated by the relaxed view.
     assert runtime_guard.blocking_forbidden_entry_points() == []
+
+
+# ------------------------------------------- dirty entry-point values (item 3)
+
+
+class _FakeEntryPoint:
+    def __init__(self, name: str, value: str, group: str = "console_scripts") -> None:
+        self.name = name
+        self.value = value
+        self.group = group
+
+
+class _FakeDistribution:
+    def __init__(self, name: str, entry_points: list[_FakeEntryPoint]) -> None:
+        self.metadata = {"Name": name}
+        self.entry_points = entry_points
+
+
+def test_dirty_entry_point_values_fail_closed() -> None:
+    """Whitespace-padded targets must not slip past the forbidden-module match."""
+    dirty = _FakeDistribution(
+        "dirtydist",
+        [
+            _FakeEntryPoint("sneaky", " graphify.serve:_main"),
+            _FakeEntryPoint("sneaky2", "graphify.serve:_main "),
+            _FakeEntryPoint(" sneaky3 ", "graphify.llm:main"),
+        ],
+    )
+    offenders = runtime_guard.forbidden_entry_points([dirty])
+    assert len(offenders) == 3, offenders
+    with pytest.raises(runtime_guard.ForbiddenDependencyError):
+        runtime_guard.assert_no_forbidden_entry_points([dirty])
+
+
+def test_unparseable_entry_point_value_fails_closed() -> None:
+    """A value with no module target cannot be verified: refuse, never ignore."""
+    dirty = _FakeDistribution("dirtydist", [_FakeEntryPoint("broken", ":_main")])
+    with pytest.raises(runtime_guard.ForbiddenDependencyError):
+        runtime_guard.forbidden_entry_points([dirty])
+
+
+# ------------------------------------------------- import-probe honesty (item 4)
+
+
+def test_import_block_evidence_distinguishes_active_blocks_from_absent_roots() -> None:
+    evidence = runtime_guard.import_block_evidence()
+    # graphifyy is installed here, so the guard must actively block these roots;
+    # an empty actively_blocked list would mean the probe proved nothing.
+    assert "graphify.llm" in evidence["actively_blocked"]
+    assert "graphify.serve" in evidence["actively_blocked"]
+    # Provider roots that are not installed are reported as such, not as blocked.
+    assert "openai" in evidence["not_installed"]
+    assert evidence["actively_blocked"], "a vacuous probe proves nothing"
+
+
+def test_verify_runtime_reports_nonvacuous_import_evidence() -> None:
+    report = runtime_guard.verify_runtime(mcp_server=_clean_mcp_server())
+    evidence = report["import_block_evidence"]
+    assert evidence["actively_blocked"], "verify_runtime must prove the guard bites an installed root"
+    assert "graphify.llm" in evidence["actively_blocked"]
+    assert isinstance(evidence["not_installed"], list)
+
+
+# ------------------------------------------- exotic MCP method families (item 8)
+
+
+def test_exotic_mcp_method_family_fails_closed() -> None:
+    """An unenumerated method family is refused, not silently ignored."""
+
+    class ExoticServer:
+        _request_handlers = {
+            "tools/list": object(),
+            "resources/list": object(),
+            "experimental/frobnicate": object(),
+        }
+
+    with pytest.raises(runtime_guard.CapabilityViolation):
+        runtime_guard.observed_mcp_capabilities(ExoticServer())
+    with pytest.raises(runtime_guard.CapabilityViolation):
+        runtime_guard.verify_runtime(mcp_server=ExoticServer())
+
+
+def test_benign_protocol_methods_are_not_capabilities() -> None:
+    """ping / server/* / notifications/* advertise no capability and stay allowed."""
+    from mcp.server.lowlevel import Server
+
+    assert runtime_guard.observed_mcp_capabilities(Server("soul-knowledge")) == {}
+
+    class ProductLike:
+        _request_handlers = {
+            "ping": object(),
+            "server/discover": object(),
+            "tools/list": object(),
+            "tools/call": object(),
+            "resources/list": object(),
+            "resources/read": object(),
+        }
+
+    observed = runtime_guard.observed_mcp_capabilities(ProductLike())
+    assert set(observed) == {"tools", "resources"}
+    runtime_guard.assert_mcp_capabilities(observed)
 
 
 def test_assert_no_forbidden_distributions_pass_on_this_environment() -> None:

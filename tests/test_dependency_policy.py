@@ -17,6 +17,7 @@ unresolvable direct dependency is a failure, never a skip.
 from __future__ import annotations
 
 import importlib.metadata as importlib_metadata
+import re
 import sys
 import tomllib
 from pathlib import Path
@@ -196,7 +197,9 @@ def test_every_locked_package_is_version_pinned(locked_packages: dict[str, dict]
 
 
 def test_enabled_environment_contains_no_forbidden_distribution(locked_packages: dict[str, dict]) -> None:
-    reachable = _reachable_packages(locked_packages)
+    # The fixpoint walk (item 7) follows edge-requested extras the legacy walk
+    # silently dropped, so this check cannot miss a package hidden behind one.
+    reachable, _ = _reachable_packages_with_extras(locked_packages)
     assert "graphifyy" in reachable and "mcp" in reachable, "the walk must reach the real environment"
     offenders = sorted(name for name in reachable if _is_forbidden_distribution(name))
     assert offenders == [], f"forbidden distributions are reachable: {offenders}"
@@ -204,7 +207,7 @@ def test_enabled_environment_contains_no_forbidden_distribution(locked_packages:
 
 def test_dormant_graphify_extras_are_not_reachable(locked_packages: dict[str, dict]) -> None:
     """Graphify ships provider/vector/sink extras; they stay out of the runtime."""
-    reachable = _reachable_packages(locked_packages)
+    reachable, _ = _reachable_packages_with_extras(locked_packages)
     for package in ("openai", "tiktoken", "anthropic", "boto3", "graspologic-native", "neo4j"):
         assert package not in reachable, package
 
@@ -285,11 +288,190 @@ def test_forbidden_distribution_policy_has_one_shared_source_of_truth() -> None:
     assert declared, "the shared forbidden-distribution set must not be empty"
     for name in declared:
         assert _is_forbidden_distribution(name), name
-    # The matcher catches prefix variants the exact list cannot enumerate.
+    # The matcher catches boundary variants the exact list cannot enumerate.
     assert _is_forbidden_distribution("torchaudio")
     assert _is_forbidden_distribution("openai")
     assert not _is_forbidden_distribution("graphifyy")
     assert not _is_forbidden_distribution("networkx")
+
+
+def test_forbidden_distribution_matching_is_boundary_aware() -> None:
+    """Item 9: exact or separator-bounded matches only — no raw prefix bleed.
+
+    The old matcher used ``startswith(entry)``, so a benign distribution whose
+    name merely *begins* with a forbidden one (``torches``, ``ollamarama``)
+    would be flagged (false positive), while variants separated by a digit
+    (``psycopg2``) or a suffix without separator needed luck to be caught.
+    Matching is now exact or ``entry + "-"`` bounded: no false positives, and
+    every real variant stays caught (no false negatives).
+    """
+    for name in (
+        "openai",
+        "torch",
+        "torchaudio",
+        "torchvision",
+        "torch-cuda",
+        "openai-whisper",
+        "langchain",
+        "langchain-core",
+        "langchain-community",
+        "psycopg",
+        "psycopg2",
+        "psycopg2-binary",
+        "faiss-cpu",
+        "faiss-gpu",
+        "sentence-transformers",
+        "faster-whisper",
+        "yt-dlp",
+    ):
+        assert _is_forbidden_distribution(name), f"false negative: {name}"
+    for name in ("torches", "torchweed", "ollamarama", "groceries", "graphifyy", "networkx", "mcp"):
+        assert not _is_forbidden_distribution(name), f"false positive: {name}"
+
+
+# ------------------------------------------------- extras tripwire (item 7)
+
+# Every (package, extra) the lock walk is allowed to follow. ENABLED_EXTRAS is
+# the packaging contract; pyjwt[crypto] is an edge-requested extra pulled in by
+# the pinned MCP SDK's auth surface and is recorded here deliberately — any
+# *other* extra appearing in the walk fails this test and forces a review.
+APPROVED_WALKED_EXTRAS = ENABLED_EXTRAS + (("pyjwt", "crypto"),)
+
+
+def _reachable_packages_with_extras(locked_packages: dict[str, dict]) -> tuple[set[str], set[tuple[str, str]]]:
+    """Fixpoint walk: the legacy walk plus the extras actually followed.
+
+    Two deliberate strengthenings over ``_reachable_packages``:
+
+    * a package is **revisited** when an edge later requests a new extra of it
+      (the legacy walk marks it seen by name and silently drops the extra —
+      that was the tripwire weakness);
+    * every (package, extra) pair followed — from ENABLED_EXTRAS or from any
+      dependency edge — is recorded, so the tripwire test can compare the walk
+      against the approved set.
+    """
+    seen_extras: dict[str, set[str]] = {}
+    followed: set[tuple[str, str]] = set()
+    pending: list[tuple[str, frozenset[str]]] = [(PROJECT_NAME, frozenset())]
+    enabled: dict[str, frozenset[str]] = {}
+    for package, extra in ENABLED_EXTRAS:
+        enabled[package] = enabled.get(package, frozenset()) | {extra}
+
+    while pending:
+        name, extras = pending.pop()
+        package = locked_packages.get(name)
+        if package is None:
+            continue
+        effective = set(extras) | set(enabled.get(name, frozenset()))
+        followed.update((name, extra) for extra in effective)
+        new_extras = effective - seen_extras.get(name, set())
+        if name in seen_extras and not new_extras:
+            continue
+        seen_extras.setdefault(name, set()).update(effective)
+        requests = list(package.get("dependencies") or [])
+        for extra in sorted(effective):
+            requests.extend((package.get("optional-dependencies") or {}).get(extra) or [])
+        for request in requests:
+            if not _marker_applies(request):
+                continue
+            pending.append((_normalized(request["name"]), frozenset(request.get("extra") or ())))
+    return set(seen_extras), followed
+
+
+def test_reachability_walk_follows_only_approved_extras(locked_packages: dict[str, dict]) -> None:
+    """Tripwire: any extra edge beyond the approved set is a hard failure."""
+    reachable, followed = _reachable_packages_with_extras(locked_packages)
+    assert "graphifyy" in reachable, "the walk must reach the real environment"
+    assert followed <= set(APPROVED_WALKED_EXTRAS), f"unapproved extras followed by the lock walk: {followed}"
+
+
+def test_extras_tripwire_fires_on_an_undeclared_extra_edge() -> None:
+    """The legacy walk drops edge-requested extras for already-seen packages;
+    the strengthened walk exposes them and the tripwire fires."""
+    synthetic = {
+        # graphifyy is visited (and marked seen) before the mcp edge requests
+        # its "openai" extra, so the legacy seen-by-name walk drops the extra.
+        PROJECT_NAME: {"version": "0.1.0", "dependencies": [{"name": "graphifyy"}]},
+        "graphifyy": {
+            "version": GRAPHIFY_VERSION,
+            "dependencies": [{"name": "mcp"}],
+            "optional-dependencies": {
+                "mcp": [{"name": "mcp"}],
+                "openai": [{"name": "openai"}],
+            },
+        },
+        "mcp": {"version": "2.3.0", "dependencies": [{"name": "graphifyy", "extra": ["openai"]}]},
+        "openai": {"version": "2.0.0", "dependencies": []},
+    }
+    # Legacy walk: graphifyy is already seen when the mcp edge requests its
+    # "openai" extra, so the provider package is never reached — the hole.
+    legacy_reachable = _reachable_packages(synthetic)
+    assert "openai" not in legacy_reachable, "the legacy walk must still hide the edge"
+    # Fixpoint walk: the extra edge is followed and the tripwire sees it.
+    reachable, followed = _reachable_packages_with_extras(synthetic)
+    assert "openai" in reachable, "the fixpoint walk must expose the extra edge"
+    assert ("graphifyy", "openai") in followed
+    assert not followed <= set(APPROVED_WALKED_EXTRAS)
+
+
+def test_enabled_extras_match_pyproject_exactly(pyproject: dict) -> None:
+    """ENABLED_EXTRAS is the review checkpoint; pyproject must not drift ahead of it."""
+    declared = set()
+    for item in pyproject["project"]["dependencies"]:
+        requirement = Requirement(item)
+        for extra in requirement.extras:
+            declared.add((_normalized(requirement.name), extra))
+    assert declared == set(ENABLED_EXTRAS), declared
+
+
+# ----------------------------------- feature-matrix consistency (items 5 and 6)
+
+MATRIX = REPO_ROOT / "docs" / "research" / "graphify-feature-matrix.md"
+
+
+def _matrix_rows() -> dict[int, list[str]]:
+    rows: dict[int, list[str]] = {}
+    for line in MATRIX.read_text(encoding="utf-8").splitlines():
+        match = re.match(r"\|\s*(\d+)\s*\|", line)
+        if match:
+            number = int(match.group(1))
+            assert number not in rows, f"matrix row {number} appears twice"
+            rows[number] = [cell.strip() for cell in line.strip().strip("|").split("|")]
+    return rows
+
+
+def test_feature_matrix_denominator_is_exactly_40_and_machine_checkable() -> None:
+    """Item 6: the denominator is the 40 numbered rows — nothing more, nothing less."""
+    rows = _matrix_rows()
+    assert sorted(rows) == list(range(1, 41)), "the denominator is exactly the 40 numbered rows"
+    for number, cells in rows.items():
+        assert len(cells) == 7, f"row {number} must carry all seven cells"
+        assert "Task" in cells[4], f"row {number} has no owning task"
+        assert "::" in cells[5], f"row {number} has no named contract test"
+    # The §4 exclusion table must not contain numbered rows: excluded surfaces
+    # leave the denominator exactly once, never double-counted against a row.
+    text = MATRIX.read_text(encoding="utf-8")
+    exclusions = text.split("## 4.")[1].split("## 5.")[0]
+    assert not re.search(r"\|\s*\d+\s*\|", exclusions), "a numbered row leaked into the exclusions table"
+
+
+def test_matrix_rows_1_and_36_resolve_the_denominator_tension() -> None:
+    """Rows 1/36 embed §4 sub-surface exclusions; the row text must say how the
+    denominator treats that (row stays in the 40; excluded sub-surface counted once)."""
+    rows = _matrix_rows()
+    for number in (1, 36):
+        cell_text = " | ".join(rows[number]).lower()
+        assert "denominator" in cell_text, f"row {number} does not resolve its denominator tension"
+
+
+def test_matrix_task8_coownership_is_annotated_on_row_36_not_only_in_prose() -> None:
+    """Item 5: Task 8 co-ownership must be visible on the row, not only in prose."""
+    rows = _matrix_rows()
+    owner_cell = rows[36][4]
+    assert "Task 9" in owner_cell and "Task 8" in owner_cell, owner_cell
+    # The prose claim and the annotated row must not drift apart.
+    text = MATRIX.read_text(encoding="utf-8")
+    assert "Task 8 co-owns" in text, "the prose co-ownership statement must remain"
 
 
 def test_project_entry_points_are_declared_and_deterministic(pyproject: dict) -> None:

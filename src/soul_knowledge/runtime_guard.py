@@ -20,6 +20,7 @@ Design rules:
 
 from __future__ import annotations
 
+import ast
 import importlib.metadata as importlib_metadata
 import os
 import re
@@ -27,6 +28,7 @@ import socket
 import sys
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+from importlib.machinery import PathFinder
 from importlib.util import find_spec
 from typing import Any
 
@@ -61,10 +63,12 @@ __all__ = [
     "assert_no_sampling_handler",
     "assert_supported_python",
     "blocking_forbidden_entry_points",
+    "cli_scraping_violations",
     "deny_outbound_sockets",
     "deterministic_env",
     "forbidden_entry_points",
     "forbidden_mcp_methods",
+    "import_block_evidence",
     "import_guard",
     "install_import_guard",
     "install_socket_guard",
@@ -160,6 +164,7 @@ FORBIDDEN_DISTRIBUTIONS: frozenset[str] = frozenset(
         "transformers",
         "sentence-transformers",
         "torch",
+        "torchaudio",
         "torchvision",
         "tensorflow",
         "onnxruntime",
@@ -187,6 +192,7 @@ FORBIDDEN_DISTRIBUTIONS: frozenset[str] = frozenset(
         "falkordb",
         "psycopg",
         "psycopg-binary",
+        "psycopg2",
         "jieba",
         "jieba-py",
         # Document/media/site tooling that pulls model assets or writes files the
@@ -415,12 +421,14 @@ def is_forbidden_distribution(name: str) -> bool:
     """True when *name* is a forbidden distribution or one of its variants.
 
     The single source of truth for both the runtime guard and the packaging
-    tests (``tests/test_dependency_policy.py``). Matches the canonical name
-    exactly and by prefix, so a variant such as ``torchaudio`` is caught by the
-    ``torch`` entry without a second hand-maintained list drifting out of sync.
+    tests (``tests/test_dependency_policy.py``). Matching is **exact or
+    separator-bounded** (``entry`` or ``entry + "-"``): a variant such as
+    ``torchaudio`` needs an explicit entry, while ``torch-cuda`` is caught by
+    the ``torch`` entry. A bare prefix match would false-positive on benign
+    lookalikes (``torches``, ``ollamarama``) and is deliberately not used.
     """
     normalized = _canonical(name)
-    return any(normalized == entry or normalized.startswith(entry) for entry in FORBIDDEN_DISTRIBUTIONS)
+    return any(normalized == entry or normalized.startswith(entry + "-") for entry in FORBIDDEN_DISTRIBUTIONS)
 
 
 def forbidden_distributions(installed: Mapping[str, str] | None = None) -> list[str]:
@@ -462,11 +470,19 @@ DORMANT_PINNED_ENTRY_POINTS: frozenset[str] = frozenset({"graphifyy:console_scri
 
 
 def _is_forbidden_entry_point(entry_point: Any) -> bool:
-    module = str(entry_point.value).split(":")[0]
+    raw_value = str(entry_point.value)
+    module = raw_value.split(":", 1)[0].strip()
+    if not module:
+        # A value with no parseable module target cannot be verified against the
+        # forbidden import roots. Fail closed instead of silently ignoring it.
+        raise ForbiddenDependencyError(
+            f"unverifiable entry point {str(entry_point.name)!r}: value {raw_value!r} has no module target"
+        )
     if is_forbidden_module(module):
         return True
+    name = str(entry_point.name).strip()
     if entry_point.group == "console_scripts" and (
-        str(entry_point.name) in FORBIDDEN_ENTRY_POINT_SCRIPTS or is_forbidden_distribution(str(entry_point.name))
+        name in FORBIDDEN_ENTRY_POINT_SCRIPTS or is_forbidden_distribution(name)
     ):
         return True
     return False
@@ -698,6 +714,69 @@ def assert_no_forbidden_imports(blocked: Iterable[str] | None = None) -> None:
     guard.assert_clean()
 
 
+def _resolvable_without_import(root: str) -> bool:
+    """True when *root* resolves, without importing anything or touching meta-path.
+
+    Uses :class:`importlib.machinery.PathFinder` directly, so the probe has no
+    ``sys.modules`` side effects (a plain ``find_spec`` on a dotted root imports
+    its parent package — which would both pollute the process and short-circuit
+    the guarded probe that follows).
+    """
+    parts = root.split(".")
+    path: Any = None
+    for index in range(len(parts)):
+        name = ".".join(parts[: index + 1])
+        spec = PathFinder.find_spec(name, path)
+        if spec is None:
+            return False
+        path = spec.submodule_search_locations
+    return True
+
+
+def import_block_evidence(blocked: Iterable[str] | None = None) -> dict[str, list[str]]:
+    """Non-vacuous probe of the import guard, with honest per-root evidence.
+
+    Returns ``{"actively_blocked": [...], "not_installed": [...]}``:
+
+    * ``actively_blocked`` — roots that **resolve** in this environment and are
+      actively rejected by the guard. Only these prove the guard bites.
+    * ``not_installed`` — roots with no resolvable module here; the guard has
+      nothing to block for them, and they are reported as such instead of
+      being silently counted as "blocked" (the old probe's overpromise).
+
+    Fails closed: a forbidden module already present in ``sys.modules`` is a
+    violation (the meta-path guard cannot intercept an already-loaded module),
+    and a resolvable root the guard does not reject raises
+    :class:`ForbiddenImportError` — never a soft report.
+    """
+    roots = sorted(FORBIDDEN_IMPORT_ROOTS if blocked is None else blocked)
+    rootset = frozenset(roots)
+    resolvable: list[str] = []
+    absent: list[str] = []
+    for root in roots:
+        # A root with a forbidden ancestor is covered by the ancestor's probe:
+        # importing the child requires importing the blocked parent first.
+        parts = root.split(".")
+        if any(".".join(parts[:index]) in rootset for index in range(1, len(parts))):
+            continue
+        (resolvable if _resolvable_without_import(root) else absent).append(root)
+    guard = import_guard(roots)
+    guard.install()
+    try:
+        guard.assert_not_loaded()
+        actively_blocked: list[str] = []
+        for root in resolvable:
+            try:
+                find_spec(root)
+            except ForbiddenImportError:
+                actively_blocked.append(root)
+                continue
+            raise ForbiddenImportError(f"the import guard did not block {root!r}")
+    finally:
+        guard.uninstall()
+    return {"actively_blocked": actively_blocked, "not_installed": absent}
+
+
 # ---------------------------------------------------------------------------
 # Socket guard
 # ---------------------------------------------------------------------------
@@ -887,6 +966,14 @@ _CAPABILITY_FAMILIES: tuple[str, ...] = (
 )
 _METHOD_FAMILY_ALIASES: Mapping[str, str] = {"completion": "completions"}
 
+# Protocol-core methods that advertise **no** capability and are therefore
+# neither allowed nor forbidden surface: ``ping``, the ``server/*`` family
+# (the pinned SDK registers ``server/discover``) and ``notifications/*``.
+# These are enumerated explicitly; any *other* unrecognised family is an exotic
+# surface the guard cannot classify, and fails closed instead of being ignored.
+_BENIGN_MCP_METHODS: frozenset[str] = frozenset({"ping"})
+_BENIGN_MCP_METHOD_FAMILIES: frozenset[str] = frozenset({"server", "notifications"})
+
 
 def _method_family(method: str) -> str | None:
     family = method.split("/")[0].strip().lower()
@@ -901,14 +988,154 @@ def observed_mcp_capabilities(server: Any) -> dict[str, dict[str, Any]]:
     never from :data:`ALLOWED_MCP_CAPABILITIES`, so a server that exposes
     sampling, prompts, logging or completions is caught instead of echoed back. A
     server with no verifiable handler registry is refused (fail closed).
+
+    Every registered method must classify: an enumerated capability family, or
+    an explicitly benign protocol-core method (``ping``, ``server/*``,
+    ``notifications/*``). An exotic method family outside both sets is
+    *rejected* with :class:`CapabilityViolation` — never silently ignored.
     """
     registry = _handler_registry(server)
     observed: dict[str, dict[str, Any]] = {}
-    for method in registry:
-        family = _method_family(str(method))
+    for raw_method in registry:
+        method = str(raw_method)
+        family = _method_family(method)
         if family is not None:
             observed.setdefault(family, {})
+            continue
+        lowered = method.strip().lower()
+        if lowered in _BENIGN_MCP_METHODS or lowered.split("/")[0] in _BENIGN_MCP_METHOD_FAMILIES:
+            continue
+        raise CapabilityViolation(
+            f"unverifiable MCP method {method!r}: its family is neither an enumerated capability "
+            f"({sorted(_CAPABILITY_FAMILIES)}) nor a benign protocol method; refusing to guess"
+        )
     return {family: observed[family] for family in sorted(observed)}
+
+
+# ---------------------------------------------------------------------------
+# Static shell-out scan (anti-CLI-scraping)
+# ---------------------------------------------------------------------------
+
+# Call targets that spawn a process. The product never spawns a process
+# (feature-matrix row 36: no credential may ride an argv, and Graphify is used
+# as a library, never scraped through its CLI), so *any* use in product sources
+# is a violation — a non-literal argv cannot be statically verified and is
+# refused rather than skipped.
+_SHELL_OUT_CALLS: frozenset[str] = frozenset(
+    {
+        "os.system",
+        "os.popen",
+        "os.spawnl",
+        "os.spawnle",
+        "os.spawnlp",
+        "os.spawnlpe",
+        "os.spawnv",
+        "os.spawnve",
+        "os.spawnvp",
+        "os.spawnvpe",
+        "os.posix_spawn",
+        "os.posix_spawnp",
+        "os.execl",
+        "os.execle",
+        "os.execlp",
+        "os.execlpe",
+        "os.execv",
+        "os.execve",
+        "os.execvp",
+        "os.execvpe",
+        "subprocess.run",
+        "subprocess.call",
+        "subprocess.check_call",
+        "subprocess.check_output",
+        "subprocess.Popen",
+        "subprocess.getoutput",
+        "subprocess.getstatusoutput",
+    }
+)
+
+# Dynamic-code evaluation is an unverifiable shell-out/import vector: a string
+# built at runtime can hide ``os.system('graphify ...')`` from any literal scan.
+_DYNAMIC_EVAL_CALLS: frozenset[str] = frozenset({"eval", "exec"})
+
+_SCANNABLE_MODULES: frozenset[str] = frozenset({"os", "subprocess"})
+
+
+def _call_target(func: ast.expr, aliases: Mapping[str, str]) -> str | None:
+    """Resolve a call's dotted target, following import aliases and from-imports."""
+    if isinstance(func, ast.Name):
+        name = func.id
+        if name in aliases:
+            return aliases[name]
+        return name if name in _DYNAMIC_EVAL_CALLS else None
+    if isinstance(func, ast.Attribute):
+        parts: list[str] = []
+        current: ast.expr = func
+        while isinstance(current, ast.Attribute):
+            parts.append(current.attr)
+            current = current.value
+        if not isinstance(current, ast.Name):
+            return None
+        parts.append(current.id)
+        dotted = ".".join(reversed(parts))
+        base, _, rest = dotted.partition(".")
+        if base in aliases:
+            dotted = aliases[base] + ("." + rest if rest else "")
+        if dotted in _SHELL_OUT_CALLS:
+            return dotted
+        tail = ".".join(dotted.split(".")[-2:])
+        return tail if tail in _SHELL_OUT_CALLS else None
+    return None
+
+
+def cli_scraping_violations(source: str, filename: str = "<source>") -> list[str]:
+    """Static scan: fail closed on every shell-out / dynamic-eval vector.
+
+    Returns sorted ``"filename:lineno reason"`` violations. Detects
+    ``os.system``/``os.popen``/``os.spawn*``/``os.exec*``/``os.posix_spawn*``,
+    the full ``subprocess`` call surface (``run``/``call``/``check_call``/
+    ``check_output``/``Popen``/``getoutput``/``getstatusoutput``) and the
+    ``eval``/``exec`` builtins, following import aliases and from-imports so
+    ``import subprocess as sp`` or ``from subprocess import run`` cannot hide a
+    call. Non-literal argv is covered structurally: the product never spawns
+    processes at all, so the call itself is the violation regardless of what
+    its arguments look like.
+    """
+    tree = ast.parse(source, filename=filename)
+    aliases: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in _SCANNABLE_MODULES:
+                    aliases[alias.asname or alias.name] = alias.name
+        elif isinstance(node, ast.ImportFrom) and node.module in _SCANNABLE_MODULES:
+            for alias in node.names:
+                aliases[alias.asname or alias.name] = f"{node.module}.{alias.name}"
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        target = _call_target(node.func, aliases)
+        if target is None or (target not in _SHELL_OUT_CALLS and target not in _DYNAMIC_EVAL_CALLS):
+            continue
+        if target in _DYNAMIC_EVAL_CALLS:
+            violations.append(
+                f"{filename}:{node.lineno} evaluates dynamic code via {target} "
+                "(an unverifiable shell-out/import vector)"
+            )
+            continue
+        literals = [
+            argument.value
+            for argument in node.args
+            if isinstance(argument, ast.Constant) and isinstance(argument.value, str)
+        ]
+        if any("graphify" in literal for literal in literals):
+            reason = f"shells out to the graphify CLI via {target}"
+        elif literals:
+            reason = f"spawns a process via {target} (no process spawn is allowed on the product surface)"
+        else:
+            reason = f"spawns a process via {target} with a non-literal argv that cannot be statically verified"
+        violations.append(f"{filename}:{node.lineno} {reason}")
+    return sorted(violations)
 
 
 # ---------------------------------------------------------------------------
@@ -927,12 +1154,9 @@ def _probe_outbound_denied() -> bool:
         return False
 
 
-def _probe_imports_blocked() -> bool:
-    try:
-        assert_no_forbidden_imports()
-    except ForbiddenImportError:
-        return False
-    return True
+def _probe_imports_blocked() -> dict[str, list[str]]:
+    """Non-vacuous import-guard probe; raises if a resolvable root is unblocked."""
+    return import_block_evidence()
 
 
 def verify_runtime(
@@ -980,8 +1204,10 @@ def verify_runtime(
         raise OutboundSocketDenied("the outbound socket guard did not deny a probe connection")
 
     imports_blocked = _probe_imports_blocked()
-    if not imports_blocked:
-        raise ForbiddenImportError("the import guard did not block a forbidden module")
+    if not imports_blocked["actively_blocked"]:
+        raise ForbiddenImportError(
+            "the import-block probe is vacuous: no installed forbidden root was actively blocked"
+        )
 
     if mcp_server is None and mcp_capabilities is None:
         raise CapabilityViolation(
@@ -1014,7 +1240,8 @@ def verify_runtime(
         "ambient_credentials_removed": list(removed_credential_names(ambient)),
         "scrubbed_credentials_removed": len(removed_credential_names(ambient)),
         "outbound_sockets_denied": outbound_denied,
-        "forbidden_imports_blocked": imports_blocked,
+        "forbidden_imports_blocked": True,
+        "import_block_evidence": imports_blocked,
         "mcp_capabilities": sorted(observed_capabilities),
         "mcp_capability_evidence": capability_evidence,
         "forbidden_import_roots": sorted(FORBIDDEN_IMPORT_ROOTS),
