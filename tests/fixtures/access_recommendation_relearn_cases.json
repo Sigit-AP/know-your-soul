@@ -1,0 +1,413 @@
+{
+  "contract_version": "access-recommendation-relearn-contract/1.0.0",
+  "status": "FROZEN",
+  "spec_reference": "docs/superpowers/specs/2026-10-24-superpower-knowledge-soul-design.md sections 13.2 and 13.3",
+  "contracts": {
+    "access_policy": "docs/contracts/access-policy.md",
+    "recommendation_contract": "docs/contracts/recommendation-contract.md",
+    "relearn_contract": "docs/contracts/relearn-contract.md"
+  },
+  "verified_by": "tests/test_measurement_contracts.py",
+  "access_cases": [
+    {
+      "id": "acc-001-l1-greeting",
+      "surface_class": "L1_greeting",
+      "example": "operator says 'hello'",
+      "expected": {
+        "decision": "never_call",
+        "model_calls": 0,
+        "graph_calls": 0,
+        "policy": "hash-pinned local policy artifact"
+      }
+    },
+    {
+      "id": "acc-002-l1-one-fact-lookup",
+      "surface_class": "L1_one_fact_lookup",
+      "example": "what is the capital of France",
+      "expected": {
+        "decision": "never_call",
+        "model_calls": 0,
+        "graph_calls": 0,
+        "policy": "hash-pinned local policy artifact"
+      }
+    },
+    {
+      "id": "acc-003-l1-one-command",
+      "surface_class": "L1_one_command",
+      "example": "run `git status`",
+      "expected": {
+        "decision": "never_call",
+        "model_calls": 0,
+        "graph_calls": 0,
+        "policy": "hash-pinned local policy artifact"
+      }
+    },
+    {
+      "id": "acc-004-l1-file-read",
+      "surface_class": "L1_file_read",
+      "example": "read config.yaml",
+      "expected": {
+        "decision": "never_call",
+        "model_calls": 0,
+        "graph_calls": 0,
+        "policy": "hash-pinned local policy artifact"
+      }
+    },
+    {
+      "id": "acc-005-l1-status-check",
+      "surface_class": "L1_status_check",
+      "example": "is the nightly build green",
+      "expected": {
+        "decision": "never_call",
+        "model_calls": 0,
+        "graph_calls": 0,
+        "policy": "hash-pinned local policy artifact"
+      }
+    },
+    {
+      "id": "acc-006-ambiguous-at-cap",
+      "surface_class": "ambiguous",
+      "example": "borderline request that might benefit from stored lessons",
+      "expected": {
+        "decision": "may_call_access_only",
+        "access_only": true,
+        "max_estimated_tokens": 160,
+        "knowledge_payload_tokens": 0,
+        "model_calls": 0,
+        "graph_calls": 0,
+        "policy": "hash-pinned local policy artifact"
+      }
+    },
+    {
+      "id": "acc-007-ambiguous-second",
+      "surface_class": "ambiguous",
+      "example": "unclear whether prior decisions apply to this task",
+      "expected": {
+        "decision": "may_call_access_only",
+        "access_only": true,
+        "max_estimated_tokens": 160,
+        "knowledge_payload_tokens": 0,
+        "model_calls": 0,
+        "graph_calls": 0,
+        "policy": "hash-pinned local policy artifact"
+      }
+    },
+    {
+      "id": "acc-008-required",
+      "surface_class": "required",
+      "example": "multi-step change that clearly needs recorded decisions and lessons",
+      "expected": {
+        "decision": "call",
+        "access_only": false,
+        "policy": "hash-pinned local policy artifact"
+      }
+    }
+  ],
+  "recommendation_cases": [
+    {
+      "id": "rec-001-well-formed-query-block",
+      "case_type": [
+        "recommendation_shape"
+      ],
+      "description": "A knowledge.query recommendation block with exactly the three frozen lists and fully populated items.",
+      "recommendation_block": {
+        "best_actions": [
+          {
+            "action_id": "act-001",
+            "label": "write the contract test before the fixture",
+            "source_node_ids": [
+              "n-lesson-tdd",
+              "n-decision-freeze"
+            ],
+            "source_node_versions": [
+              3,
+              1
+            ],
+            "evidence_ids": [
+              "e0001",
+              "e0002",
+              "e0003",
+              "e0004"
+            ],
+            "learned_class": "validated_practice",
+            "reason_codes": [
+              "HIGH_P",
+              "RECENT_EVIDENCE"
+            ],
+            "expiry": "2026-11-24T00:00:00+00:00",
+            "promoted": true
+          }
+        ],
+        "recommendations": [
+          {
+            "action_id": "act-002",
+            "label": "run the full gate suite before committing",
+            "source_node_ids": [
+              "n-lesson-gates"
+            ],
+            "source_node_versions": [
+              2
+            ],
+            "evidence_ids": [
+              "e0010",
+              "e0011"
+            ],
+            "learned_class": "operating_procedure",
+            "reason_codes": [
+              "MEDIUM_P"
+            ],
+            "expiry": "2026-11-01T00:00:00+00:00",
+            "promoted": false
+          }
+        ],
+        "unnecessary_actions": [
+          {
+            "action_id": "act-003",
+            "label": "re-read the entire corpus",
+            "source_node_ids": [
+              "n-lesson-scope"
+            ],
+            "source_node_versions": [
+              1
+            ],
+            "evidence_ids": [
+              "e0020",
+              "e0021"
+            ],
+            "learned_class": "anti_pattern",
+            "reason_codes": [
+              "LOW_P",
+              "STALE"
+            ],
+            "expiry": "2026-10-31T00:00:00+00:00",
+            "promoted": false
+          }
+        ]
+      },
+      "raw_soul_forbidden_fragments": [
+        "RAW_SOUL_DO_NOT_EXPOSE",
+        "## SOUL corpus raw text"
+      ],
+      "expected": {
+        "single_observation_rejection": false
+      }
+    },
+    {
+      "id": "rec-002-one-observation-no-promotion",
+      "case_type": [
+        "one_observation_no_promotion"
+      ],
+      "description": "An action backed by a single observation can be recommended but never promoted.",
+      "recommendation_block": {
+        "best_actions": [],
+        "recommendations": [
+          {
+            "action_id": "act-010",
+            "label": "try the new release flow",
+            "source_node_ids": [
+              "n-idea-release"
+            ],
+            "source_node_versions": [
+              1
+            ],
+            "evidence_ids": [
+              "e0100"
+            ],
+            "learned_class": "candidate",
+            "reason_codes": [
+              "INSUFFICIENT_EVIDENCE"
+            ],
+            "expiry": "2026-11-24T00:00:00+00:00",
+            "promoted": false
+          }
+        ],
+        "unnecessary_actions": []
+      },
+      "promotion_attempt": {
+        "action_id": "act-010",
+        "result": "rejected",
+        "reason": "ONE_OBSERVATION_NO_PROMOTION"
+      },
+      "raw_soul_forbidden_fragments": [
+        "RAW_SOUL_DO_NOT_EXPOSE"
+      ],
+      "expected": {
+        "single_observation_rejection": true
+      }
+    },
+    {
+      "id": "rec-003-review-block-same-shape",
+      "case_type": [
+        "recommendation_shape"
+      ],
+      "description": "knowledge.review returns the same three-list block shape.",
+      "recommendation_block": {
+        "best_actions": [],
+        "recommendations": [
+          {
+            "action_id": "act-020",
+            "label": "schedule review of stale node n-old",
+            "source_node_ids": [
+              "n-old"
+            ],
+            "source_node_versions": [
+              5
+            ],
+            "evidence_ids": [
+              "e0200",
+              "e0201",
+              "e0202"
+            ],
+            "learned_class": "maintenance",
+            "reason_codes": [
+              "DUE_REVIEW",
+              "HIGH_U"
+            ],
+            "expiry": "2026-11-07T00:00:00+00:00",
+            "promoted": false
+          }
+        ],
+        "unnecessary_actions": []
+      },
+      "raw_soul_forbidden_fragments": [
+        "RAW_SOUL_DO_NOT_EXPOSE"
+      ],
+      "expected": {
+        "single_observation_rejection": false
+      }
+    }
+  ],
+  "relearn_cases": [
+    {
+      "id": "rl-001-relearn-offer",
+      "case_type": "relearn_offer",
+      "description": "A SOUL.md or corpus change emits a deterministic RelearnOffer and sets RELEARN_PENDING; no mode is chosen automatically.",
+      "given": {
+        "source_change": "soul_md sha256 changed"
+      },
+      "expected": {
+        "emits": "RelearnOffer",
+        "status": "RELEARN_PENDING",
+        "automatic_mode_selection": false,
+        "no_change_without_operator_decision": true
+      }
+    },
+    {
+      "id": "rl-002-reset",
+      "case_type": "reset",
+      "mode": "RESET",
+      "description": "RESET starts with zero old evidence.",
+      "expected": {
+        "scores": {
+          "p": "0.000000000000",
+          "m": "0.000000000000",
+          "e": "0.000000000000",
+          "u": "1.000000000000",
+          "professional_level": 1
+        },
+        "promotion_blocked": true,
+        "old_evidence_carried": 0
+      }
+    },
+    {
+      "id": "rl-003-accumulate-quarantine",
+      "case_type": "accumulate",
+      "mode": "ACCUMULATE",
+      "description": "ACCUMULATE reuses only nodes whose anchors map deterministically; unmapped evidence is quarantined from scoring.",
+      "expected": {
+        "scored_evidence_ids": [
+          "e0001",
+          "e0002"
+        ],
+        "quarantined_evidence_ids": [
+          "e0003",
+          "e0004"
+        ],
+        "mapping_required": "approved deterministic anchor mapping"
+      }
+    },
+    {
+      "id": "rl-004-mixed-source-refusal",
+      "case_type": "mixed_source",
+      "description": "A default response spanning incompatible source versions fails.",
+      "expected": {
+        "default_mixed_response": true,
+        "outcome": "error",
+        "error_code": "MIXED_SOURCE_VERSIONS"
+      }
+    },
+    {
+      "id": "rl-005-mixed-source-approved",
+      "case_type": "mixed_source",
+      "description": "A mixed response is allowed only with explicit operator approval and mixed_source_versions=true.",
+      "expected": {
+        "mixed_source_versions": true,
+        "operator_approval": true,
+        "outcome": "ok"
+      }
+    },
+    {
+      "id": "rl-006-zero-evidence-weight",
+      "case_type": "zero_evidence_weight",
+      "description": "Relearn, source-version, backup, and rollback events carry zero evidence weight; only log_event, record_outcome, and evaluate can move P/M/E; relearn never triggers promotion.",
+      "zero_weight_event_kinds": [
+        "relearn",
+        "source_version",
+        "backup",
+        "rollback"
+      ],
+      "score_moving_tools": [
+        "log_event",
+        "record_outcome",
+        "evaluate"
+      ],
+      "expected": {
+        "relearn_never_triggers_promotion": true
+      }
+    },
+    {
+      "id": "rl-007-rollback",
+      "case_type": "rollback",
+      "description": "Rollback restores exact pre-relearn hashes, graph bytes, and P/M/E values with exactly one linked audit event.",
+      "expected": {
+        "restores_pre_relearn_hashes": true,
+        "restores_pre_relearn_scores": true,
+        "restores_graph_bytes": true,
+        "linked_audit_events": 1
+      }
+    },
+    {
+      "id": "rl-008-supersession",
+      "case_type": "supersession",
+      "description": "Supersession uses valid-from/valid-to relation fields with audit retention, never deletion; ties stay needs_improvement.",
+      "expected": {
+        "uses_valid_from_valid_to": true,
+        "deletion": false,
+        "contradictions_retained_both_directions": true,
+        "tie_resolution": "needs_improvement"
+      }
+    },
+    {
+      "id": "rl-009-source-version-registry",
+      "case_type": "source_version_registry",
+      "description": "The registry stores hashes and tool versions; mtime is never a correctness gate.",
+      "expected": {
+        "fields": [
+          "sha256",
+          "byte_count",
+          "char_count",
+          "line_count",
+          "manifest_hash",
+          "parser_version",
+          "normalization_version",
+          "engine_version",
+          "scoring_version",
+          "superseded_by",
+          "deletion_state"
+        ],
+        "version_identity": "sha256",
+        "mtime_is_correctness_gate": false
+      }
+    }
+  ]
+}

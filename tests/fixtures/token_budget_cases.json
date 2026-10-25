@@ -1,0 +1,388 @@
+{
+  "contract_version": "token-budget-contract/1.0.0",
+  "status": "FROZEN",
+  "spec_reference": "docs/superpowers/specs/2026-10-24-superpower-knowledge-soul-design.md sections 8 and 13.4",
+  "estimator": "estimated_tokens = ceil(utf8_byte_length / 4)",
+  "minimum_budget": 128,
+  "access_only_cap": 160,
+  "frozen_baselines": {
+    "soul_md": {
+      "bytes": 31279,
+      "estimated_tokens": 7820
+    },
+    "soul_corpus": {
+      "bytes": 52604,
+      "estimated_tokens": 13151
+    }
+  },
+  "token_budget_contract": "docs/mathematics/token-budget-contract.md",
+  "verified_by": "tests/test_measurement_contracts.py",
+  "cases": [
+    {
+      "id": "tok-001-minimal-fit",
+      "case_type": [
+        "complete_payload"
+      ],
+      "description": "Smallest complete canonical QueryResponse; budget equals its size exactly.",
+      "payload": {
+        "audit_event_id": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+        "projection_version": "gen-000042",
+        "required_knowledge_watermark": 7,
+        "source_knowledge_high_watermark": 7,
+        "stale": false,
+        "truncated": false,
+        "confidence": "0.500000000000",
+        "node_versions": {
+          "n1": 3
+        },
+        "provenance": [
+          "soul://corpus/lesson-1"
+        ],
+        "results": [
+          {
+            "node_id": "n0",
+            "summary": "summary-0 pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad",
+            "p": "0.900000000000"
+          }
+        ]
+      },
+      "budget": 128,
+      "expected": {
+        "outcome": "ok",
+        "estimated_tokens": 128,
+        "knowledge_payload_tokens": 128
+      }
+    },
+    {
+      "id": "tok-002-exact-multiple-of-4",
+      "case_type": [
+        "complete_payload"
+      ],
+      "description": "Canonical payload byte length is an exact multiple of 4 (ceil boundary).",
+      "payload": {
+        "audit_event_id": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+        "projection_version": "gen-000042",
+        "required_knowledge_watermark": 7,
+        "source_knowledge_high_watermark": 7,
+        "stale": false,
+        "truncated": false,
+        "confidence": "0.500000000000",
+        "node_versions": {
+          "n1": 3
+        },
+        "provenance": [
+          "soul://corpus/lesson-1"
+        ],
+        "results": [
+          {
+            "node_id": "n0",
+            "summary": "summary-0 pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad padx",
+            "p": "0.900000000000"
+          }
+        ]
+      },
+      "budget": 128,
+      "expected": {
+        "outcome": "ok",
+        "estimated_tokens": 128,
+        "knowledge_payload_tokens": 128
+      }
+    },
+    {
+      "id": "tok-003-multibyte-utf8",
+      "case_type": [
+        "complete_payload",
+        "multibyte_utf8"
+      ],
+      "description": "Multibyte UTF-8 content: the estimator counts bytes, not characters.",
+      "payload": {
+        "audit_event_id": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+        "projection_version": "gen-000042",
+        "required_knowledge_watermark": 7,
+        "source_knowledge_high_watermark": 7,
+        "stale": false,
+        "truncated": false,
+        "confidence": "0.500000000000",
+        "node_versions": {
+          "n1": 3
+        },
+        "provenance": [
+          "soul://corpus/lesson-1"
+        ],
+        "results": [
+          {
+            "node_id": "n0",
+            "summary": "Pembelajaran bermakna: gagasan, tindakan, keputusan — é, ü, 中文",
+            "p": "0.900000000000"
+          },
+          {
+            "node_id": "n1",
+            "summary": "Pembelajaran bermakna: gagasan, tindakan, keputusan — é, ü, 中文",
+            "p": "0.900000000000"
+          }
+        ]
+      },
+      "budget": 135,
+      "expected": {
+        "outcome": "ok",
+        "estimated_tokens": 135,
+        "knowledge_payload_tokens": 135
+      }
+    },
+    {
+      "id": "tok-004-budget-127",
+      "case_type": [
+        "budget_too_small"
+      ],
+      "description": "Budget 127 is below the 128-token minimum: BUDGET_TOO_SMALL, no knowledge payload.",
+      "payload": null,
+      "budget": 127,
+      "expected": {
+        "outcome": "BUDGET_TOO_SMALL",
+        "knowledge_payload_tokens": 0
+      }
+    },
+    {
+      "id": "tok-005-budget-zero",
+      "case_type": [
+        "budget_too_small"
+      ],
+      "description": "Budget 0: BUDGET_TOO_SMALL, no knowledge payload.",
+      "payload": null,
+      "budget": 0,
+      "expected": {
+        "outcome": "BUDGET_TOO_SMALL",
+        "knowledge_payload_tokens": 0
+      }
+    },
+    {
+      "id": "tok-006-truncated-to-fit",
+      "case_type": [
+        "complete_payload",
+        "truncation"
+      ],
+      "description": "Traversal is budget-limited: results were truncated so the complete canonical payload fits; truncated=true is part of the payload.",
+      "payload": {
+        "audit_event_id": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+        "projection_version": "gen-000042",
+        "required_knowledge_watermark": 7,
+        "source_knowledge_high_watermark": 7,
+        "stale": false,
+        "truncated": true,
+        "confidence": "0.500000000000",
+        "node_versions": {
+          "n1": 3
+        },
+        "provenance": [
+          "soul://corpus/lesson-1"
+        ],
+        "results": [
+          {
+            "node_id": "n0",
+            "summary": "kept pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad",
+            "p": "0.900000000000"
+          }
+        ]
+      },
+      "budget": 128,
+      "expected": {
+        "outcome": "truncated",
+        "estimated_tokens": 128,
+        "knowledge_payload_tokens": 128,
+        "untruncated_results_would_exceed_budget": true
+      }
+    },
+    {
+      "id": "tok-007-metadata-exceeds-budget",
+      "case_type": [
+        "complete_payload",
+        "metadata_exceeds_budget"
+      ],
+      "description": "Mandatory metadata alone exceeds the (legal) budget: an error, never an over-budget success.",
+      "payload": {
+        "audit_event_id": "f0e1d2c3b4a5968778695a4b3c2d1e0f",
+        "projection_version": "gen-000099",
+        "required_knowledge_watermark": 123456789,
+        "source_knowledge_high_watermark": 123456789,
+        "stale": false,
+        "truncated": false,
+        "confidence": "0.123456789012",
+        "node_versions": {
+          "node-0000": 0,
+          "node-0001": 1,
+          "node-0002": 2,
+          "node-0003": 3,
+          "node-0004": 4,
+          "node-0005": 5,
+          "node-0006": 6,
+          "node-0007": 7,
+          "node-0008": 8,
+          "node-0009": 9,
+          "node-0010": 10,
+          "node-0011": 11
+        },
+        "provenance": [
+          "soul://corpus/very/long/provenance/path/segment-0000.md",
+          "soul://corpus/very/long/provenance/path/segment-0001.md",
+          "soul://corpus/very/long/provenance/path/segment-0002.md",
+          "soul://corpus/very/long/provenance/path/segment-0003.md",
+          "soul://corpus/very/long/provenance/path/segment-0004.md",
+          "soul://corpus/very/long/provenance/path/segment-0005.md",
+          "soul://corpus/very/long/provenance/path/segment-0006.md",
+          "soul://corpus/very/long/provenance/path/segment-0007.md"
+        ],
+        "results": []
+      },
+      "budget": 224,
+      "expected": {
+        "outcome": "metadata_exceeds_budget",
+        "estimated_tokens": 229,
+        "knowledge_payload_tokens": 0
+      }
+    },
+    {
+      "id": "tok-008-access-only-zero-payload",
+      "case_type": [
+        "complete_payload",
+        "access_only"
+      ],
+      "description": "access_only=true response: zero knowledge payload within the 160-token cap.",
+      "payload": {
+        "access_only": true,
+        "audit_event_id": "00112233445566778899aabbccddeeff",
+        "projection_version": "gen-000007",
+        "required_knowledge_watermark": 9,
+        "source_knowledge_high_watermark": 9,
+        "stale": false,
+        "truncated": false,
+        "results": [],
+        "knowledge_payload_tokens": 0
+      },
+      "budget": 160,
+      "expected": {
+        "outcome": "ok",
+        "estimated_tokens": 63,
+        "knowledge_payload_tokens": 0,
+        "max_estimated_tokens": 160
+      }
+    },
+    {
+      "id": "tok-009-transport-parity",
+      "case_type": [
+        "complete_payload",
+        "transport_parity"
+      ],
+      "description": "CLI stdout, API JSON, and MCP tool content carry the same canonical payload; transport envelopes are excluded from the budget.",
+      "payload": {
+        "audit_event_id": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+        "projection_version": "gen-000042",
+        "required_knowledge_watermark": 7,
+        "source_knowledge_high_watermark": 7,
+        "stale": false,
+        "truncated": false,
+        "confidence": "0.500000000000",
+        "node_versions": {
+          "n1": 3
+        },
+        "provenance": [
+          "soul://corpus/lesson-1"
+        ],
+        "results": [
+          {
+            "node_id": "n0",
+            "summary": "transport parity check pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad pad",
+            "p": "0.900000000000"
+          },
+          {
+            "node_id": "n1",
+            "summary": "transport parity check",
+            "p": "0.900000000000"
+          }
+        ]
+      },
+      "budget": 128,
+      "transports": [
+        "cli_stdout",
+        "api_json",
+        "mcp_tool_content"
+      ],
+      "expected": {
+        "outcome": "ok",
+        "estimated_tokens": 128,
+        "knowledge_payload_tokens": 128,
+        "estimated_tokens_by_transport": {
+          "cli_stdout": 128,
+          "api_json": 128,
+          "mcp_tool_content": 128
+        },
+        "transport_envelopes_excluded": true
+      }
+    },
+    {
+      "id": "tok-010-baseline-soul-md",
+      "case_type": [
+        "frozen_baseline"
+      ],
+      "description": "Frozen host baseline: SOUL.md is 31,279 bytes = 7,820 estimated tokens.",
+      "payload": null,
+      "budget": null,
+      "subject": "soul_md",
+      "expected": {
+        "outcome": "measured",
+        "bytes": 31279,
+        "estimated_tokens": 7820
+      }
+    },
+    {
+      "id": "tok-011-baseline-soul-corpus",
+      "case_type": [
+        "frozen_baseline"
+      ],
+      "description": "Frozen host baseline: SOUL corpus is 52,604 bytes = 13,151 estimated tokens.",
+      "payload": null,
+      "budget": null,
+      "subject": "soul_corpus",
+      "expected": {
+        "outcome": "measured",
+        "bytes": 52604,
+        "estimated_tokens": 13151
+      }
+    },
+    {
+      "id": "tok-012-paired-quality-reject",
+      "case_type": [
+        "paired_quality_gate"
+      ],
+      "description": "Token savings with a quality loss: rejected even though tokens drop from 13,151 to 40.",
+      "payload": null,
+      "budget": null,
+      "paired_measurement": {
+        "baseline_estimated_tokens": 13151,
+        "system_estimated_tokens": 40,
+        "quality_maintained": false
+      },
+      "expected": {
+        "outcome": "measured",
+        "verdict": "rejected"
+      }
+    },
+    {
+      "id": "tok-013-paired-quality-accept",
+      "case_type": [
+        "paired_quality_gate"
+      ],
+      "description": "Token savings with quality maintained: accepted.",
+      "payload": null,
+      "budget": null,
+      "paired_measurement": {
+        "baseline_estimated_tokens": 13151,
+        "system_estimated_tokens": 40,
+        "quality_maintained": true
+      },
+      "expected": {
+        "outcome": "measured",
+        "verdict": "accepted"
+      }
+    }
+  ]
+}

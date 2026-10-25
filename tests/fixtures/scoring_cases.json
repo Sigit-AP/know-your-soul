@@ -1,0 +1,6145 @@
+{
+  "contract_version": "scoring-contract/1.0.0",
+  "status": "FROZEN",
+  "spec_reference": "docs/superpowers/specs/2026-10-24-superpower-knowledge-soul-design.md section 9",
+  "quantization": "serialized scores are quantized to 12 decimal places with ROUND_HALF_EVEN; all calculations use Python Decimal with precision 34",
+  "evidence_schema": "docs/mathematics/evidence-schema.md",
+  "scoring_contract": "docs/mathematics/scoring-contract.md",
+  "verified_by": "tests/test_measurement_contracts.py",
+  "cases": [
+    {
+      "id": "score-001-single-item-hand",
+      "case_type": [
+        "hand_calculated",
+        "bounds",
+        "one_observation_no_promotion",
+        "level_caps"
+      ],
+      "description": "Single independent item, age 0, empty query context. q=0.9; P=0.89; E=2/3; M=0 (fewer than 3 independence groups in the bin); level capped at 2.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "0.6",
+          "correctness": "0.8",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 500,
+          "compute_ms": 500,
+          "output_chars": 2000
+        }
+      ],
+      "derivation": "p_j = 0.30*0.8 + 0.25*((0.6+1)/2) + 0.20*1 + 0.15*1 + 0.10*(1-0) = 0.24+0.20+0.20+0.15+0.10 = 0.89 exactly; single item so P = 0.89. E: benefit=1*1=1; cost=0.4*0.5+0.4*0.5+0.2*0.5=0.5; e=1/1.5=2/3. U = 1/sqrt(1+0.9) = 1/sqrt(1.9). One independence group caps level at 2; U_P>0.70 also caps at 2; promotion impossible.",
+      "expected": {
+        "p": "0.890000000000",
+        "m": "0.000000000000",
+        "e": "0.666666666667",
+        "u_p": "0.725476250110",
+        "u_m": "0.725476250110",
+        "u_e": "0.725476250110",
+        "overall_uncertainty": "0.725476250110",
+        "confidence_p": "0.274523749890",
+        "confidence_m": "0.274523749890",
+        "confidence_e": "0.274523749890",
+        "selected_m_bin": null,
+        "m_bin_evidence_count": null,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-002-two-item-weighted-p-hand",
+      "case_type": [
+        "hand_calculated",
+        "bounds"
+      ],
+      "description": "Two independent items with reliability 0.6 (perfect) and 0.3 (worst); P = (0.6*1 + 0.3*0)/0.9 = 2/3.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.6",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "-1",
+          "correctness": "0",
+          "reliability": "0.3",
+          "reproducibility": "0",
+          "scope_fit": "0",
+          "successful_use": "0",
+          "task_coverage": "1",
+          "quality_at_use": "0",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "derivation": "p_A = 0.30+0.25+0.20+0.15+0.10 = 1; p_B = 0. Weights 0.6/0.9 and 0.3/0.9 give P = 2/3. E: e_A = 1/1.07 (cost 0.07), e_B = 0 (zero benefit), so E = (2/3)*(100/107) = 200/321. M has only 2 independence groups -> null bin.",
+      "expected": {
+        "p": "0.666666666667",
+        "m": "0.000000000000",
+        "e": "0.623052959502",
+        "u_p": "0.725476250110",
+        "u_m": "0.725476250110",
+        "u_e": "0.725476250110",
+        "overall_uncertainty": "0.725476250110",
+        "confidence_p": "0.274523749890",
+        "confidence_m": "0.274523749890",
+        "confidence_e": "0.274523749890",
+        "selected_m_bin": null,
+        "m_bin_evidence_count": null,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-003-zero-evidence",
+      "case_type": [
+        "zero_evidence",
+        "zero_total_weight",
+        "bounds"
+      ],
+      "description": "No evidence at all: P=M=E=0, U=1 everywhere, level 1, no promotion.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [],
+      "expected": {
+        "p": "0.000000000000",
+        "m": "0.000000000000",
+        "e": "0.000000000000",
+        "u_p": "1.000000000000",
+        "u_m": "1.000000000000",
+        "u_e": "1.000000000000",
+        "overall_uncertainty": "1.000000000000",
+        "confidence_p": "0.000000000000",
+        "confidence_m": "0.000000000000",
+        "confidence_e": "0.000000000000",
+        "selected_m_bin": null,
+        "m_bin_evidence_count": null,
+        "professional_level": 1,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": true,
+            "reason": "ZERO_TOTAL_WEIGHT"
+          },
+          "m": {
+            "zero": true,
+            "reason": "ZERO_TOTAL_WEIGHT"
+          },
+          "e": {
+            "zero": true,
+            "reason": "ZERO_TOTAL_WEIGHT"
+          }
+        }
+      }
+    },
+    {
+      "id": "score-004-all-missing-provenance",
+      "case_type": [
+        "zero_evidence",
+        "zero_total_weight"
+      ],
+      "description": "Every item lacks provenance: unscorable and reported separately.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "0.000000000000",
+        "m": "0.000000000000",
+        "e": "0.000000000000",
+        "u_p": "1.000000000000",
+        "u_m": "1.000000000000",
+        "u_e": "1.000000000000",
+        "overall_uncertainty": "1.000000000000",
+        "confidence_p": "0.000000000000",
+        "confidence_m": "0.000000000000",
+        "confidence_e": "0.000000000000",
+        "selected_m_bin": null,
+        "m_bin_evidence_count": null,
+        "professional_level": 1,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 2,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": true,
+            "reason": "ZERO_TOTAL_WEIGHT"
+          },
+          "m": {
+            "zero": true,
+            "reason": "ZERO_TOTAL_WEIGHT"
+          },
+          "e": {
+            "zero": true,
+            "reason": "ZERO_TOTAL_WEIGHT"
+          }
+        }
+      }
+    },
+    {
+      "id": "score-005-all-zero-reliability",
+      "case_type": [
+        "all_zero_reliability",
+        "zero_total_weight"
+      ],
+      "description": "Three items with reliability 0: zero total weight with reason ZERO_TOTAL_WEIGHT.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "0.000000000000",
+        "m": "0.000000000000",
+        "e": "0.000000000000",
+        "u_p": "1.000000000000",
+        "u_m": "1.000000000000",
+        "u_e": "1.000000000000",
+        "overall_uncertainty": "1.000000000000",
+        "confidence_p": "0.000000000000",
+        "confidence_m": "0.000000000000",
+        "confidence_e": "0.000000000000",
+        "selected_m_bin": null,
+        "m_bin_evidence_count": null,
+        "professional_level": 1,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 3,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": true,
+            "reason": "ZERO_TOTAL_WEIGHT"
+          },
+          "m": {
+            "zero": true,
+            "reason": "ZERO_TOTAL_WEIGHT"
+          },
+          "e": {
+            "zero": true,
+            "reason": "ZERO_TOTAL_WEIGHT"
+          }
+        }
+      }
+    },
+    {
+      "id": "score-006-disjoint-context",
+      "case_type": [
+        "disjoint_context",
+        "zero_total_weight"
+      ],
+      "description": "Non-empty query context fully disjoint from every item's tags: Jaccard 0.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [
+        "python"
+      ],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "rust"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "go"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "0.000000000000",
+        "m": "0.000000000000",
+        "e": "0.000000000000",
+        "u_p": "1.000000000000",
+        "u_m": "1.000000000000",
+        "u_e": "1.000000000000",
+        "overall_uncertainty": "1.000000000000",
+        "confidence_p": "0.000000000000",
+        "confidence_m": "0.000000000000",
+        "confidence_e": "0.000000000000",
+        "selected_m_bin": null,
+        "m_bin_evidence_count": null,
+        "professional_level": 1,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 2,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": true,
+            "reason": "ZERO_TOTAL_WEIGHT"
+          },
+          "m": {
+            "zero": true,
+            "reason": "ZERO_TOTAL_WEIGHT"
+          },
+          "e": {
+            "zero": true,
+            "reason": "ZERO_TOTAL_WEIGHT"
+          }
+        }
+      }
+    },
+    {
+      "id": "score-007-empty-query-context",
+      "case_type": [
+        "context_relevance"
+      ],
+      "description": "Empty query context gives context_relevance=1 regardless of evidence tags.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "a"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "b",
+            "c"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "0",
+          "correctness": "0.5",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "0.908333333333",
+        "m": "1.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.500000000000",
+        "u_m": "0.500000000000",
+        "u_e": "0.500000000000",
+        "overall_uncertainty": "0.500000000000",
+        "confidence_p": "0.500000000000",
+        "confidence_m": "0.500000000000",
+        "confidence_e": "0.500000000000",
+        "selected_m_bin": "1.0",
+        "m_bin_evidence_count": 3,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.940255473832",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-008-partial-jaccard",
+      "case_type": [
+        "context_relevance"
+      ],
+      "description": "Query {a,b}: Jaccard 1/2, 1, and 2/3 for the three items.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [
+        "a",
+        "b"
+      ],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "a"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "a",
+            "b"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "a",
+            "b",
+            "c"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "1.000000000000",
+        "m": "1.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.561951486949",
+        "u_m": "0.561951486949",
+        "u_e": "0.561951486949",
+        "overall_uncertainty": "0.561951486949",
+        "confidence_p": "0.438048513051",
+        "confidence_m": "0.438048513051",
+        "confidence_e": "0.438048513051",
+        "selected_m_bin": "1.0",
+        "m_bin_evidence_count": 3,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.986559412592",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-009-duplicate-dedup-hand",
+      "case_type": [
+        "hand_calculated",
+        "duplicate_resistance"
+      ],
+      "description": "An exact duplicate (larger evidence_id) is represented once; scores equal score-001 exactly.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "0.6",
+          "correctness": "0.8",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 500,
+          "compute_ms": 500,
+          "output_chars": 2000
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "0.6",
+          "correctness": "0.8",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 500,
+          "compute_ms": 500,
+          "output_chars": 2000
+        }
+      ],
+      "derivation": "e0002 is byte-identical to e0001 except evidence_id, so exact-duplicate dedup retains e0001 only; the result equals score-001: P=0.89, E=2/3.",
+      "expected": {
+        "p": "0.890000000000",
+        "m": "0.000000000000",
+        "e": "0.666666666667",
+        "u_p": "0.725476250110",
+        "u_m": "0.725476250110",
+        "u_e": "0.725476250110",
+        "overall_uncertainty": "0.725476250110",
+        "confidence_p": "0.274523749890",
+        "confidence_m": "0.274523749890",
+        "confidence_e": "0.274523749890",
+        "selected_m_bin": null,
+        "m_bin_evidence_count": null,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-010-correlated-group-of-4-hand",
+      "case_type": [
+        "hand_calculated",
+        "correlated_groups"
+      ],
+      "description": "Four items sharing one independence_key get independence 1/sqrt(4)=0.5 each; one independent item added. All p_j=1 so P=1 regardless of weights.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "shared-cluster",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "shared-cluster",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "shared-cluster",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0004",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0004",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "shared-cluster",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0005",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0005",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0005",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "derivation": "independence = 1/sqrt(4) = 0.5 exactly; sum(q_P) = 4*0.5 + 1 = 3, so U_P = 1/sqrt(4) = 0.5 exactly. P = 1 (weighted mean of identical p_j=1). Two distinct groups cap level at 2.",
+      "expected": {
+        "p": "1.000000000000",
+        "m": "0.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.500000000000",
+        "u_m": "0.500000000000",
+        "u_e": "0.500000000000",
+        "overall_uncertainty": "0.500000000000",
+        "confidence_p": "0.500000000000",
+        "confidence_m": "0.500000000000",
+        "confidence_e": "0.500000000000",
+        "selected_m_bin": null,
+        "m_bin_evidence_count": null,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-011-depth-discount-hand",
+      "case_type": [
+        "hand_calculated",
+        "depth_discount"
+      ],
+      "description": "Descendant evidence at depth 2 is divided by (1+2)=3: weights 0.9 and 0.3 give P = 0.75.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {
+        "n-root": 0,
+        "n-child": 2
+      },
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n-root",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n-child",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "-1",
+          "correctness": "0",
+          "reliability": "0.9",
+          "reproducibility": "0",
+          "scope_fit": "0",
+          "successful_use": "0",
+          "task_coverage": "1",
+          "quality_at_use": "0",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "derivation": "q_A = 0.9/(1+0) = 0.9; q_B = 0.9/(1+2) = 0.3; w = 0.75/0.25; p_A=1, p_B=0 so P = 0.75 exactly. E = 0.75*(100/107) = 75/107.",
+      "expected": {
+        "p": "0.750000000000",
+        "m": "0.000000000000",
+        "e": "0.700934579439",
+        "u_p": "0.674199862463",
+        "u_m": "0.674199862463",
+        "u_e": "0.674199862463",
+        "overall_uncertainty": "0.674199862463",
+        "confidence_p": "0.325800137537",
+        "confidence_m": "0.325800137537",
+        "confidence_e": "0.325800137537",
+        "selected_m_bin": null,
+        "m_bin_evidence_count": null,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-012-recency-half-life-hand",
+      "case_type": [
+        "hand_calculated",
+        "recency"
+      ],
+      "description": "The p_j=0 item is exactly h_P=90 days old, so its P weight decays by 1/2: P = (1*1 + 0.5*0)/1.5 = 2/3.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-07-26T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "-1",
+          "correctness": "0",
+          "reliability": "1",
+          "reproducibility": "0",
+          "scope_fit": "0",
+          "successful_use": "0",
+          "task_coverage": "1",
+          "quality_at_use": "0",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "derivation": "decay = exp(-ln(2)*90/90) = 0.5; weights 1 and 0.5 give P = 2/3. For M (h=30) the stale item decays to exp(-3*ln2)=0.125; for E (h=7) to exp(-ln2*90/7).",
+      "expected": {
+        "p": "0.666666666667",
+        "m": "0.000000000000",
+        "e": "0.934453496832",
+        "u_p": "0.632455532034",
+        "u_m": "0.685994340570",
+        "u_e": "0.707082957037",
+        "overall_uncertainty": "0.707082957037",
+        "confidence_p": "0.367544467966",
+        "confidence_m": "0.314005659430",
+        "confidence_e": "0.292917042963",
+        "selected_m_bin": null,
+        "m_bin_evidence_count": null,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-013-future-evidence-invalid",
+      "case_type": [
+        "zero_total_weight"
+      ],
+      "description": "Evidence from the future is invalid and counted under other exclusions.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-25T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "1.000000000000",
+        "m": "0.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.707106781187",
+        "u_m": "0.707106781187",
+        "u_e": "0.707106781187",
+        "overall_uncertainty": "0.707106781187",
+        "confidence_p": "0.292893218813",
+        "confidence_m": "0.292893218813",
+        "confidence_e": "0.292893218813",
+        "selected_m_bin": null,
+        "m_bin_evidence_count": null,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 1
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-014-contradiction-hand",
+      "case_type": [
+        "hand_calculated",
+        "contradiction"
+      ],
+      "description": "Contradiction only enters through the 0.10*(1-contradiction) term: equal weights, p in {1.0, 0.9}, so P = 0.95.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "derivation": "p_A = 1, p_B = 1 - 0.10 = 0.9; equal weights give P = 0.95 exactly.",
+      "expected": {
+        "p": "0.950000000000",
+        "m": "0.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.577350269190",
+        "u_m": "0.577350269190",
+        "u_e": "0.577350269190",
+        "overall_uncertainty": "0.577350269190",
+        "confidence_p": "0.422649730810",
+        "confidence_m": "0.422649730810",
+        "confidence_e": "0.422649730810",
+        "selected_m_bin": null,
+        "m_bin_evidence_count": null,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-015-m-eligible-single-bin-hand",
+      "case_type": [
+        "hand_calculated",
+        "m_bin_local_denominator"
+      ],
+      "description": "Four independent items in bin u=0.8, quality 0.9 >= 0.70, S=0.5: M = 0.8*0.5 = 0.4.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "0.5",
+          "quality_at_use": "0.9",
+          "contradiction": "0",
+          "utilization_u": "0.8",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "0.5",
+          "quality_at_use": "0.9",
+          "contradiction": "0",
+          "utilization_u": "0.8",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "0.5",
+          "quality_at_use": "0.9",
+          "contradiction": "0",
+          "utilization_u": "0.8",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0004",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0004",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0004",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "0.5",
+          "quality_at_use": "0.9",
+          "contradiction": "0",
+          "utilization_u": "0.8",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "derivation": "w=1/4 each; Q=0.9 (eligible); S = sum(w*1*0.5) = 0.5; M = 0.8*0.5 = 0.4 exactly; selected_m_bin=0.8 with 4 items. P=1 (all p_j=1); E: benefit=0.5, cost=0.07, e = 0.5/0.57 = 50/57.",
+      "expected": {
+        "p": "1.000000000000",
+        "m": "0.400000000000",
+        "e": "0.877192982456",
+        "u_p": "0.447213595500",
+        "u_m": "0.447213595500",
+        "u_e": "0.447213595500",
+        "overall_uncertainty": "0.447213595500",
+        "confidence_p": "0.552786404500",
+        "confidence_m": "0.552786404500",
+        "confidence_e": "0.552786404500",
+        "selected_m_bin": "0.8",
+        "m_bin_evidence_count": 4,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.740009043403",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-016-m-insufficient-groups",
+      "case_type": [
+        "null_m_bin"
+      ],
+      "description": "Only 2 distinct independence groups in the bin: ineligible, M=0, null bin.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.8",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.8",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "1.000000000000",
+        "m": "0.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.577350269190",
+        "u_m": "0.577350269190",
+        "u_e": "0.577350269190",
+        "overall_uncertainty": "0.577350269190",
+        "confidence_p": "0.422649730810",
+        "confidence_m": "0.422649730810",
+        "confidence_e": "0.422649730810",
+        "selected_m_bin": null,
+        "m_bin_evidence_count": null,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-017-m-below-quality-gate",
+      "case_type": [
+        "bin_boundary",
+        "null_m_bin"
+      ],
+      "description": "Bin quality Q=0.69 < 0.70: ineligible even with 3 groups.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "0.69",
+          "contradiction": "0",
+          "utilization_u": "0.5",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "0.69",
+          "contradiction": "0",
+          "utilization_u": "0.5",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "0.69",
+          "contradiction": "0",
+          "utilization_u": "0.5",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "1.000000000000",
+        "m": "0.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.500000000000",
+        "u_m": "0.500000000000",
+        "u_e": "0.500000000000",
+        "overall_uncertainty": "0.500000000000",
+        "confidence_p": "0.500000000000",
+        "confidence_m": "0.500000000000",
+        "confidence_e": "0.500000000000",
+        "selected_m_bin": null,
+        "m_bin_evidence_count": null,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-018-m-quality-boundary-hand",
+      "case_type": [
+        "hand_calculated",
+        "bin_boundary"
+      ],
+      "description": "Bin quality exactly Q=0.70 is eligible: M = 0.5*1 = 0.5.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.5",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "0.70",
+          "contradiction": "0",
+          "utilization_u": "0.5",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.25",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "0.70",
+          "contradiction": "0",
+          "utilization_u": "0.5",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.25",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "0.70",
+          "contradiction": "0",
+          "utilization_u": "0.5",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "derivation": "reliabilities 0.5/0.25/0.25 give exact local weights 0.5/0.25/0.25; Q = 0.70*(1.0) = 0.70 meets the gate exactly; S = 1; M = 0.5*1 = 0.5 exactly.",
+      "expected": {
+        "p": "1.000000000000",
+        "m": "0.500000000000",
+        "e": "0.934579439252",
+        "u_p": "0.707106781187",
+        "u_m": "0.707106781187",
+        "u_e": "0.707106781187",
+        "overall_uncertainty": "0.707106781187",
+        "confidence_p": "0.292893218813",
+        "confidence_m": "0.292893218813",
+        "confidence_e": "0.292893218813",
+        "selected_m_bin": "0.5",
+        "m_bin_evidence_count": 3,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.801335247026",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-019-m-tie-smaller-u-hand",
+      "case_type": [
+        "hand_calculated",
+        "bin_boundary"
+      ],
+      "description": "Bins u=0.8 (S=0.5) and u=0.4 (S=1.0) tie at 0.4: the smaller u wins.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.5",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "0.5",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.8",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.25",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "0.5",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.8",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.25",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "0.5",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.8",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0011",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0011",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0011",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.5",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.4",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0012",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0012",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0012",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.25",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.4",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0013",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0013",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0013",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.25",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.4",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "derivation": "exact local weights 0.5/0.25/0.25 in both bins; u*S: 0.8*0.5 = 0.4 and 0.4*1.0 = 0.4; the exact tie resolves to the smaller u=0.4.",
+      "expected": {
+        "p": "1.000000000000",
+        "m": "0.400000000000",
+        "e": "0.905886210854",
+        "u_p": "0.577350269190",
+        "u_m": "0.577350269190",
+        "u_e": "0.577350269190",
+        "overall_uncertainty": "0.577350269190",
+        "confidence_p": "0.422649730810",
+        "confidence_m": "0.422649730810",
+        "confidence_e": "0.422649730810",
+        "selected_m_bin": "0.4",
+        "m_bin_evidence_count": 3,
+        "professional_level": 3,
+        "promotable": false,
+        "g": "0.744788096906",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-020-m-higher-u-wins",
+      "case_type": [
+        "m_bin_local_denominator"
+      ],
+      "description": "Bins u=0.4 (S=1, value 0.4) and u=0.8 (S=0.6, value 0.48): u=0.8 wins.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.5",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.4",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.25",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.4",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.25",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.4",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0011",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0011",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0011",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.5",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "0.6",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.8",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0012",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0012",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0012",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.25",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "0.6",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.8",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0013",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0013",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0013",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.25",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "0.6",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.8",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "1.000000000000",
+        "m": "0.480000000000",
+        "e": "0.915050913656",
+        "u_p": "0.577350269190",
+        "u_m": "0.577350269190",
+        "u_e": "0.577350269190",
+        "overall_uncertainty": "0.577350269190",
+        "confidence_p": "0.422649730810",
+        "confidence_m": "0.422649730810",
+        "confidence_e": "0.422649730810",
+        "selected_m_bin": "0.8",
+        "m_bin_evidence_count": 3,
+        "professional_level": 3,
+        "promotable": false,
+        "g": "0.788245360098",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-021-m-zero-local-weight-bin",
+      "case_type": [
+        "all_zero_reliability",
+        "m_bin_local_denominator"
+      ],
+      "description": "Bin u=0.5 has zero local weight (all reliability 0); bin u=0.9 stands alone.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.5",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.5",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.5",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0011",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0011",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0011",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.9",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0012",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0012",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0012",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.9",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0013",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0013",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0013",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.9",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "1.000000000000",
+        "m": "0.900000000000",
+        "e": "0.934579439252",
+        "u_p": "0.500000000000",
+        "u_m": "0.500000000000",
+        "u_e": "0.500000000000",
+        "overall_uncertainty": "0.500000000000",
+        "confidence_p": "0.500000000000",
+        "confidence_m": "0.500000000000",
+        "confidence_e": "0.500000000000",
+        "selected_m_bin": "0.9",
+        "m_bin_evidence_count": 3,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.955863762059",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 3,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-022-m-correlated-below-threshold",
+      "case_type": [
+        "correlated_groups",
+        "null_m_bin"
+      ],
+      "description": "Bin u=0.7 has 5 items but only 2 independence groups: ineligible. Bin u=0.3 with 3 independent items yields M=0.3.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "cluster-x",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.7",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "cluster-x",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.7",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "cluster-x",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.7",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0004",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0004",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "cluster-y",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.7",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0005",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0005",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "cluster-y",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.7",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0011",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0011",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0011",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.3",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0012",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0012",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0012",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.3",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0013",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0013",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0013",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.3",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "1.000000000000",
+        "m": "0.300000000000",
+        "e": "0.934579439252",
+        "u_p": "0.374076529857",
+        "u_m": "0.374076529857",
+        "u_e": "0.374076529857",
+        "overall_uncertainty": "0.374076529857",
+        "confidence_p": "0.625923470143",
+        "confidence_m": "0.625923470143",
+        "confidence_e": "0.625923470143",
+        "selected_m_bin": "0.3",
+        "m_bin_evidence_count": 3,
+        "professional_level": 3,
+        "promotable": false,
+        "g": "0.687479291745",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-023-e-units-saturation-hand",
+      "case_type": [
+        "hand_calculated",
+        "e_units"
+      ],
+      "description": "All three cost terms saturate at the min(2,...) cap: cost=2.0, e=1/3.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 2500,
+          "compute_ms": 3000,
+          "output_chars": 10000
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 2500,
+          "compute_ms": 3000,
+          "output_chars": 10000
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 2500,
+          "compute_ms": 3000,
+          "output_chars": 10000
+        }
+      ],
+      "derivation": "cost = 0.4*min(2,2.5) + 0.4*min(2,2.5) + 0.2*min(2,3) = 0.8+0.8+0.4 = 2.0; benefit=1; e = 1/3; E = 1/3.",
+      "expected": {
+        "p": "1.000000000000",
+        "m": "1.000000000000",
+        "e": "0.333333333333",
+        "u_p": "0.500000000000",
+        "u_m": "0.500000000000",
+        "u_e": "0.500000000000",
+        "overall_uncertainty": "0.500000000000",
+        "confidence_p": "0.500000000000",
+        "confidence_m": "0.500000000000",
+        "confidence_e": "0.500000000000",
+        "selected_m_bin": "1.0",
+        "m_bin_evidence_count": 3,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.802741561760",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-024-e-zero-benefit",
+      "case_type": [
+        "e_units",
+        "bounds"
+      ],
+      "description": "successful_use=0 gives benefit 0 and e_j=0; E=0 with nonzero total weight.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "0",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "0",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "0",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "1.000000000000",
+        "m": "0.000000000000",
+        "e": "0.000000000000",
+        "u_p": "0.500000000000",
+        "u_m": "0.500000000000",
+        "u_e": "0.500000000000",
+        "overall_uncertainty": "0.500000000000",
+        "confidence_p": "0.500000000000",
+        "confidence_m": "0.500000000000",
+        "confidence_e": "0.500000000000",
+        "selected_m_bin": "1.0",
+        "m_bin_evidence_count": 3,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-025-permutation-replay-canonical",
+      "case_type": [
+        "permutation_replay",
+        "deterministic_replay"
+      ],
+      "description": "Mixed ages, tags, groups, depths, and bins; canonical ordering must make any input permutation byte-identical at 12 decimals.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [
+        "a",
+        "b"
+      ],
+      "node_depths": {
+        "n1": 0,
+        "n-child": 1
+      },
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-21T00:00:00+00:00",
+          "context_tags": [
+            "a"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.6",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n-child",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-09-09T00:00:00+00:00",
+          "context_tags": [
+            "a",
+            "b"
+          ],
+          "independence_key": "cluster-1",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.6",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n-child",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "b"
+          ],
+          "independence_key": "cluster-1",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.6",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0004",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0004",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0004",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.5",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "0.8",
+          "contradiction": "0",
+          "utilization_u": "0.9",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0005",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0005",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0005",
+          "outcome": "-0.5",
+          "correctness": "0.2",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "0.5",
+          "quality_at_use": "0.8",
+          "contradiction": "0.4",
+          "utilization_u": "0.9",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0006",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0006",
+          "observed_at": "2026-04-07T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0006",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "0.8",
+          "contradiction": "0",
+          "utilization_u": "0.9",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "1.000000000000",
+        "m": "0.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.722562086038",
+        "u_m": "0.752008696008",
+        "u_e": "0.802603428390",
+        "overall_uncertainty": "0.802603428390",
+        "confidence_p": "0.277437913962",
+        "confidence_m": "0.247991303992",
+        "confidence_e": "0.197396571610",
+        "selected_m_bin": null,
+        "m_bin_evidence_count": null,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 3,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-026-p-below-0.30-level-1",
+      "case_type": [
+        "p_gate",
+        "level_caps"
+      ],
+      "description": "P=0.20 is below 0.30: level 1 and G=0 even with three groups.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "-0.2",
+          "correctness": "0",
+          "reliability": "1",
+          "reproducibility": "0",
+          "scope_fit": "0",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "-0.2",
+          "correctness": "0",
+          "reliability": "1",
+          "reproducibility": "0",
+          "scope_fit": "0",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "-0.2",
+          "correctness": "0",
+          "reliability": "1",
+          "reproducibility": "0",
+          "scope_fit": "0",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "0.200000000000",
+        "m": "1.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.500000000000",
+        "u_m": "0.500000000000",
+        "u_e": "0.500000000000",
+        "overall_uncertainty": "0.500000000000",
+        "confidence_p": "0.500000000000",
+        "confidence_m": "0.500000000000",
+        "confidence_e": "0.500000000000",
+        "selected_m_bin": "1.0",
+        "m_bin_evidence_count": 3,
+        "professional_level": 1,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-027-p-exactly-0.30-level-2",
+      "case_type": [
+        "level_caps",
+        "bin_boundary"
+      ],
+      "description": "P exactly 0.30 starts at level 2.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "-1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "0",
+          "scope_fit": "0",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "-1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "0",
+          "scope_fit": "0",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "-1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "0",
+          "scope_fit": "0",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0004",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0004",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0004",
+          "outcome": "-1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "0",
+          "scope_fit": "0",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0005",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0005",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0005",
+          "outcome": "-1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "0",
+          "scope_fit": "0",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "0.300000000000",
+        "m": "1.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.408248290464",
+        "u_m": "0.408248290464",
+        "u_e": "0.408248290464",
+        "overall_uncertainty": "0.408248290464",
+        "confidence_p": "0.591751709536",
+        "confidence_m": "0.591751709536",
+        "confidence_e": "0.591751709536",
+        "selected_m_bin": "1.0",
+        "m_bin_evidence_count": 5,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-028-p-exactly-0.50-level-3",
+      "case_type": [
+        "level_caps",
+        "bin_boundary"
+      ],
+      "description": "P exactly 0.50 starts at level 3 (six groups, moderate uncertainty).",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "-0.2",
+          "correctness": "1",
+          "reliability": "0.5",
+          "reproducibility": "0.5",
+          "scope_fit": "0",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "-0.2",
+          "correctness": "1",
+          "reliability": "0.5",
+          "reproducibility": "0.5",
+          "scope_fit": "0",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "-0.2",
+          "correctness": "1",
+          "reliability": "0.25",
+          "reproducibility": "0.5",
+          "scope_fit": "0",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0004",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0004",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0004",
+          "outcome": "-0.2",
+          "correctness": "1",
+          "reliability": "0.25",
+          "reproducibility": "0.5",
+          "scope_fit": "0",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0005",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0005",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0005",
+          "outcome": "-0.2",
+          "correctness": "1",
+          "reliability": "0.25",
+          "reproducibility": "0.5",
+          "scope_fit": "0",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0006",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0006",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0006",
+          "outcome": "-0.2",
+          "correctness": "1",
+          "reliability": "0.25",
+          "reproducibility": "0.5",
+          "scope_fit": "0",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "0.500000000000",
+        "m": "1.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.577350269190",
+        "u_m": "0.577350269190",
+        "u_e": "0.577350269190",
+        "overall_uncertainty": "0.577350269190",
+        "confidence_p": "0.422649730810",
+        "confidence_m": "0.422649730810",
+        "confidence_e": "0.422649730810",
+        "selected_m_bin": "1.0",
+        "m_bin_evidence_count": 6,
+        "professional_level": 3,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-029-p-exactly-0.70-level-4-g-boundary",
+      "case_type": [
+        "level_caps",
+        "bin_boundary",
+        "p_gate"
+      ],
+      "description": "P exactly 0.70 starts at level 4 and G is computed (gate is P<0.70); 12 groups with U_P<=0.50 make the node promotable.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "-0.2",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "0.5",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.5",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "-0.2",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "0.5",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.5",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "-0.2",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "0.5",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.5",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0004",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0004",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0004",
+          "outcome": "-0.2",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "0.5",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.5",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0005",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0005",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0005",
+          "outcome": "-0.2",
+          "correctness": "1",
+          "reliability": "0.5",
+          "reproducibility": "0.5",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.5",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0006",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0006",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0006",
+          "outcome": "-0.2",
+          "correctness": "1",
+          "reliability": "0.5",
+          "reproducibility": "0.5",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.5",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0007",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0007",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0007",
+          "outcome": "-0.2",
+          "correctness": "1",
+          "reliability": "0.5",
+          "reproducibility": "0.5",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.5",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0008",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0008",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0008",
+          "outcome": "-0.2",
+          "correctness": "1",
+          "reliability": "0.5",
+          "reproducibility": "0.5",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.5",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0009",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0009",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0009",
+          "outcome": "-0.2",
+          "correctness": "1",
+          "reliability": "0.5",
+          "reproducibility": "0.5",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.5",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0010",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0010",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0010",
+          "outcome": "-0.2",
+          "correctness": "1",
+          "reliability": "0.5",
+          "reproducibility": "0.5",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.5",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0011",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0011",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0011",
+          "outcome": "-0.2",
+          "correctness": "1",
+          "reliability": "0.5",
+          "reproducibility": "0.5",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.5",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0012",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0012",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0012",
+          "outcome": "-0.2",
+          "correctness": "1",
+          "reliability": "0.5",
+          "reproducibility": "0.5",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.5",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "0.700000000000",
+        "m": "1.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.333333333333",
+        "u_m": "0.333333333333",
+        "u_e": "0.333333333333",
+        "overall_uncertainty": "0.333333333333",
+        "confidence_p": "0.666666666667",
+        "confidence_m": "0.666666666667",
+        "confidence_e": "0.666666666667",
+        "selected_m_bin": "1.0",
+        "m_bin_evidence_count": 12,
+        "professional_level": 4,
+        "promotable": true,
+        "g": "0.825414824317",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-030-p-exactly-0.85-level-5-hand",
+      "case_type": [
+        "hand_calculated",
+        "level_caps",
+        "bin_boundary"
+      ],
+      "description": "P exactly 0.85 with 20 independent groups, reliability 0.9: level 5, promotable, G>0.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0004",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0004",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0004",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0005",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0005",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0005",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0006",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0006",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0006",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0007",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0007",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0007",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0008",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0008",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0008",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0009",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0009",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0009",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0010",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0010",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0010",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0011",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0011",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0011",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0012",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0012",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0012",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0013",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0013",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0013",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0014",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0014",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0014",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0015",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0015",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0015",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0016",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0016",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0016",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0017",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0017",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0017",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0018",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0018",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0018",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0019",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0019",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0019",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0020",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0020",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0020",
+          "outcome": "1",
+          "correctness": "0.5",
+          "reliability": "0.9",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "derivation": "p_j = 0.30*0.5 + 0.25 + 0.20 + 0.15 + 0.10 = 0.85 exactly. sum(q_P) = 20*0.9 = 18, U_P = 1/sqrt(19) <= 0.30, so no caps apply: level 5. 20 >= 10 groups and U_P <= 0.50: promotable. M=1 (bin 1.0, S=1, Q=1); E = 100/107; G = 0.85^0.5 * 1 * (100/107)^0.2 > 0.",
+      "expected": {
+        "p": "0.850000000000",
+        "m": "1.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.229415733871",
+        "u_m": "0.229415733871",
+        "u_e": "0.229415733871",
+        "overall_uncertainty": "0.229415733871",
+        "confidence_p": "0.770584266129",
+        "confidence_m": "0.770584266129",
+        "confidence_e": "0.770584266129",
+        "selected_m_bin": "1.0",
+        "m_bin_evidence_count": 20,
+        "professional_level": 5,
+        "promotable": true,
+        "g": "0.909562836415",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-031-uncertainty-cap-at-4",
+      "case_type": [
+        "level_caps"
+      ],
+      "description": "20 groups with reliability 0.4: sum(q_P)=8, U_P=1/3>0.30 caps level at 4 despite P=0.90.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0004",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0004",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0004",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0005",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0005",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0005",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0006",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0006",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0006",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0007",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0007",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0007",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0008",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0008",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0008",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0009",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0009",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0009",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0010",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0010",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0010",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0011",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0011",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0011",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0012",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0012",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0012",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0013",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0013",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0013",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0014",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0014",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0014",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0015",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0015",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0015",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0016",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0016",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0016",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0017",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0017",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0017",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0018",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0018",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0018",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0019",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0019",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0019",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0020",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0020",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0020",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0.4",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "0.900000000000",
+        "m": "1.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.333333333333",
+        "u_m": "0.333333333333",
+        "u_e": "0.333333333333",
+        "overall_uncertainty": "0.333333333333",
+        "confidence_p": "0.666666666667",
+        "confidence_m": "0.666666666667",
+        "confidence_e": "0.666666666667",
+        "selected_m_bin": "1.0",
+        "m_bin_evidence_count": 20,
+        "professional_level": 4,
+        "promotable": true,
+        "g": "0.935932437261",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-032-group-cap-9-promotion-blocked",
+      "case_type": [
+        "level_caps",
+        "p_gate"
+      ],
+      "description": "9 independence groups (<10) block promotion and cap level at 3 even with P=1.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0004",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0004",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0004",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0005",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0005",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0005",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0006",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0006",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0006",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0007",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0007",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0007",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0008",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0008",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0008",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0009",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0009",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0009",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "1.000000000000",
+        "m": "1.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.316227766017",
+        "u_m": "0.316227766017",
+        "u_e": "0.316227766017",
+        "overall_uncertainty": "0.316227766017",
+        "confidence_p": "0.683772233983",
+        "confidence_m": "0.683772233983",
+        "confidence_e": "0.683772233983",
+        "selected_m_bin": "1.0",
+        "m_bin_evidence_count": 9,
+        "professional_level": 3,
+        "promotable": false,
+        "g": "0.986559412592",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-033-g-zero-below-p-gate-hand",
+      "case_type": [
+        "hand_calculated",
+        "p_gate"
+      ],
+      "description": "P=0.69 < 0.70 forces G=0 and blocks promotion even with M=1 and high E.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "0",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "0",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "0",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0004",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0004",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0004",
+          "outcome": "1",
+          "correctness": "0",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0005",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0005",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0005",
+          "outcome": "1",
+          "correctness": "0",
+          "reliability": "0.5",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0006",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0006",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0006",
+          "outcome": "1",
+          "correctness": "0",
+          "reliability": "0.5",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0007",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0007",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0007",
+          "outcome": "1",
+          "correctness": "0",
+          "reliability": "0.5",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0008",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0008",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0008",
+          "outcome": "1",
+          "correctness": "0",
+          "reliability": "0.5",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0009",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0009",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0009",
+          "outcome": "1",
+          "correctness": "0",
+          "reliability": "0.5",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0010",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0010",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0010",
+          "outcome": "1",
+          "correctness": "0",
+          "reliability": "0.5",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0011",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0011",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0011",
+          "outcome": "1",
+          "correctness": "0",
+          "reliability": "0.5",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0012",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0012",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0012",
+          "outcome": "1",
+          "correctness": "0",
+          "reliability": "0.5",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0.1",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "derivation": "p_j = 0 + 0.25 + 0.20 + 0.15 + 0.10*0.9 = 0.69 exactly; exact weights (4x reliability 1, 8x 0.5, total 8) give P = 0.69 exactly; 12 groups, U_P = 1/3 <= 0.50, but P<0.70 gives G=0 and promotable=false.",
+      "expected": {
+        "p": "0.690000000000",
+        "m": "1.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.333333333333",
+        "u_m": "0.333333333333",
+        "u_e": "0.333333333333",
+        "overall_uncertainty": "0.333333333333",
+        "confidence_p": "0.666666666667",
+        "confidence_m": "0.666666666667",
+        "confidence_e": "0.666666666667",
+        "selected_m_bin": "1.0",
+        "m_bin_evidence_count": 12,
+        "professional_level": 3,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-035-mixed-exclusion-counts",
+      "case_type": [
+        "zero_total_weight",
+        "disjoint_context"
+      ],
+      "description": "One item per exclusion class plus three valid items: counts 1/1/1/1.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [
+        "python"
+      ],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "0",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "unrelated"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0004",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0004",
+          "observed_at": "2026-10-26T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0004",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0005",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0005",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0005",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0006",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0006",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0006",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0007",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0007",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0007",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "1.000000000000",
+        "m": "1.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.500000000000",
+        "u_m": "0.500000000000",
+        "u_e": "0.500000000000",
+        "overall_uncertainty": "0.500000000000",
+        "confidence_p": "0.500000000000",
+        "confidence_m": "0.500000000000",
+        "confidence_e": "0.500000000000",
+        "selected_m_bin": "1.0",
+        "m_bin_evidence_count": 3,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.986559412592",
+        "exclusion_counts": {
+          "missing_provenance": 1,
+          "disjoint_context": 1,
+          "zero_reliability": 1,
+          "other_exclusions": 1
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-036-invalid-utilization-bin",
+      "case_type": [
+        "zero_total_weight"
+      ],
+      "description": "utilization_u=0.25 is outside {0.1,...,1.0}: invalid, other exclusion.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.25",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "1.000000000000",
+        "m": "0.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.577350269190",
+        "u_m": "0.577350269190",
+        "u_e": "0.577350269190",
+        "overall_uncertainty": "0.577350269190",
+        "confidence_p": "0.422649730810",
+        "confidence_m": "0.422649730810",
+        "confidence_e": "0.422649730810",
+        "selected_m_bin": null,
+        "m_bin_evidence_count": null,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 1
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-037-empty-task-denominator",
+      "case_type": [
+        "zero_total_weight"
+      ],
+      "description": "task_coverage=null marks an empty rubric denominator: the item is invalid.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0001",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": null,
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0002",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "1.0",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "1.000000000000",
+        "m": "0.000000000000",
+        "e": "0.934579439252",
+        "u_p": "0.577350269190",
+        "u_m": "0.577350269190",
+        "u_e": "0.577350269190",
+        "overall_uncertainty": "0.577350269190",
+        "confidence_p": "0.422649730810",
+        "confidence_m": "0.422649730810",
+        "confidence_e": "0.422649730810",
+        "selected_m_bin": null,
+        "m_bin_evidence_count": null,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.000000000000",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 1
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    },
+    {
+      "id": "score-038-m-bin-local-denominator-correlated",
+      "case_type": [
+        "m_bin_local_denominator",
+        "correlated_groups",
+        "deterministic_replay"
+      ],
+      "description": "Local normalization inside bin u=0.6 uses post-dedup q values with independence 1/sqrt(2) for the correlated pair: the bin denominator is 2*(1/sqrt(2)) + 1 + 1, not a raw item count.",
+      "at": "2026-10-24T00:00:00+00:00",
+      "query_context_tags": [],
+      "node_depths": {},
+      "evidence": [
+        {
+          "evidence_id": "e0001",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0001",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "pair",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "0.5",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.6",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0002",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0002",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "pair",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "0.5",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.6",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0003",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0003",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0003",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "1",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.6",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        },
+        {
+          "evidence_id": "e0004",
+          "node_id": "n1",
+          "source_uri": "soul://corpus/e0004",
+          "observed_at": "2026-10-24T00:00:00+00:00",
+          "context_tags": [
+            "python"
+          ],
+          "independence_key": "ik-e0004",
+          "outcome": "1",
+          "correctness": "1",
+          "reliability": "1",
+          "reproducibility": "1",
+          "scope_fit": "1",
+          "successful_use": "1",
+          "task_coverage": "0.75",
+          "quality_at_use": "1",
+          "contradiction": "0",
+          "utilization_u": "0.6",
+          "latency_ms": 100,
+          "compute_ms": 100,
+          "output_chars": 100
+        }
+      ],
+      "expected": {
+        "p": "1.000000000000",
+        "m": "0.431801948466",
+        "e": "0.904967349510",
+        "u_p": "0.475963149478",
+        "u_m": "0.475963149478",
+        "u_e": "0.475963149478",
+        "overall_uncertainty": "0.475963149478",
+        "confidence_p": "0.524036850522",
+        "confidence_m": "0.524036850522",
+        "confidence_e": "0.524036850522",
+        "selected_m_bin": "0.6",
+        "m_bin_evidence_count": 4,
+        "professional_level": 2,
+        "promotable": false,
+        "g": "0.761924539818",
+        "exclusion_counts": {
+          "missing_provenance": 0,
+          "disjoint_context": 0,
+          "zero_reliability": 0,
+          "other_exclusions": 0
+        },
+        "zero_total_weight": {
+          "p": {
+            "zero": false,
+            "reason": null
+          },
+          "m": {
+            "zero": false,
+            "reason": null
+          },
+          "e": {
+            "zero": false,
+            "reason": null
+          }
+        }
+      }
+    }
+  ]
+}
