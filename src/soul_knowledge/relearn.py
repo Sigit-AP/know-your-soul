@@ -226,6 +226,29 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _reopen_store_in_place(store: EventStore, *, busy_timeout_ms: int) -> None:
+    """Reopen a closed shared ``EventStore`` against its (restored) db file.
+
+    Relearn rollback must close the database file before byte-replacing it,
+    but the store object is *shared*: the service, projector, audit log and
+    lifecycle engines all hold the same instance. Rebinding a new EventStore
+    on the engine alone strands every other holder on a closed handle (W3-1:
+    the rollback commits durably, then an untyped ``sqlite3.ProgrammingError``
+    wedges the whole service). Reopening in place keeps the one shared object
+    valid for every holder — including references held outside this module.
+
+    A fresh EventStore performs the real connect (pragmas + migrations); only
+    its connection is transplanted, so the connection recipe stays owned by
+    ``store.py``. Caller must hold ``store._lock``.
+    """
+    fresh = EventStore(
+        store.db_path,
+        migrations_dir=store._migrations_dir,  # noqa: SLF001 - same-process handle surgery
+        busy_timeout_ms=busy_timeout_ms,
+    )
+    store._conn = fresh._conn  # noqa: SLF001 - transplant: the shared object becomes valid again
+
+
 class RelearnEngine:
     """Hash-scoped relearn lifecycle on top of the source registry."""
 
@@ -726,51 +749,58 @@ class RelearnEngine:
             raise UnknownRelearn(f"no relearn record for {relearn_id!r}")
 
         db_path = Path(self._store.db_path)
-        self._store.close()
-        try:
-            for suffix in ("-wal", "-shm"):
-                side = Path(str(db_path) + suffix)
-                if side.exists():
-                    side.unlink()
-            staged = db_path.with_name(db_path.name + ".restore-tmp")
-            shutil.copyfile(backup_dir / "soul.db", staged)
-            sqlite_artifact = next(a for a in manifest.artifacts if a.kind == "sqlite")
-            if _sha256_file(staged) != sqlite_artifact.sha256:
-                staged.unlink()
-                raise RollbackVerificationError("restored SQLite bytes do not hash-match the pre-relearn backup")
-            os.replace(staged, db_path)
-            restored_db_sha256 = _sha256_file(db_path)
-            if restored_db_sha256 != sqlite_artifact.sha256:  # pragma: no cover - defensive
-                raise RollbackVerificationError("restored database hash mismatch after rename")
+        store = self._store
+        with store.read() as conn:
+            busy_timeout_ms = int(conn.execute("PRAGMA busy_timeout").fetchone()[0])
+        # Hold the store lock across close → byte-replace → reopen so a
+        # concurrent holder blocks for the swap window instead of dying on a
+        # closed handle (RLock: close() and the transplant re-acquire it
+        # reentrantly). The store object itself is never replaced — every
+        # holder of the shared instance stays valid (W3-1).
+        with store._lock:  # noqa: SLF001 - same-process handle surgery
+            store.close()
+            try:
+                for suffix in ("-wal", "-shm"):
+                    side = Path(str(db_path) + suffix)
+                    if side.exists():
+                        side.unlink()
+                staged = db_path.with_name(db_path.name + ".restore-tmp")
+                shutil.copyfile(backup_dir / "soul.db", staged)
+                sqlite_artifact = next(a for a in manifest.artifacts if a.kind == "sqlite")
+                if _sha256_file(staged) != sqlite_artifact.sha256:
+                    staged.unlink()
+                    raise RollbackVerificationError("restored SQLite bytes do not hash-match the pre-relearn backup")
+                os.replace(staged, db_path)
+                restored_db_sha256 = _sha256_file(db_path)
+                if restored_db_sha256 != sqlite_artifact.sha256:  # pragma: no cover - defensive
+                    raise RollbackVerificationError("restored database hash mismatch after rename")
 
-            if self._generation_dir is not None and (backup_dir / "generation").exists():
-                pointer = (backup_dir / "CURRENT").read_text(encoding="utf-8").strip()
-                target = self._generation_dir / "generations" / pointer
-                if target.exists():
-                    shutil.rmtree(target)
-                shutil.copytree(backup_dir / "generation", target)
-                for artifact in manifest.artifacts:
-                    if artifact.kind != "generation_file":
-                        continue
-                    restored = target / artifact.path
-                    if not restored.exists() or _sha256_file(restored) != artifact.sha256:
-                        raise RollbackVerificationError(
-                            f"restored generation file {artifact.path!r} does not hash-match the backup"
-                        )
-                live_pointer = self._generation_dir / "CURRENT"
-                shutil.copyfile(backup_dir / "CURRENT", live_pointer)
-                pointer_artifact = next((a for a in manifest.artifacts if a.kind == "current_pointer"), None)
-                if pointer_artifact is not None and _sha256_file(live_pointer) != pointer_artifact.sha256:
-                    raise RollbackVerificationError("restored CURRENT pointer does not hash-match the backup")
-        except Exception:
-            self._store = EventStore(db_path)
-            self._registry = SourceRegistry(self._store)
-            raise
-        (backup_dir / "ROLLED_BACK").write_text(_utcnow().isoformat(), encoding="utf-8")
+                if self._generation_dir is not None and (backup_dir / "generation").exists():
+                    pointer = (backup_dir / "CURRENT").read_text(encoding="utf-8").strip()
+                    target = self._generation_dir / "generations" / pointer
+                    if target.exists():
+                        shutil.rmtree(target)
+                    shutil.copytree(backup_dir / "generation", target)
+                    for artifact in manifest.artifacts:
+                        if artifact.kind != "generation_file":
+                            continue
+                        restored = target / artifact.path
+                        if not restored.exists() or _sha256_file(restored) != artifact.sha256:
+                            raise RollbackVerificationError(
+                                f"restored generation file {artifact.path!r} does not hash-match the backup"
+                            )
+                    live_pointer = self._generation_dir / "CURRENT"
+                    shutil.copyfile(backup_dir / "CURRENT", live_pointer)
+                    pointer_artifact = next((a for a in manifest.artifacts if a.kind == "current_pointer"), None)
+                    if pointer_artifact is not None and _sha256_file(live_pointer) != pointer_artifact.sha256:
+                        raise RollbackVerificationError("restored CURRENT pointer does not hash-match the backup")
+            except Exception:
+                _reopen_store_in_place(store, busy_timeout_ms=busy_timeout_ms)
+                raise
+            (backup_dir / "ROLLED_BACK").write_text(_utcnow().isoformat(), encoding="utf-8")
+            _reopen_store_in_place(store, busy_timeout_ms=busy_timeout_ms)
 
-        self._store = EventStore(db_path)
-        self._registry = SourceRegistry(self._store)
-        audit = AuditLog(self._store)
+        audit = AuditLog(store)
         invocation = Invocation.create(
             "knowledge.relearn_rollback",
             hashlib.sha256(canonical_json({"relearn_rollback": relearn_id}).encode()).hexdigest(),
