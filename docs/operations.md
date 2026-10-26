@@ -1,9 +1,9 @@
 # Operations — soul-knowledge
 
-Task 9 core. This document covers day-2 operation of the store, projection and
+This document covers day-2 operation of the store, projection and
 API surfaces: observability, health/readiness, backup/restore, projection
-recovery, and the security posture. The HTTP/Unix-socket server wiring lands in
-Task 7; every policy it needs already exists here as a pure function.
+recovery, and the security posture. The HTTP/Unix-socket server
+(`http_api.py`) builds on the pure policies documented here.
 
 ## Security posture
 
@@ -18,7 +18,7 @@ Least privilege by default (`src/soul_knowledge/security.py`):
   the Host allowlist is enforced on *every* request, loopback included, and an
   empty allowlist fails closed. Beyond loopback a configured API key is
   mandatory (compared via `hmac.compare_digest` over SHA-256 digests). The
-  `make_host_allowlist` / `make_request_authorizer` factories are the Task 7
+  `make_host_allowlist` / `make_request_authorizer` factories are the server
   middleware seam.
 - **Payload sanitization** — `sanitize_text` strips every Unicode format
   character (bidi controls, zero-width characters, BOM) and every control
@@ -100,7 +100,17 @@ schedule; keep receipts with the backup so rollback can assert the chain head.
 
 ## Container
 
-`deploy/Dockerfile`: two-stage build on `python:3.14-slim`, locked dependency
-install at build time, non-root `soul` user, `/data` volume for the store and
-projections, no runtime network requirement. The `soul-knowledge` entrypoint
-(console script) is delivered by Task 7's `cli.py`.
+`deploy/Dockerfile`: two-stage build on `python:3.14-slim`, non-root `soul`
+user, `/data` volume for the store and projections, no runtime network
+requirement. Dependency installs differ by surface, deliberately:
+
+- **Local / CI reproduction** uses `uv sync --frozen`, which installs the
+  bit-exact locked environment from `uv.lock`.
+- **The container build** runs `pip install .`, which resolves dependency
+  ranges from `pyproject.toml` — pip does not read `uv.lock` (see the
+  Dockerfile header note). For a bit-exact locked container build, generate a
+  constraints file from the lock (`uv export`) or install with uv; the
+  current image accepts the pyproject ranges by design.
+
+The `soul-knowledge` entrypoint (console script, `cli.py`) is installed by
+the build stage.

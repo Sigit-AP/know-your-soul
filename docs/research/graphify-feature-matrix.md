@@ -20,6 +20,7 @@ spec: `docs/superpowers/specs/2026-10-24-superpower-knowledge-soul-design.md` se
 | Coverage ceiling before any implementation | 37/40 = **92.5%** |
 | Verified adopted coverage at Task 1 | **0/40 = 0%** — no adapter exists yet |
 | Verified adopted coverage at Task 3 | **34/40 = 85%** — rows 1–22, 24, 26–35 and 39 pass their named contract tests (Task 3). Row 23's named test passes, but its residual (whole-set durability / power-loss recovery, owner Task 9) stays open, so the row is not counted |
+| Verified adopted coverage at release (2026-10-26, HEAD `51565d3`) | **40/40 = 100%** — all 40 rows' named contract tests pass (`TestGraphifyCoverageGate` re-runs all 40 named tests fresh: 3 passed, exit 0, 2026-10-26); rows 22/23/38 residuals closed (see `docs/verification.md` §3) |
 | Release gate (spec acceptance criterion 9) | ≥ 90% (≥ 36/40) with exclusions and calculation shown |
 
 Rules that bound every later coverage claim:

@@ -20,11 +20,14 @@ source still matches the frozen manifest.
 
 ## Commands
 
+Run from the repository root with the locked environment (`uv sync --frozen`
+first, or prefix with `uv run`):
+
 ```bash
-python bench/run.py freeze   # re-snapshot the pinned corpus + write manifest
-python bench/run.py verify   # frozen-corpus integrity; live-source drift report
-python bench/run.py check    # no-system self-checks (exit 0/1)
-python bench/run.py run [--repeats N]   # paired benchmark
+uv run python bench/run.py freeze   # re-snapshot the pinned corpus + write manifest
+uv run python bench/run.py verify   # frozen-corpus integrity; live-source drift report
+uv run python bench/run.py check    # no-system self-checks (exit 0/1)
+uv run python bench/run.py run [--repeats N]   # paired benchmark
 ```
 
 ## The paired measurement
@@ -101,16 +104,11 @@ silently accepted or rejected on floor grounds.
 | 0 | all checks/cases pass |
 | 1 | a check failed, or at least one case verdict was `rejected` |
 | 2 | usage error |
-| 3 | **skipped** — integration pending; a `skipped` ledger was still written |
 
-## Integration skip-gate
-
-`run` measures the *whole* system, so it gates on the three access-path
-adapters (`soul_knowledge.cli`, `soul_knowledge.http_api`,
-`soul_knowledge.mcp_server`). While any is missing, `run` exits 3 and writes a
-ledger with `status: "skipped"` and per-case `pending-integration`. The gate
-opens automatically when Tasks 7-8 land — nothing in this directory needs
-editing at integration.
+`run` measures the whole system through the three access-path adapters
+(`soul_knowledge.cli`, `soul_knowledge.http_api`, `soul_knowledge.mcp_server`)
+and exits **0 with 24/24 cases accepted** on the frozen corpus (gate contract
+2.1.0).
 
 ## Estimator parity
 

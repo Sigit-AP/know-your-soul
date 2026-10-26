@@ -76,12 +76,12 @@ knowledge payload within 160 estimated tokens.
 ## Install and run
 
 ```bash
-uv sync                                    # pinned, locked environment (Python 3.14)
+uv sync --frozen                           # pinned, locked environment (Python 3.14)
 uv run pytest -q                           # full test suite
 uv run pyright                             # type checking
 uv run ruff check                          # lint
-python bench/run.py check                  # no-system harness self-checks
-python bench/run.py run                    # paired benchmark (exit 3 while integration is pending)
+uv run python bench/run.py check           # harness self-checks (cases, corpus, estimator parity)
+uv run python bench/run.py run             # paired benchmark (exit 0, 24/24 accepted)
 ```
 
 ## Benchmark and verification

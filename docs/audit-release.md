@@ -69,11 +69,11 @@ iterations (each with verified improvement: 4/24 → 21/24 → 23/24 → 24/24).
 Release requires **all** of:
 
 - [x] Full `pytest -q` green with no integration-pending acceptance skips
-      remaining (`632 passed, 1 skipped`, exit 0, fresh 2026-10-25 ~20:30 UTC;
-      the one skip was the external
-      Hermes-install check — **closed in the wave-3 fix round (W3-11): the
-      check now runs for real; fresh suite `690 passed, 0 skipped`, exit 0** —
-      `docs/verification.md` §1/§6).
+      remaining (fresh 2026-10-26: **`898 passed, 1 warning`, 0 skipped**,
+      exit 0 — supersedes the dated historical runs `632 passed, 1 skipped`
+      (the one skip was the external Hermes-install check) and `690 passed,
+      0 skipped` (wave-3 fix round, W3-11 closure: the check now runs for
+      real) — `docs/verification.md` §1/§6).
 - [x] Type checking (`pyright` exit 0), lint (`ruff check` exit 0), format
       (clean on all changed files; the single repo-wide `ruff format --check`
       offender is `docs/mathematics/scoring.md`, committed drift reproduced
@@ -85,10 +85,11 @@ Release requires **all** of:
       their byte-identical gate 2.0.0 ceilings; q03 vacuous-accepted with the
       explicit ledger annotation
       `vacuous: rubric unreachable under expected routing (case-design debt)`.
-      Ledger: `bench/results/ledger-20261025T202627Z.json`.
+      Ledger: `bench/results/ledger-20261026T031852Z.json` (fresh 2026-10-26;
+      supersedes `ledger-20261025T202627Z` after W3-2).
 - [x] Graphify coverage ≥ 90% of the applicable 40-feature inventory, counted
-      only from matrix rows whose owning contract tests pass (39/40 = 97.5%;
-      the three partial residuals reported explicitly in
+      only from matrix rows whose owning contract tests pass (**40/40 =
+      100%** — all three partial residuals closed; consistent with
       `docs/verification.md` §3).
 - [x] Zero open launch-blocking findings — **MET (T10-1 closed; §2)**.
 - [ ] Final commit `docs: publish verified release evidence` made only after
@@ -102,4 +103,4 @@ Release requires **all** of:
 | Release commit | `docs: publish verified release evidence` (this commit) |
 | Fast-follow items | none open (F2/F4/F5 closed in wave-1 fix round; wave-2 F4/F5/F6 closed) |
 | Track items | **All closed**: T10-2/row 23 (`71f7547`), W2-F7/F8/F9 (`eebe06e`), K1 (operator ruling: minimum stays 128), Task 1 deferred minors ×9 (`f9a3237`), external Hermes-install verification (wave-3 W3-11: real git-clean/tag-pin test, runs green on this host); wave-3 minors W3-7/W3-8(a)/W3-9/W3-11 closed by SUB-34 (`docs/recovery/wave3-ops-timeout-rubric-external.md`); case-design debt (non-blocking, ledger-annotated): q03 rubric unreachable under expected routing (vacuous-accepted), q07 ceiling feasible only via actual P7 routing vs expected P2 |
-| Unmeasured claims (explicit) | (1) NL answer quality vs the raw-corpus read — measured gap remains (mean `gap_vs_raw_read` 0.5549, ledger 202627Z); against the achievable compliant ceiling the system delivers 24/24, one of them (q03) vacuous-accepted as case-design debt, not delivered quality. (2) Latency claims limited to 5 repeats on this host (p50 median 6.43 ms, p95 median 7.43 ms). (3) ~~Hermes source-tree non-modification verified corpus-side only~~ — **now evidenced on both sides**: the install-tree check runs for real (`TestNoHermesSourceModification`, wave-3 W3-11): `/root/.hermes/hermes-agent` HEAD `bf0203a7` == `v0.22.5^{commit}`, `git status --porcelain` empty, stash empty; the test fails against a dirty synthetic tree (non-vacuous). (4) Token savings (mean 94.26%) measured against the raw-corpus baseline; they do not imply raw-read-equivalent answers while `gap_vs_raw_read` > 0. |
+| Unmeasured claims (explicit) | (1) NL answer quality vs the raw-corpus read — measured gap remains (mean `gap_vs_raw_read` 0.5549, ledger 20261026T031852Z); against the achievable compliant ceiling the system delivers 24/24, one of them (q03) vacuous-accepted as case-design debt, not delivered quality. (2) Latency claims limited to 5 repeats on this host (p50 median 14.29 ms, p95 median 20.40 ms — host-dependent, re-measured 2026-10-26). (3) ~~Hermes source-tree non-modification verified corpus-side only~~ — **now evidenced on both sides**: the install-tree check runs for real (`TestNoHermesSourceModification`, wave-3 W3-11): `/root/.hermes/hermes-agent` HEAD `bf0203a7` == `v0.22.5^{commit}`, `git status --porcelain` empty, stash empty; the test fails against a dirty synthetic tree (non-vacuous). (4) Token savings (mean 94.18%) measured against the raw-corpus baseline; they do not imply raw-read-equivalent answers while `gap_vs_raw_read` > 0. |

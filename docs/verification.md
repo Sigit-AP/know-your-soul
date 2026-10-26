@@ -23,21 +23,35 @@ Hermes-install test is now a real git-clean/tag-pin check — it **runs and
 passes** on this host; the last vacuous skip is gone). Recovery doc:
 `docs/recovery/wave3-ops-timeout-rubric-external.md`.
 
+**Update 2026-10-26 (SUB-44, HEAD `51565d3` + in-flight fix waves)**: §1/§2
+refreshed with fresh gate output after W3-2 (injective ids, `c1165b5`) and
+the final redaction residuals (`51565d3`): full suite **898 passed, 0
+skipped** (732 core + SUB-40/SUB-43 additions); bench ledger
+`20261026T031852Z` (token savings 94.18%, system 420–968 est. tokens;
+quality/ceiling means unchanged); README bench commands
+fixed to `uv run python bench/run.py …` (plain `python` fails
+`ModuleNotFoundError` outside the uv environment, audit H-1); `ruff format`
+offender count corrected to 162/163 files (§1).
+
+*Concurrency note:* these rows were measured while the SUB-40..43 fix waves
+were landing in the working tree; the tree is transiently red mid-wave
+(e.g. `uv run ruff check` and even collection can fail on another agent's
+half-landed files). The numbers above are real dated outputs from green
+windows; the coordinator's final gate run supersedes them.
+
 Gate order (plan Task 10): full `pytest -q`, type checking, lint, dependency
-audit, `python bench/run.py`, then the Graphify coverage calculation.
+audit, `uv run python bench/run.py`, then the Graphify coverage calculation.
 
 ## 1. Test suite
 
 | Gate | Command | Exit code | Evidence (tail of fresh output) | Date (UTC) |
 |------|---------|-----------|----------------------------------|------------|
-| Full test suite | `.venv/bin/pytest tests/ -q` | **0** | `632 passed, 1 skipped, 1 warning in 91.17s` | 2026-10-25 |
-| Full test suite (wave-3 fix round) | `.venv/bin/pytest tests/ -q` | **0** | `690 passed, 1 warning in 104.78s` — **0 skipped**: the external Hermes-install check now runs for real | 2026-10-25 |
-| Acceptance e2e | `.venv/bin/pytest tests/test_acceptance_e2e.py -q` | **0** | 48 passed, 1 skipped (1 skip = external Hermes-install check); last verified at integration, and the full-suite row above re-runs it fresh | 2026-10-25 |
-| Acceptance e2e (wave-3 fix round) | `.venv/bin/pytest tests/test_acceptance_e2e.py -q` | **0** | `49 passed` — the install-tree check (`TestNoHermesSourceModification`) executes for real and passes; skip-gates only when no git-managed Hermes install exists | 2026-10-25 |
-| Type checking | `.venv/bin/pyright` | **0** | `0 errors, 0 warnings, 0 informations` | 2026-10-25 |
-| Lint | `.venv/bin/ruff check .` | **0** | `All checks passed!` | 2026-10-25 |
-| Format | `.venv/bin/ruff format --check .` | **1 (pre-existing)** | `139 files already formatted`; the single offender is `docs/mathematics/scoring.md` — committed drift reproduced at clean HEAD (verified via stash), not introduced by this change; `bench/run.py` itself is format-clean | 2026-10-25 |
-| Dependency audit | `/root/.local/bin/uv lock --check` | **0** | `Resolved 73 packages in 2ms` (lock consistent; zero forbidden distributions — `TestLockedNoProviderEnvironment`) | 2026-10-25 |
+| Full test suite | `.venv/bin/pytest tests/ -q` | **0** | `898 passed, 1 warning in 220.12s` — **0 skipped** (732 core + SUB-40 property tests + SUB-43 redaction probes, both landed concurrently); supersedes the dated historical rows `632 passed, 1 skipped` (pre-wave-3) and `690 passed` (wave-3 fix round) | 2026-10-26 |
+| Acceptance e2e | `.venv/bin/pytest tests/test_acceptance_e2e.py -q` | **0** | `49 passed in 35.70s` — the install-tree check (`TestNoHermesSourceModification`) executes for real; skip-gates only when no git-managed Hermes install exists | 2026-10-26 |
+| Type checking | `.venv/bin/pyright` | **0** | `0 errors, 0 warnings, 0 informations` | 2026-10-26 |
+| Lint | `.venv/bin/ruff check .` | **0** | `All checks passed!` | 2026-10-26 |
+| Format | `.venv/bin/ruff format --check .` | **1 (pre-existing)** | `1 file would be reformatted, 162 files already formatted`; the single offender is `docs/mathematics/scoring.md` (comment alignment inside a fenced code block) — drift committed in `724843c` and never touched since (verified `git log --follow docs/mathematics/scoring.md` → sole commit `724843c`), i.e. pre-existing every fix wave; the contracts directory is frozen, so the drift is documented, not reformatted | 2026-10-26 |
+| Dependency audit | `/root/.local/bin/uv lock --check` | **0** | `Resolved 101 packages in 3ms` (lock consistent; zero forbidden distributions — `TestLockedNoProviderEnvironment`) | 2026-10-26 |
 
 Pre-existing issues found and fixed by the full-tree gates at integration
 (both recorded in `docs/audit-release.md` §2): one pyright error in
@@ -47,9 +61,13 @@ behavior unchanged — verified by the green suite above).
 
 ## 2. Benchmark (paired raw-SOUL vs system)
 
-Ledger: `bench/results/ledger-20261025T202627Z.json` (`repeats: 5`,
-`status: ok`, gate contract **2.1.0** "Opsi C + Ruling Q03"). Command
-`.venv/bin/python bench/run.py run` exits **0**: **24/24 cases accepted** —
+Ledger: `bench/results/ledger-20261026T031852Z.json` (`repeats: 5`,
+`status: ok`, gate contract **2.1.0** "Opsi C + Ruling Q03") — refreshed
+2026-10-26 after W3-2 (injective ids, `c1165b5`); the previous
+`20261025T202627Z` numbers are superseded (token savings and token ranges
+shifted, quality/ceiling means unchanged). Command
+`.venv/bin/python bench/run.py run` (equivalently `uv run python
+bench/run.py run`) exits **0**: **24/24 cases accepted** —
 23 at their (byte-identical) gate 2.0.0 ceilings, q03 vacuous-accepted with
 the explicit ledger annotation
 `vacuous: rubric unreachable under expected routing (case-design debt)`.
@@ -99,12 +117,12 @@ q16 stays 0.75 = ceiling — its `steelman` hit is content-delivered
 | Frozen questions | `bench/cases.json` | 24 cases, all 7 domains covered | `check: OK` exit 0 |
 | Estimator parity | `tests/fixtures/token_budget_cases.json` | 7/7 payload fixtures match | `TestTokenEstimatorParity` |
 | Repeats | bench ledger | 5 per case | ledger `repeats: 5` |
-| Latency p50 (per case, across 24 cases) | bench ledger | median **6.43 ms** (min 4.35, max 12.55) | ledger `latency_ms.p50` |
-| Latency p95 (per case, across 24 cases) | bench ledger | median **7.43 ms** (max 35.59) | ledger `latency_ms.p95` |
-| Token savings (paired) | bench ledger | mean **94.26%** (min 92.45%); system 412–993 est. tokens vs 13,151 raw-corpus baseline | ledger `token_saving_ratio` |
+| Latency p50 (per case, across 24 cases) | bench ledger | median **14.29 ms** (min 4.74, max 29.83; host-dependent, re-measured 2026-10-26) | ledger `latency_ms.p50` |
+| Latency p95 (per case, across 24 cases) | bench ledger | median **20.40 ms** (max 54.86; host-dependent) | ledger `latency_ms.p95` |
+| Token savings (paired) | bench ledger | mean **94.18%** (min 92.64%); system 420–968 est. tokens vs 13,151 raw-corpus baseline | ledger `token_saving_ratio` |
 | Compliant ceiling | bench ledger | per-case 0.0–1.0, mean **0.4042**; 18/24 cases below the 0.6 floor (`ceiling_below_floor`, enrichment debt) | ledger `quality_ceiling`, `ceiling_method: exact-full` (q03: `exact-full+single-root`) |
 | Quality verdicts | bench ledger | **24/24 accepted**; quality mean **0.4451**; q03 vacuous-accepted (annotated, `ceiling_unrestricted_2.0.0: 0.333333` preserved) | ledger `quality_system`, `quality_ceiling`, `verdict`, `ceiling_routing_note` |
-| Quality gate behavior | bench ledger | every below-ceiling case is rejected *despite* ≥92% token savings — the gate works; semantics re-verified fresh on a 24/24 run | `TestBenchmarkQualityGate` (48 passed, 1 skipped, exit 0, fresh) |
+| Quality gate behavior | bench ledger | every below-ceiling case is rejected *despite* ≥92% token savings — the gate works; semantics re-verified fresh on a 24/24 run | `TestBenchmarkQualityGate` (1 passed, exit 0, fresh 2026-10-26; full e2e file 49 passed, 0 skipped) |
 
 Diagnosis history: gate 1.0.0 rejected 24/24 (then 4/24 post-enrichment)
 because it demanded raw-read parity; the recalibration record
