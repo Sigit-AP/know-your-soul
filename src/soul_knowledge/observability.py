@@ -23,7 +23,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TextIO
+from typing import TYPE_CHECKING, Any
 
 from soul_knowledge.domain import canonical_json
 from soul_knowledge.security import redact_value
@@ -210,13 +210,6 @@ class StructuredLogger:
         self._component = component
         self._records: list[Mapping[str, Any]] = []
         self._lock = threading.Lock()
-
-    @classmethod
-    def to_stream(cls, stream: TextIO, *, component: str = "soul-knowledge") -> StructuredLogger:
-        def sink(record: Mapping[str, Any]) -> None:
-            stream.write(canonical_json(record) + "\n")
-
-        return cls(sink, component=component)
 
     def log(self, level: str, event: str, **fields: Any) -> Mapping[str, Any]:
         record = redact_value(

@@ -1088,7 +1088,19 @@ class GraphProjector:
     ) -> ProjectionReceipt:
         """Replay, build, validate and (by default) activate a generation."""
         with self.hold_lock():
-            watermark = self._store.knowledge_high_watermark() if upto_knowledge_seq is None else upto_knowledge_seq
+            store_watermark = self._store.knowledge_high_watermark()
+            if upto_knowledge_seq is not None and upto_knowledge_seq > store_watermark:
+                # F-2 residual: refuse a watermark the store cannot back. A
+                # build at a future sequence would write a manifest that lies,
+                # poison the activation CAS marker, and freeze the read model
+                # permanently; the heal paths (service read repair and
+                # recover_projection) cover the already-corrupted state, so
+                # the projector itself fails closed here instead.
+                raise ProjectionValidationError(
+                    f"upto_knowledge_seq {upto_knowledge_seq} exceeds the store's "
+                    f"knowledge high watermark {store_watermark}"
+                )
+            watermark = store_watermark if upto_knowledge_seq is None else upto_knowledge_seq
             extraction, quarantined = self._extraction(self._knowledge_events(watermark))
             generation_dir, manifest, node_count, edge_count = self._build_generation(
                 extraction,

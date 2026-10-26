@@ -92,13 +92,15 @@ def storage_payload(value: Any) -> Any:
 
     The store serialization boundary owns score quantization (spec section 9):
     every :class:`~decimal.Decimal` is quantized to 12 decimal places with
-    ``ROUND_HALF_EVEN`` and rendered as a string, and datetimes become ISO
-    strings. Values with more than 12 decimal places are quantized, never
-    rejected. Applied before any payload is persisted or hashed, so the stored
-    representation is always the quantized one.
+    ``ROUND_HALF_EVEN`` and rendered as a fixed-point string — the same shape
+    as :func:`soul_knowledge.scoring.serialize_score`, so exact zero renders
+    as ``0.000000000000``, never scientific notation (``0E-12``) — and
+    datetimes become ISO strings. Values with more than 12 decimal places are
+    quantized, never rejected. Applied before any payload is persisted or
+    hashed, so the stored representation is always the quantized one.
     """
     if isinstance(value, Decimal):
-        return str(quantize_score(value))
+        return format(quantize_score(value), "f")
     if isinstance(value, datetime):
         return value.isoformat()
     if isinstance(value, Mapping):

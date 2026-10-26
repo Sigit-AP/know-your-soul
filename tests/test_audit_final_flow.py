@@ -7,10 +7,12 @@
   in-place reopen) or refused with a typed ``BackupError`` when another
   process holds the WAL locks.
 * F-2: a rebuild with ``upto_knowledge_seq`` in the future wrote a manifest
-  whose watermark lied, freezing the read model permanently. The service now
-  treats a manifest watermark *ahead* of the store as stale, so the lying
-  generation is repaired on the next read, and ``recover_projection`` heals
-  the already-corrupted state.
+  whose watermark lied, freezing the read model permanently. The projector
+  now refuses a future ``upto_knowledge_seq`` with a typed
+  ``ProjectionValidationError`` (fail-closed, no lying manifest is ever
+  written); the service treats a manifest watermark *ahead* of the store as
+  stale, so an already-lying generation is repaired on the next read, and
+  ``recover_projection`` heals the already-corrupted state.
 * F-3: unbounded ``log_event`` growth met the 64 KiB publish cap as a
   permanent total read outage. ``log_event`` now fails closed with a typed
   ``PublishCapacityExceeded`` (with capacity indicators) before the store
@@ -49,11 +51,16 @@ from soul_knowledge.backup import (
     restore_store,
 )
 from soul_knowledge.contracts import ApplyImprovementRequest, LifecycleError, NodeNotFound, StaleProjectionUnavailable
-from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, ScoreVector
+from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, ScoreVector, canonical_json
 from soul_knowledge.http_api import error_envelope, status_for_error
 from soul_knowledge.importer import SeedImporter
 from soul_knowledge.observability import check_readiness
-from soul_knowledge.projection import ARTIFACT_MAX_BYTES, GraphProjector, ProjectorBusy
+from soul_knowledge.projection import (
+    ARTIFACT_MAX_BYTES,
+    GraphProjector,
+    ProjectionValidationError,
+    ProjectorBusy,
+)
 from soul_knowledge.service import KnowledgeService
 from soul_knowledge.store import EventStore, PublishCapacityExceeded
 
@@ -263,10 +270,56 @@ def test_service_reads_are_consistent_after_live_restore(tmp_path: Path) -> None
 # --------------------------------------------------------------------- F-2
 
 
+def test_rebuild_rejects_a_future_upto_knowledge_seq_typed(tmp_path: Path) -> None:
+    """F-2 residual: the projection itself refuses a watermark it cannot know.
+
+    SUB-41 healed the store/service side (a lying manifest is detected and
+    repaired); this pins the preventive half: ``rebuild`` fails closed with a
+    typed error instead of writing a manifest whose watermark lies.
+    """
+    store, projector, _ = _seeded(tmp_path)
+    honest = store.knowledge_high_watermark()
+    before = projector.active_manifest()
+    assert before is not None
+
+    with pytest.raises(ProjectionValidationError, match="upto_knowledge_seq"):
+        projector.rebuild(upto_knowledge_seq=honest + 1)
+    with pytest.raises(ProjectionValidationError, match="upto_knowledge_seq"):
+        projector.rebuild(upto_knowledge_seq=10**9)
+
+    # Fail-closed: no generation was activated and no marker was poisoned.
+    assert projector.active_manifest() == before
+    # The typed error maps to a client-error envelope, never a 500.
+    assert status_for_error(ProjectionValidationError("x")) == 422
+    # The boundary itself stays legal: rebuilding up to the real watermark works.
+    receipt = projector.rebuild(upto_knowledge_seq=honest)
+    assert receipt.source_knowledge_high_watermark == honest
+
+
+def _simulate_lying_manifest(store: EventStore, projector: GraphProjector, claimed: int) -> None:
+    """Construct the already-corrupted F-2 state the way it genuinely arises.
+
+    The projector refuses to *create* a lying manifest (typed rejection
+    above), so the heal-path tests simulate one: direct tampering with the
+    activated manifest plus the poisoned activation-CAS marker a pre-fix
+    ``rebuild(upto_knowledge_seq=...)`` used to leave behind.
+    """
+    generation = projector.active_generation_dir()
+    assert generation is not None
+    manifest_path = generation / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["source_knowledge_high_watermark"] = claimed
+    manifest_path.write_text(canonical_json(manifest) + "\n", encoding="utf-8")
+    store.execute_raw(
+        "UPDATE system_state SET value = ? WHERE key = 'active_projection_watermark'",
+        (str(claimed),),
+    )
+
+
 def test_lying_manifest_watermark_is_healed_on_read(tmp_path: Path) -> None:
-    """F-2: a future ``upto_knowledge_seq`` lie must not freeze the read model."""
+    """F-2: a manifest watermark ahead of the store must not freeze the read model."""
     store, projector, service = _seeded(tmp_path)
-    projector.rebuild(upto_knowledge_seq=10**9)
+    _simulate_lying_manifest(store, projector, 10**9)
     manifest = projector.active_manifest()
     assert manifest is not None
     assert int(manifest["source_knowledge_high_watermark"]) == 10**9  # the lie is on disk
@@ -284,7 +337,7 @@ def test_lying_manifest_watermark_is_healed_on_read(tmp_path: Path) -> None:
 def test_recover_projection_repairs_a_lying_manifest(tmp_path: Path) -> None:
     """F-2 repair path: recovery from the already-corrupted state."""
     store, projector, service = _seeded(tmp_path)
-    projector.rebuild(upto_knowledge_seq=10**9)
+    _simulate_lying_manifest(store, projector, 10**9)
     _upsert(store, _node("post-lie", parent="KROOT"), key="test:upsert:post-lie")
 
     report = recover_projection(store, projector, audit_log=AuditLog(store))

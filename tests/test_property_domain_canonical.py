@@ -39,6 +39,7 @@ from soul_knowledge.domain import (
     quantize_score,
     storage_payload,
 )
+from soul_knowledge.scoring import serialize_score
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 
@@ -107,14 +108,25 @@ def test_storage_payload_quantizes_every_decimal_and_parses_back(value: Decimal)
     assert Decimal(rendered) == quantize_score(value)
 
 
-@given(value=st.decimals(min_value=Decimal("0.000001"), max_value=1000, places=13, allow_nan=False))
+@given(value=st.decimals(min_value=0, max_value=1000, places=13, allow_nan=False))
 @settings(derandomize=True, max_examples=30, deadline=None)
 def test_storage_payload_renders_nonzero_quantized_scores_in_fixed_point(value: Decimal) -> None:
-    # str() of a Decimal switches to scientific notation below 1e-6 adjusted
-    # exponent; the fixed-point 12dp shape is pinned for the readable range.
+    # F-SUB40-1: str() of a Decimal switches to scientific notation for zero
+    # ('0E-12') and below an adjusted exponent of -6; the storage boundary pins
+    # the same fixed-point 12dp shape as scoring.serialize_score for every
+    # quantized value, tiny magnitudes included.
     rendered = storage_payload(value)
     assert "." in rendered
     assert len(rendered.split(".")[1]) == 12
+    assert rendered == serialize_score(value)
+
+
+def test_storage_payload_renders_zero_and_sub_micro_in_fixed_point() -> None:
+    # F-SUB40-1 explicit pins (the shapes str() used to get wrong).
+    assert storage_payload(Decimal("0")) == "0.000000000000" == serialize_score(Decimal("0"))
+    assert storage_payload(Decimal("1E-12")) == "0.000000000001" == serialize_score(Decimal("1E-12"))
+    assert storage_payload(Decimal("1E-20")) == "0.000000000000"  # quantized away, still fixed-point
+    assert storage_payload(Decimal("-1E-12")) == "-0.000000000001" == serialize_score(Decimal("-1E-12"))
 
 
 @given(moment=st.datetimes(timezones=st.just(UTC)))
