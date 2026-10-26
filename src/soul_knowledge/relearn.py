@@ -70,6 +70,7 @@ __all__ = [
     "RelearnError",
     "RelearnPreview",
     "RelearnReceipt",
+    "RelearnStatus",
     "RollbackReceipt",
     "RollbackVerificationError",
     "UnknownRelearn",
@@ -178,6 +179,22 @@ class RelearnPreview(BaseModel):
     promotion_blocked: bool = True
 
 
+class RelearnStatus(BaseModel):
+    """The relearn gate as adapters should surface it (final flow audit F-4).
+
+    ``state`` is the raw registry state (``RELEARN_PENDING`` / ``CLEAR`` /
+    ``None``); ``pending_offer`` carries the offer id an approval must name;
+    ``active_source_version_id`` is the operator-approved baseline.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    state: str | None
+    pending_offer: RelearnOffer | None = None
+    active_source_version_id: str | None = None
+    quarantined_evidence_ids: tuple[str, ...] = ()
+
+
 class RelearnReceipt(BaseModel):
     """The audited result of one operator-approved relearn apply."""
 
@@ -224,29 +241,6 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1 << 20), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def _reopen_store_in_place(store: EventStore, *, busy_timeout_ms: int) -> None:
-    """Reopen a closed shared ``EventStore`` against its (restored) db file.
-
-    Relearn rollback must close the database file before byte-replacing it,
-    but the store object is *shared*: the service, projector, audit log and
-    lifecycle engines all hold the same instance. Rebinding a new EventStore
-    on the engine alone strands every other holder on a closed handle (W3-1:
-    the rollback commits durably, then an untyped ``sqlite3.ProgrammingError``
-    wedges the whole service). Reopening in place keeps the one shared object
-    valid for every holder — including references held outside this module.
-
-    A fresh EventStore performs the real connect (pragmas + migrations); only
-    its connection is transplanted, so the connection recipe stays owned by
-    ``store.py``. Caller must hold ``store._lock``.
-    """
-    fresh = EventStore(
-        store.db_path,
-        migrations_dir=store._migrations_dir,  # noqa: SLF001 - same-process handle surgery
-        busy_timeout_ms=busy_timeout_ms,
-    )
-    store._conn = fresh._conn  # noqa: SLF001 - transplant: the shared object becomes valid again
 
 
 class RelearnEngine:
@@ -297,13 +291,35 @@ class RelearnEngine:
         )
 
     def _pending_offer(self) -> RelearnOffer:
-        if self._registry.relearn_state() != RELEARN_PENDING:
+        offer = self.pending_offer()
+        if offer is None:
             raise NoPendingRelearn("no RELEARN_PENDING offer: relearn is never selected automatically")
+        return offer
+
+    def pending_offer(self) -> RelearnOffer | None:
+        """The outstanding offer while the gate is ``RELEARN_PENDING``, else ``None``.
+
+        Adapter-facing (F-4): the non-raising half of the gate, so a surface
+        can retrieve the offer id an approval must name.
+        """
+        if self._registry.relearn_state() != RELEARN_PENDING:
+            return None
         with self._store.read() as conn:
             row = conn.execute("SELECT payload_json FROM relearn_offer ORDER BY rowid DESC LIMIT 1").fetchone()
         if row is None:  # pragma: no cover - state without an offer row is inconsistent
-            raise NoPendingRelearn("RELEARN_PENDING is set but no offer row exists")
+            return None
         return RelearnOffer.model_validate(json.loads(str(row["payload_json"])))
+
+    def status(self) -> RelearnStatus:
+        """The gate state, pending offer, approved baseline and quarantine (F-4)."""
+        offer = self.pending_offer()
+        active = self._registry.active()
+        return RelearnStatus(
+            state=self._registry.relearn_state(),
+            pending_offer=offer,
+            active_source_version_id=active.source_version_id if active is not None else None,
+            quarantined_evidence_ids=tuple(sorted(self.quarantined_evidence_ids())),
+        )
 
     def _relearn_records(self) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []
@@ -750,13 +766,12 @@ class RelearnEngine:
 
         db_path = Path(self._store.db_path)
         store = self._store
-        with store.read() as conn:
-            busy_timeout_ms = int(conn.execute("PRAGMA busy_timeout").fetchone()[0])
         # Hold the store lock across close → byte-replace → reopen so a
         # concurrent holder blocks for the swap window instead of dying on a
         # closed handle (RLock: close() and the transplant re-acquire it
         # reentrantly). The store object itself is never replaced — every
-        # holder of the shared instance stays valid (W3-1).
+        # holder of the shared instance stays valid (W3-1). The reopen recipe
+        # (pragmas, busy timeout, migrations) lives in EventStore itself.
         with store._lock:  # noqa: SLF001 - same-process handle surgery
             store.close()
             try:
@@ -795,10 +810,10 @@ class RelearnEngine:
                     if pointer_artifact is not None and _sha256_file(live_pointer) != pointer_artifact.sha256:
                         raise RollbackVerificationError("restored CURRENT pointer does not hash-match the backup")
             except Exception:
-                _reopen_store_in_place(store, busy_timeout_ms=busy_timeout_ms)
+                store.reopen_in_place()
                 raise
             (backup_dir / "ROLLED_BACK").write_text(_utcnow().isoformat(), encoding="utf-8")
-            _reopen_store_in_place(store, busy_timeout_ms=busy_timeout_ms)
+            store.reopen_in_place()
 
         audit = AuditLog(store)
         invocation = Invocation.create(

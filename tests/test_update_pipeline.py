@@ -1,26 +1,47 @@
-"""Regression probes for the deleted-source retire path (Task 3 fix round 1, finding F2).
+"""Regression probes for the offer-gated update pipeline (final flow audit F-4).
 
-A ``REMOVED`` watcher change must retire every node imported from the
-deleted source through ``node.retire`` domain events (idempotency-keyed, so a
-replayed batch is a no-op), then rebuild with ``allow_shrink=True`` scoped to
-the retire pipeline. Retired nodes disappear from the next projection and
-stay in the append-only store history as superseded revisions.
+Spec 13.3: when the corpus changes, the system emits a deterministic
+``RelearnOffer`` and sets ``RELEARN_PENDING`` — *no operator decision means
+no change*. The watcher-driven pipeline (spec 13.5) used to bypass that
+gate: it re-imported through ``registry.observe``, flipping the active
+baseline silently with no offer and no pending state.
+
+The pipeline is now split at the gate:
+
+* ``update_from_changes`` — the watcher path. It only *detects*: every
+  change batch routes through ``SourceRegistry.detect_change``, producing
+  the offer and ``RELEARN_PENDING`` while the operator-approved baseline,
+  the store and the projection stay untouched.
+* ``apply_approved_update`` — the post-decision executor. It refuses to run
+  while a decision is pending (typed ``UpdatePipelineError``); once the
+  operator has approved and the relearn engine applied the mode, it retires
+  the removed sources, re-imports and rebuilds (shrink scoped to the
+  pipeline, as before).
 """
 
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
-from soul_knowledge.domain import EventKind, LifecycleStatus, PrimaryDomain
+from soul_knowledge.domain import PrimaryDomain
 from soul_knowledge.fragment_generator import file_scoped_id
-from soul_knowledge.importer import SeedImporter, injective_section_key
-from soul_knowledge.projection import GraphProjector, ProjectorBusy, ShrinkGuardError
+from soul_knowledge.importer import SeedImporter
+from soul_knowledge.projection import GraphProjector, ProjectorBusy
+from soul_knowledge.relearn import RelearnApproval, RelearnEngine
+from soul_knowledge.source_registry import RELEARN_PENDING, SourceKind
 from soul_knowledge.source_watcher import ChangeKind, SourceChange, SourceWatcher
 from soul_knowledge.store import EventStore
-from soul_knowledge.update_pipeline import UpdateReceipt, update_from_changes
+from soul_knowledge.update_pipeline import (
+    UpdatePipelineError,
+    apply_approved_update,
+    update_from_changes,
+)
+
+NOW = datetime(2026, 10, 26, 12, 0, tzinfo=UTC)
 
 ALPHA = (
     b"# Alpha Lessons\n"
@@ -55,128 +76,161 @@ def _graph_ids(tmp_path: Path) -> set[str]:
     return {str(node["id"]) for node in graph["nodes"]}
 
 
-def _watched(
-    tmp_path: Path,
-    store: EventStore,
-    importer: SeedImporter,
-    projector: GraphProjector,
-) -> tuple[SourceWatcher, list[UpdateReceipt]]:
-    receipts: list[UpdateReceipt] = []
-
-    def _update(changes: list[SourceChange]) -> None:
-        receipts.append(
-            update_from_changes(
-                changes,
-                importer=importer,
-                projector=projector,
-                root=tmp_path / "corpus",
-                domain=PrimaryDomain.P1,
-            )
-        )
-
-    watcher = SourceWatcher(tmp_path / "corpus", state_path=tmp_path / "watch-state.json", on_change=_update)
-    watcher.poll()  # baseline snapshot; import is unchanged so this only re-derives
-    receipts.clear()
-    return watcher, receipts
+def _poll(watcher: SourceWatcher) -> list[SourceChange]:
+    return watcher.poll()
 
 
-def test_removed_source_is_retired_and_leaves_the_projection(tmp_path: Path) -> None:
+def _watcher(tmp_path: Path) -> SourceWatcher:
+    watcher = SourceWatcher(tmp_path / "corpus", state_path=tmp_path / "watch-state.json")
+    watcher.poll()  # baseline snapshot
+    return watcher
+
+
+# ------------------------------------------------------- detection is gated
+
+
+def test_changed_source_emits_offer_and_holds_the_baseline(tmp_path: Path) -> None:
     store, importer, projector = _populated(tmp_path)
+    registry = importer._registry  # noqa: SLF001 - pipeline wiring
+    # The corpus baseline exists once detection has seen it.
+    assert update_from_changes(
+        [SourceChange(path="alpha.md", kind=ChangeKind.CHANGED, content_sha256="0" * 64)],
+        importer=importer,
+        root=tmp_path / "corpus",
+    ).baseline_recorded
+
+    baseline = registry.active(SourceKind.SOUL_CORPUS)
+    assert baseline is not None
+    watermark = store.knowledge_high_watermark()
+    graph_before = _graph_ids(tmp_path)
+
+    watcher = _watcher(tmp_path)
+    (tmp_path / "corpus" / "alpha.md").write_bytes(ALPHA + b"\n## Third Lesson\n\nA new lesson.\n")
+    changes = _poll(watcher)
+    receipt = update_from_changes(changes, importer=importer, root=tmp_path / "corpus")
+
+    # The offer is emitted and the gate is set...
+    assert receipt.offer is not None
+    assert receipt.relearn_pending is True
+    assert receipt.offer.default_action == "NONE"
+    assert receipt.offer.requires_operator_decision is True
+    assert registry.relearn_state() == RELEARN_PENDING
+    # ...but nothing else moved: baseline, store and projection are untouched.
+    assert registry.active(SourceKind.SOUL_CORPUS) == baseline
+    assert store.knowledge_high_watermark() == watermark
+    assert _graph_ids(tmp_path) == graph_before
+    assert projector.active_manifest() is not None
+
+
+def test_removed_source_is_offer_gated_not_retired(tmp_path: Path) -> None:
+    store, importer, _ = _populated(tmp_path)
+    update_from_changes(
+        [SourceChange(path="alpha.md", kind=ChangeKind.ADDED, content_sha256="0" * 64)],
+        importer=importer,
+        root=tmp_path / "corpus",
+    )
     alpha_root = file_scoped_id("alpha.md")
-    alpha_lesson = f"{alpha_root}.{injective_section_key('First Lesson')}"
-    before_ids = _graph_ids(tmp_path)
-    assert {alpha_root, alpha_lesson, file_scoped_id("beta.md")} <= before_ids
-    alpha_version = store.node_version(alpha_root)
+    version_before = store.node_version(alpha_root)
 
-    watcher, receipts = _watched(tmp_path, store, importer, projector)
+    watcher = _watcher(tmp_path)
     (tmp_path / "corpus" / "alpha.md").unlink()
-    changes = watcher.poll()
-
+    changes = _poll(watcher)
     assert [change.kind for change in changes] == [ChangeKind.REMOVED]
-    assert changes[0].path == "alpha.md"
-    assert receipts and set(receipts[-1].retired_node_ids) >= {alpha_root, alpha_lesson}
+    receipt = update_from_changes(changes, importer=importer, root=tmp_path / "corpus")
 
-    # The store retains the retired node as a superseded revision (append-only).
-    retired = store.current_node(alpha_root)
-    assert retired is not None
-    assert retired.lifecycle_status is LifecycleStatus.SUPERSEDED
-    assert store.node_version(alpha_root) == alpha_version + 1
-    assert any(event.kind is EventKind.NODE_RETIRE and event.node_id == alpha_root for event in store.replay_domain())
-
-    # The next projection no longer contains the retired nodes.
-    after_ids = _graph_ids(tmp_path)
-    assert alpha_root not in after_ids
-    assert alpha_lesson not in after_ids
-    assert file_scoped_id("beta.md") in after_ids
-    assert len(after_ids) < len(before_ids)
-    manifest = projector.active_manifest()
-    assert manifest is not None
-    assert manifest["node_count"] == len(after_ids)
-
-    # A second identical poll is a no-op: no changes, no new events, same graph.
-    watermark = store.knowledge_high_watermark()
-    event_count = store.event_count()
-    assert watcher.poll() == []
-    assert store.knowledge_high_watermark() == watermark
-    assert store.event_count() == event_count
-    assert _graph_ids(tmp_path) == after_ids
+    assert receipt.offer is not None
+    assert "alpha.md" in receipt.offer.diff.removed
+    assert receipt.relearn_pending is True
+    # No decision yet: the nodes stay live, no retire event was written.
+    assert store.node_version(alpha_root) == version_before
+    assert alpha_root in _graph_ids(tmp_path)
 
 
-def test_retire_batch_replay_is_idempotent(tmp_path: Path) -> None:
-    store, importer, projector = _populated(tmp_path)
-    watcher, _ = _watched(tmp_path, store, importer, projector)
-    (tmp_path / "corpus" / "alpha.md").unlink()
-    changes = watcher.poll()
-
-    watermark = store.knowledge_high_watermark()
-    domain_events = store.domain_event_count()
-    replayed = update_from_changes(
-        changes,
+def test_replayed_change_batch_is_a_noop(tmp_path: Path) -> None:
+    store, importer, _ = _populated(tmp_path)
+    update_from_changes(
+        [SourceChange(path="alpha.md", kind=ChangeKind.ADDED, content_sha256="0" * 64)],
         importer=importer,
-        projector=projector,
         root=tmp_path / "corpus",
-        domain=PrimaryDomain.P1,
     )
-    assert replayed.retired_node_ids == ()
-    assert store.knowledge_high_watermark() == watermark
-    assert store.domain_event_count() == domain_events
-    assert file_scoped_id("alpha.md") not in _graph_ids(tmp_path)
+    watcher = _watcher(tmp_path)
+    (tmp_path / "corpus" / "alpha.md").write_bytes(ALPHA + b"\n## Third Lesson\n\nA new lesson.\n")
+    changes = _poll(watcher)
+    first = update_from_changes(changes, importer=importer, root=tmp_path / "corpus")
+    assert first.offer is not None
+    offers = store.event_count()
+
+    replayed = update_from_changes(changes, importer=importer, root=tmp_path / "corpus")
+    assert replayed.offer is None  # fingerprint unchanged: detection is idempotent
+    assert replayed.relearn_pending is True
+    assert store.event_count() == offers
 
 
-def test_shrink_guard_still_blocks_an_unscoped_shrink(tmp_path: Path) -> None:
-    """The retire pipeline's allow_shrink is scoped: a plain rebuild still refuses to shrink."""
-    store, importer, projector = _populated(tmp_path)
-    watcher, _ = _watched(tmp_path, store, importer, projector)
-    (tmp_path / "corpus" / "alpha.md").unlink()
-    changes = watcher.poll()
-    assert [change.kind for change in changes] == [ChangeKind.REMOVED]
+# ---------------------------------------------------- post-decision executor
 
-    # Retire one more live node without the pipeline, then a plain rebuild must trip the guard.
-    retired = importer.retire_source("beta.md")
-    assert retired
-    with pytest.raises(ShrinkGuardError):
-        projector.rebuild()
-    # The scoped pipeline rebuild succeeds and serves the shrunk graph.
-    receipt = update_from_changes(
-        changes,
+
+def test_apply_approved_update_refused_while_decision_pending(tmp_path: Path) -> None:
+    _, importer, projector = _populated(tmp_path)
+    update_from_changes(
+        [SourceChange(path="alpha.md", kind=ChangeKind.ADDED, content_sha256="0" * 64)],
         importer=importer,
-        projector=projector,
         root=tmp_path / "corpus",
-        domain=PrimaryDomain.P1,
     )
-    assert receipt.projection is not None
-    assert receipt.projection.activated is True
+    watcher = _watcher(tmp_path)
+    (tmp_path / "corpus" / "alpha.md").write_bytes(ALPHA + b"\n## Third Lesson\n\nA new lesson.\n")
+    update_from_changes(_poll(watcher), importer=importer, root=tmp_path / "corpus")
+
+    with pytest.raises(UpdatePipelineError, match="operator|pending"):
+        apply_approved_update(importer=importer, projector=projector, root=tmp_path / "corpus", domain=PrimaryDomain.P1)
 
 
-def test_rebuild_retries_while_another_projector_holds_the_lock(tmp_path: Path) -> None:
-    """K2: a busy rebuild lock must not drop the watcher batch.
-
-    A reader-triggered ``repair_if_stale`` holds the single rebuild lock, so a
-    watcher batch can arrive while ``rebuild`` would raise ``ProjectorBusy``.
-    The pipeline retries with a bounded backoff instead of losing the change.
-    """
+def test_apply_approved_update_after_operator_decision(tmp_path: Path) -> None:
     store, importer, projector = _populated(tmp_path)
-    watcher, receipts = _watched(tmp_path, store, importer, projector)
+    registry = importer._registry  # noqa: SLF001 - pipeline wiring
+    engine = RelearnEngine(store, registry, generation_dir=tmp_path / "out")
+    update_from_changes(
+        [SourceChange(path="alpha.md", kind=ChangeKind.ADDED, content_sha256="0" * 64)],
+        importer=importer,
+        root=tmp_path / "corpus",
+    )
+
+    watcher = _watcher(tmp_path)
+    (tmp_path / "corpus" / "alpha.md").unlink()
+    receipt = update_from_changes(_poll(watcher), importer=importer, root=tmp_path / "corpus")
+    assert receipt.offer is not None
+    alpha_root = file_scoped_id("alpha.md")
+
+    engine.apply(
+        "RESET",
+        RelearnApproval(offer_id=receipt.offer.offer_id, mode="RESET", approved_by="operator", decided_at=NOW),
+    )
+    applied = apply_approved_update(
+        importer=importer, projector=projector, root=tmp_path / "corpus", domain=PrimaryDomain.P1
+    )
+
+    assert alpha_root in set(applied.retired_node_ids)
+    assert applied.projection is not None and applied.projection.activated is True
+    assert alpha_root not in _graph_ids(tmp_path)
+    assert file_scoped_id("beta.md") in _graph_ids(tmp_path)
+
+
+def test_apply_approved_update_retries_a_busy_rebuild(tmp_path: Path) -> None:
+    store, importer, projector = _populated(tmp_path)
+    registry = importer._registry  # noqa: SLF001 - pipeline wiring
+    engine = RelearnEngine(store, registry, generation_dir=tmp_path / "out")
+    update_from_changes(
+        [SourceChange(path="alpha.md", kind=ChangeKind.ADDED, content_sha256="0" * 64)],
+        importer=importer,
+        root=tmp_path / "corpus",
+    )
+    watcher = _watcher(tmp_path)
+    (tmp_path / "corpus" / "alpha.md").write_bytes(ALPHA + b"\n## Third Lesson\n\nA new lesson.\n")
+    receipt = update_from_changes(_poll(watcher), importer=importer, root=tmp_path / "corpus")
+    assert receipt.offer is not None
+    engine.apply(
+        "RESET",
+        RelearnApproval(offer_id=receipt.offer.offer_id, mode="RESET", approved_by="operator", decided_at=NOW),
+    )
 
     real_rebuild = projector.rebuild
     calls = {"count": 0}
@@ -188,34 +242,10 @@ def test_rebuild_retries_while_another_projector_holds_the_lock(tmp_path: Path) 
         return real_rebuild(**kwargs)  # type: ignore[arg-type]
 
     projector.rebuild = busy_twice  # type: ignore[method-assign]
-    (tmp_path / "corpus" / "alpha.md").write_bytes(
-        ALPHA + b"\n## Third Lesson\n\nRetry the rebuild while the lock is busy.\n"
+    applied = apply_approved_update(
+        importer=importer, projector=projector, root=tmp_path / "corpus", domain=PrimaryDomain.P1
     )
-    changes = watcher.poll()
     projector.rebuild = real_rebuild  # type: ignore[method-assign]
 
-    assert [change.kind for change in changes] == [ChangeKind.CHANGED]
     assert calls["count"] == 3, "two busy signals then one successful rebuild"
-    assert receipts and receipts[-1].projection is not None
-    assert receipts[-1].projection.activated is True
-
-
-def test_busy_lock_exhaustion_keeps_the_typed_error(tmp_path: Path) -> None:
-    """The retry is bounded: an exhausted budget still surfaces ``ProjectorBusy``."""
-    _, importer, projector = _populated(tmp_path)
-    (tmp_path / "corpus" / "alpha.md").write_bytes(ALPHA + b"\n## Fourth Lesson\n\nNever lose a batch.\n")
-    changes = [SourceChange(path="alpha.md", kind=ChangeKind.CHANGED, content_sha256="0" * 64)]
-
-    def always_busy(**kwargs: object) -> object:
-        raise ProjectorBusy("another projector holds the rebuild lock for this corpus root")
-
-    projector.rebuild = always_busy  # type: ignore[method-assign]
-    with pytest.raises(ProjectorBusy):
-        update_from_changes(
-            changes,
-            importer=importer,
-            projector=projector,
-            root=tmp_path / "corpus",
-            domain=PrimaryDomain.P1,
-            rebuild_attempts=1,
-        )
+    assert applied.projection is not None and applied.projection.activated is True

@@ -153,7 +153,8 @@ def export_query_audit(store: EventStore, *, operations: Sequence[str] = QUERY_A
         rows = conn.execute(
             "SELECT invocation_id, audit_event_id, audit_event_seq, operation, request_hash, actor, "
             "idempotency_key, started_at, completed_at, outcome_json FROM invocation_journal "
-            f"WHERE status = 'complete' AND operation IN ({placeholders}) ORDER BY audit_event_seq",
+            f"WHERE status = 'complete' AND operation IN ({placeholders}) "  # nosec B608 -- bound via ops
+            "ORDER BY audit_event_seq",
             ops,
         ).fetchall()
     lines: list[str] = []
@@ -304,8 +305,23 @@ def check_readiness(
     projector: GraphProjector | None = None,
     migrations_dir: str | Path | None = None,
     stale_after_seconds: float = 300.0,
+    repair_projection: bool = True,
 ) -> HealthReport:
-    """Traffic gate: health plus stale journals and projection freshness."""
+    """Traffic gate: health plus stale journals and projection freshness.
+
+    Readiness is proactive (final flow audit F-9): with a projector attached,
+    a lagging projection is repaired *during the check* (one
+    ``repair_if_stale`` pass) instead of reporting red until some read
+    happens to heal it. A repair failure never raises here — it is recorded
+    in ``details["projection_repair"]`` and the watermark checks below report
+    the resulting state. F-3: the report always carries the publish-capacity
+    estimate, and ``publish_capacity`` goes red at the write-side guard
+    threshold, so monitoring sees the ceiling approaching *before* writes are
+    refused.
+    """
+    from soul_knowledge.projection import ARTIFACT_MAX_BYTES
+    from soul_knowledge.store import PUBLISH_CAPACITY_RATIO
+
     health = check_health(store, migrations_dir=migrations_dir)
     checks: dict[str, bool] = dict(health.checks)
     details: dict[str, Any] = dict(health.details)
@@ -313,6 +329,21 @@ def check_readiness(
     checks["no_stale_journals"] = not stale
     details["stale_journals"] = len(stale)
     if projector is not None:
+        if repair_projection:
+            try:
+                manifest = projector.active_manifest()
+                if (
+                    manifest is not None
+                    and int(manifest.get("source_knowledge_high_watermark", -1)) > store.knowledge_high_watermark()
+                ):
+                    # F-2: a lying (ahead-of-store) manifest needs the CAS marker
+                    # healed and may legitimately shrink on rebuild.
+                    store.heal_lying_projection_watermark()
+                    projector.rebuild(allow_shrink=True)
+                else:
+                    projector.repair_if_stale()
+            except Exception as error:  # noqa: BLE001 - health never raises; the checks report state
+                details["projection_repair"] = f"{type(error).__name__}"
         manifest = projector.active_manifest()
         checks["projection_present"] = manifest is not None
         if manifest is not None:
@@ -322,4 +353,12 @@ def check_readiness(
             details["projection_version"] = manifest.get("projection_version")
             details["projection_watermark"] = watermark
             details["store_watermark"] = store_watermark
+        estimated = store.estimate_publish_bytes()
+        guard = int(ARTIFACT_MAX_BYTES * PUBLISH_CAPACITY_RATIO)
+        details["publish_capacity"] = {
+            "estimated_bytes": estimated,
+            "guard_bytes": guard,
+            "cap_bytes": ARTIFACT_MAX_BYTES,
+        }
+        checks["publish_capacity"] = estimated <= guard
     return HealthReport(ok=all(checks.values()), checks=checks, details=details)

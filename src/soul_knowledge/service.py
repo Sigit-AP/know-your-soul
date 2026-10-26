@@ -32,11 +32,12 @@ import threading
 import time
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from pathlib import Path
+from typing import Any, Literal
 
 from pydantic import ValidationError
 
-from soul_knowledge.audit import AuditLog, success_outcome
+from soul_knowledge.audit import AuditLog, failure_outcome, success_outcome
 from soul_knowledge.contracts import (
     ACCESS_ONLY_TOKEN_CAP,
     DEFAULT_MAX_TOKEN_BUDGET,
@@ -80,26 +81,34 @@ from soul_knowledge.contracts import (
     estimated_tokens_of_payload,
     score_text,
 )
-from soul_knowledge.domain import Event, EventKind, Evidence, Node, canonical_json, quantize_score
+from soul_knowledge.domain import Event, EventKind, Evidence, Node, canonical_json, quantize_score, storage_payload
 from soul_knowledge.events import Invocation, InvocationOutcome, WriteReceipt
+from soul_knowledge.importer import DEFAULT_PARSER_VERSIONS
 from soul_knowledge.improvement import (
     ApprovalRequired,
     ProposalValidationError,
     RegressionGateFailure,
     UnknownImprovement,
     apply_improvement,
+    content_fingerprint,
     get_proposal,
     propose,
     rollback_improvement,
 )
 from soul_knowledge.improvement import UnknownNode as ImprovementUnknownNode
-from soul_knowledge.projection import GraphProjector, ProjectorBusy
+from soul_knowledge.projection import ARTIFACT_MAX_BYTES, GraphProjector, ProjectorBusy
 from soul_knowledge.read_model_validator import ReadModelValidator
 from soul_knowledge.relearn import (
     BackupUnavailable,
     MixedSourceVersions,
+    NoPendingRelearn,
     OperatorDecisionRequired,
+    RelearnApproval,
     RelearnEngine,
+    RelearnError,
+    RelearnPreview,
+    RelearnReceipt,
+    RelearnStatus,
     UnknownRelearn,
 )
 from soul_knowledge.retrieval import (
@@ -115,7 +124,8 @@ from soul_knowledge.review import UnknownNode as ReviewUnknownNode
 from soul_knowledge.scheduler import DueReviewScheduler
 from soul_knowledge.scoring import ScoreEngine, UnknownNodeError
 from soul_knowledge.security import redact_text
-from soul_knowledge.store import EventStore, StoreError
+from soul_knowledge.source_registry import ParserVersions, RelearnOffer, SourceKind
+from soul_knowledge.store import PUBLISH_CAPACITY_RATIO, EventStore, PublishCapacityExceeded, StoreError
 
 __all__ = ["KnowledgeService"]
 
@@ -186,6 +196,8 @@ class KnowledgeService:
         validator: ReadModelValidator | None = None,
         max_token_budget: int = DEFAULT_MAX_TOKEN_BUDGET,
         default_actor: str = "operator",
+        publish_capacity_bytes: int | None = None,
+        repair_cooldown_seconds: float = 1.0,
     ) -> None:
         self._store = store
         self._projector = projector
@@ -193,6 +205,21 @@ class KnowledgeService:
         self._validator = validator if validator is not None else ReadModelValidator()
         self._max_token_budget = max_token_budget
         self._default_actor = default_actor
+        # F-3: the write-side publish-capacity guard. The publish cap itself
+        # (ARTIFACT_MAX_BYTES, per artifact) lives in the projection; the
+        # service refuses log_event writes whose conservative size estimate
+        # would cross 95% of it, so the store can never grow past the point
+        # where a repair rebuild fails permanently.
+        self._publish_capacity_bytes = (
+            int(ARTIFACT_MAX_BYTES * PUBLISH_CAPACITY_RATIO)
+            if publish_capacity_bytes is None
+            else int(publish_capacity_bytes)
+        )
+        # F-7: reader-triggered repairs are rate-limited so a sustained write
+        # stream no longer forces one rebuild per read.
+        self._repair_cooldown_seconds = float(repair_cooldown_seconds)
+        self._repair_lock = threading.Lock()
+        self._repair_unavailable_until = 0.0
         self._snapshot_cache: dict[tuple[str, str], _Snapshot] = {}
         self._cache_lock = threading.Lock()
         # Lifecycle engines (Tasks 5/6) share one evidence-scope hook so the
@@ -304,7 +331,16 @@ class KnowledgeService:
         generation = self._projector.active_generation_dir()
         if manifest is None or generation is None:
             return None
-        if int(manifest.get("source_knowledge_high_watermark", -1)) < required_watermark:
+        manifest_watermark = int(manifest.get("source_knowledge_high_watermark", -1))
+        store_watermark = self._store.knowledge_high_watermark()
+        if manifest_watermark > store_watermark:
+            # F-2: the manifest claims coverage ahead of the store — impossible
+            # for an honest build (a rebuild with a future upto_knowledge_seq
+            # wrote it, or a restore regressed the store). Treat it as stale so
+            # the read path repairs to an honest watermark instead of freezing
+            # the read model permanently.
+            return None
+        if manifest_watermark < required_watermark:
             return None
         if manifest.get("projection_version") != self._store.projection_version():
             return None
@@ -327,16 +363,51 @@ class KnowledgeService:
             self._snapshot_cache[key] = snapshot
         return snapshot
 
+    def _repair_projection_once(self) -> None:
+        """One repair pass, including the ahead-of-store (lying manifest) case.
+
+        F-2: a manifest whose watermark is *ahead* of the store (poisoned
+        ``upto_knowledge_seq``, or a restore that regressed the store) also
+        poisons the activation CAS marker, and the honest rebuild may
+        legitimately shrink — the store cannot grow backwards. Both are
+        handled here: heal the marker, then rebuild with shrink scoped to
+        exactly this condition. The ordinary path stays ``repair_if_stale``.
+        """
+        manifest = self._projector.active_manifest()
+        ahead = (
+            manifest is not None
+            and int(manifest.get("source_knowledge_high_watermark", -1)) > self._store.knowledge_high_watermark()
+        )
+        try:
+            if ahead:
+                self._store.heal_lying_projection_watermark()
+                self._projector.rebuild(allow_shrink=True)
+            else:
+                self._projector.repair_if_stale()
+        except ProjectorBusy:
+            pass  # a concurrent writer is repairing; the re-check decides
+
     def _snapshot(self, required_watermark: int) -> _Snapshot:
         snapshot = self._try_snapshot(required_watermark)
         if snapshot is not None:
             return snapshot
-        # A stale read triggers synchronous repair and exactly one retry (7.6).
-        try:
-            self._projector.repair_if_stale()
-        except ProjectorBusy:
-            pass  # a concurrent writer is repairing; the re-check decides
-        snapshot = self._try_snapshot(required_watermark)
+        # A stale read triggers one synchronous repair and one retry (7.6). The
+        # cooldown (F-7) engages only after a repair attempt that still did not
+        # cover the requirement — the watermark moved during the rebuild, which
+        # under a sustained write stream would otherwise make every reader pay
+        # a full rebuild and still fail. Within the window a stale read fails
+        # typed and retryable instead; a repair that covers its read clears the
+        # cooldown, so the normal write→repair flow is unaffected.
+        with self._repair_lock:
+            # Re-check under the lock: a concurrent reader may just have repaired.
+            snapshot = self._try_snapshot(required_watermark)
+            if snapshot is None and time.monotonic() >= self._repair_unavailable_until:
+                self._repair_projection_once()
+                snapshot = self._try_snapshot(required_watermark)
+                if snapshot is None:
+                    self._repair_unavailable_until = time.monotonic() + self._repair_cooldown_seconds
+                else:
+                    self._repair_unavailable_until = 0.0
         if snapshot is None:
             raise StaleProjectionUnavailable(
                 f"the active projection does not cover knowledge watermark {required_watermark}"
@@ -816,6 +887,38 @@ class KnowledgeService:
 
     # ----------------------------------------------------------------- mutations
 
+    def _assert_publish_capacity(self, node: Node, invocation: Invocation, started: float) -> None:
+        """Fail closed when this write would push the published graph past its cap.
+
+        F-3: ``log_event`` used to grow the store without bound while every
+        published artifact is capped — enough writes made every repair rebuild
+        fail and the read model wedged permanently. The guard prices the
+        write with the store's conservative estimate and refuses it *before*
+        the commit, as a typed :class:`PublishCapacityExceeded` carrying the
+        estimate and the cap; the refusal itself is an audited invocation
+        (exactly one final failure audit, spec 7).
+        """
+        payload_bytes = len(canonical_json(storage_payload(node.model_dump(mode="python"))).encode("utf-8"))
+        estimate = self._store.estimate_publish_bytes(extra_payload_bytes=payload_bytes, extra_nodes=1, extra_edges=1)
+        if estimate <= self._publish_capacity_bytes:
+            return
+        error = PublishCapacityExceeded(
+            f"log_event refused: the estimated published graph would reach {estimate} bytes, over the "
+            f"publish capacity guard at {self._publish_capacity_bytes} bytes "
+            f"(per-artifact cap {ARTIFACT_MAX_BYTES} bytes). Retire nodes or restore a smaller backup "
+            "before writing more; see docs/recovery/sub41-flow-core-fixes.md"
+        )
+        self._audit.begin(invocation)
+        receipt = self._audit.complete(
+            invocation.invocation_id,
+            failure_outcome(invocation, started, error),
+        )
+        if receipt.status != "failure":  # pragma: no cover - defensive
+            raise StoreError(
+                f"publish-capacity refusal for invocation {invocation.invocation_id!r} recorded {receipt.status!r}"
+            )
+        raise error
+
     def log_event(
         self,
         node: Node,
@@ -825,6 +928,7 @@ class KnowledgeService:
         expected_version: int | None = None,
     ) -> WriteReceipt:
         """Record structured content as a node upsert through ``store.commit``."""
+        started = time.monotonic()
         event = Event(
             kind=EventKind.NODE_UPSERT,
             node_id=node.node_id,
@@ -839,6 +943,7 @@ class KnowledgeService:
             actor=actor or self._default_actor,
             idempotency_key=idempotency_key,
         )
+        self._assert_publish_capacity(node, invocation, started)
         return self._store.commit(event, invocation=invocation, expected_version=expected_version)
 
     def record_outcome(
@@ -1148,6 +1253,120 @@ class KnowledgeService:
             raise typed from error
         return response
 
+    # ------------------------------------------------------ relearn gate (F-4)
+
+    def relearn_status(self, *, actor: str | None = None) -> RelearnStatus:
+        """The relearn gate: state, the pending offer (with its id), the baseline.
+
+        Adapter-facing (F-4): the offer id an approval must name is retrievable
+        here. An audited read (knowledge.relearn_status).
+        """
+        started = time.monotonic()
+        invocation = self._begin("knowledge.relearn_status", {}, actor, None)
+        try:
+            status = self._relearn_engine.status()
+        except Exception as error:
+            self._finish_failure(invocation, started, error)
+            raise
+        self._finish_success(invocation, started, {"state": status.state})
+        return status
+
+    def offer_relearn(
+        self,
+        path: str | Path,
+        kind: SourceKind = SourceKind.SOUL_CORPUS,
+        parser_versions: ParserVersions | None = None,
+        *,
+        actor: str | None = None,
+    ) -> RelearnOffer | None:
+        """Detect a source change and emit the deterministic offer (never a mode).
+
+        Adapter-facing (F-4): wraps ``SourceRegistry.detect_change`` — on a
+        fingerprint change it records the new source version, the
+        :class:`RelearnOffer` and ``RELEARN_PENDING`` in one transaction;
+        returns ``None`` when nothing changed. Audited as
+        ``knowledge.relearn_offer``.
+        """
+        versions = parser_versions if parser_versions is not None else DEFAULT_PARSER_VERSIONS
+        started = time.monotonic()
+        invocation = self._begin("knowledge.relearn_offer", {"path": str(path), "kind": kind.value}, actor, None)
+        try:
+            offer = self._relearn_engine.offer(path, kind, versions)
+        except Exception as error:
+            self._finish_failure(invocation, started, error)
+            raise
+        self._finish_success(
+            invocation,
+            started,
+            {"offer_id": offer.offer_id if offer is not None else None, "relearn_pending": offer is not None},
+        )
+        return offer
+
+    def preview_relearn(
+        self,
+        mode: Literal["RESET", "ACCUMULATE"],
+        *,
+        actor: str | None = None,
+    ) -> RelearnPreview:
+        """The read-only deterministic preview of one mode against the pending offer.
+
+        Audited as ``knowledge.relearn_preview``; a missing pending offer is a
+        typed failure.
+        """
+        started = time.monotonic()
+        invocation = self._begin("knowledge.relearn_preview", {"mode": mode}, actor, None)
+        try:
+            preview = self._relearn_engine.preview(mode)
+        except StoreError as error:
+            typed = self._map_lifecycle_error(error)
+            typed.audit_event_id = invocation.audit_event_id
+            self._finish_failure(invocation, started, typed)
+            raise typed from error
+        self._finish_success(invocation, started, {"offer_id": preview.offer_id, "mode": preview.mode})
+        return preview
+
+    def apply_relearn(
+        self,
+        mode: Literal["RESET", "ACCUMULATE"],
+        approval: RelearnApproval | None,
+        *,
+        actor: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> RelearnReceipt:
+        """Apply an operator-approved relearn mode against the pending offer.
+
+        Adapter-facing (F-4): the service pre-validates the gate (pending
+        offer present, approval matches the offer and the mode) so the typed
+        refusal is audited by this service invocation; the engine then runs
+        the verified-backup apply and its own audited invocation. A replay
+        (``idempotency_key`` of an applied relearn) returns the original
+        receipt — the pre-validation skips the gate exactly then, because a
+        successful apply clears it.
+        """
+        started = time.monotonic()
+        payload = {"mode": mode, "offer_id": approval.offer_id if approval is not None else None}
+        try:
+            offer = self._relearn_engine.pending_offer()
+            if offer is None and idempotency_key is None:
+                raise NoPendingRelearn("no RELEARN_PENDING offer: relearn is never selected automatically")
+            if offer is not None and (approval is None or approval.offer_id != offer.offer_id or approval.mode != mode):
+                raise OperatorDecisionRequired(
+                    f"mode {mode} for offer {offer.offer_id!r} requires an explicit matching operator approval"
+                )
+        except RelearnError as error:
+            typed = self._audit_lifecycle_failure("knowledge.relearn_apply", payload, actor, error, started)
+            raise typed from error
+        try:
+            return self._relearn_engine.apply(
+                mode,
+                approval,
+                actor=actor or self._default_actor,
+                idempotency_key=idempotency_key,
+            )
+        except RelearnError as error:
+            typed = self._audit_lifecycle_failure("knowledge.relearn_apply", payload, actor, error, started)
+            raise typed from error
+
     # ------------------------------------------------------ propose / apply / rollback
 
     def propose_improvement(
@@ -1266,6 +1485,48 @@ class KnowledgeService:
             knowledge_seq=receipt.knowledge_seq,
         )
 
+    def _guard_rollback_noop(self, node_id: str, to_version: int | None) -> None:
+        """Refuse a rollback that cannot change content (final flow audit F-6).
+
+        Rolling back to the current version — or, target-less, when the most
+        recent apply's base revision already equals the current content — used
+        to append an identical-content revision whose only effect was flipping
+        ``lifecycle_status`` to ``rollback``. That is a dishonest no-op: the
+        guard raises a typed error instead. ``None`` targets with no applied
+        improvement and unknown nodes fall through to the engine's own typed
+        errors.
+        """
+        current = self._store.current_node(node_id)
+        if current is None:
+            return
+        target_version = to_version
+        if target_version is None:
+            with self._store.read() as conn:
+                rows = conn.execute(
+                    "SELECT payload_json FROM event_log WHERE kind = 'domain' AND node_id = ? ORDER BY event_seq DESC",
+                    (node_id,),
+                ).fetchall()
+            for row in rows:
+                data = (json.loads(str(row["payload_json"])).get("payload") or {}).get("improvement_apply")
+                if isinstance(data, dict) and data.get("from_version") is not None:
+                    target_version = int(data["from_version"])
+                    break
+            if target_version is None:
+                return  # the engine raises UnknownImprovement
+        with self._store.read() as conn:
+            row = conn.execute(
+                "SELECT payload_json FROM node_revision WHERE node_id = ? AND version = ?",
+                (node_id, target_version),
+            ).fetchone()
+        if row is None:
+            return  # the engine raises UnknownImprovement
+        target = Node.model_validate(json.loads(str(row["payload_json"])))
+        if content_fingerprint(target) == content_fingerprint(current):
+            raise LifecycleError(
+                f"rollback of node {node_id!r} to version {target_version} would leave the content unchanged "
+                f"(current version {current.version}); nothing to roll back"
+            )
+
     def rollback(
         self,
         request: RollbackRequest | None = None,
@@ -1313,6 +1574,7 @@ class KnowledgeService:
                     verified=relearn_receipt.verified,
                 )
             assert request.node_id is not None  # RollbackRequest guarantees one target
+            self._guard_rollback_noop(request.node_id, request.to_version)
             receipt = rollback_improvement(
                 self._store,
                 node_id=request.node_id,
@@ -1321,6 +1583,9 @@ class KnowledgeService:
                 at=request.at,
                 idempotency_key=idempotency_key,
             )
+        except KnowledgeError as error:
+            typed = self._audit_lifecycle_failure(operation, payload, actor, error, started)
+            raise typed from error
         except StoreError as error:
             typed = self._audit_lifecycle_failure(operation, payload, actor, error, started)
             raise typed from error

@@ -29,7 +29,12 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from soul_knowledge.store import EventStore
+from soul_knowledge.store import EventStore, StoreError
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows fallback
+    fcntl = None  # type: ignore[assignment]
 
 if TYPE_CHECKING:
     from soul_knowledge.audit import AuditLog
@@ -55,8 +60,13 @@ __all__ = [
 ]
 
 
-class BackupError(RuntimeError):
-    """A backup or restore contract violation."""
+class BackupError(StoreError):
+    """A backup or restore contract violation.
+
+    A ``StoreError`` (final flow audit F-5) so the HTTP/MCP envelopes surface
+    the typed name and the actionable message instead of a sanitized
+    ``INTERNAL``/"internal error".
+    """
 
 
 @dataclass(frozen=True)
@@ -150,7 +160,57 @@ def _verify_copy(conn: sqlite3.Connection, *, expected_events: int, expected_hea
         raise BackupError("backup copy chain head does not match the source anchor")
 
 
-def _copy_into(store_conn: sqlite3.Connection, dest: Path) -> BackupReceipt:
+# ------------------------------------------------------------- live safety
+
+
+_WAL_LOCK_OFFSET = 120  # SQLite shm lock region (DMS + WAL lock bytes)
+_WAL_LOCK_LENGTH = 512
+
+
+def _wal_sidecar_live(dest: Path) -> bool:
+    """True when *another process* holds WAL locks on *dest*'s ``-shm`` file.
+
+    Final flow audit F-1. A live WAL-mode connection holds shared byte-range
+    locks in the shm lock region (empirically bytes 120+ on this SQLite) for
+    its whole lifetime; crash residue holds none. An exclusive probe lock on
+    that region therefore distinguishes "live foreign handle" from "stale
+    sidecars": blocked → live, acquired → residue. Sidecar *absence* means no
+    WAL handle exists at all. When fcntl is unavailable the check fails
+    closed (sidecars present → treated as live).
+    """
+    shm = Path(str(dest) + "-shm")
+    if not shm.exists():
+        return False
+    if fcntl is None:  # pragma: no cover - non-POSIX fallback
+        return True
+    try:
+        fd = os.open(shm, os.O_RDWR)
+    except OSError:
+        return False
+    try:
+        try:
+            fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB, _WAL_LOCK_LENGTH, _WAL_LOCK_OFFSET)
+        except OSError:
+            return True
+        fcntl.lockf(fd, fcntl.LOCK_UN, _WAL_LOCK_LENGTH, _WAL_LOCK_OFFSET)
+        return False
+    finally:
+        os.close(fd)
+
+
+def _purge_wal_sidecars(dest: Path) -> None:
+    """Remove *dest*'s ``-wal``/``-shm`` so an old WAL never replays over replaced bytes.
+
+    Only safe once no live handle can exist (the caller has either closed the
+    same-process store under its lock or proven the sidecars unlocked).
+    """
+    for suffix in ("-wal", "-shm"):
+        side = Path(str(dest) + suffix)
+        if side.exists():
+            side.unlink()
+
+
+def _copy_into(store_conn: sqlite3.Connection, dest: Path, *, purge_sidecars: bool = False) -> BackupReceipt:
     """Backup the live connection into *dest* atomically; verify and fsync."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(f"{dest.name}.tmp-{os.getpid()}")
@@ -162,6 +222,11 @@ def _copy_into(store_conn: sqlite3.Connection, dest: Path) -> BackupReceipt:
             _verify_copy(dest_conn, expected_events=expected_events, expected_head=expected_head)
         finally:
             dest_conn.close()
+        if purge_sidecars:
+            # F-1: restore must purge the destination's stale WAL *before* the
+            # replace, or a fresh connection replays it over the restored
+            # file and the "restore" silently restores nothing.
+            _purge_wal_sidecars(dest)
         os.replace(tmp, dest)
         fd = os.open(dest, os.O_RDONLY)
         try:
@@ -184,7 +249,11 @@ def _copy_into(store_conn: sqlite3.Connection, dest: Path) -> BackupReceipt:
 
 
 def _anchor_readonly(path: Path) -> tuple[int, str | None]:
-    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    # immutable=1: the file this verifies is a complete, just-written backup
+    # API copy, so no WAL recovery is needed — and no empty -wal/-shm sidecars
+    # may be recreated at the destination (F-1: sidecars at a restore target
+    # must stay absent after the purge).
+    conn = sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True)
     try:
         return _anchor(conn)
     finally:
@@ -192,8 +261,14 @@ def _anchor_readonly(path: Path) -> tuple[int, str | None]:
 
 
 def backup_store(store: EventStore, dest_path: str | Path) -> BackupReceipt:
-    """Verified, atomic online backup of the store to *dest_path*."""
+    """Verified, atomic online backup of the store to *dest_path*.
+
+    The destination must not be a live database (F-1): replacing a file out
+    from under a live handle is the same WAL-chimera class as an uncoordinated
+    restore, so a live destination fails closed with a typed error.
+    """
     dest = Path(dest_path)
+    _assert_not_live(dest, operation="backup")
     source = store.db_path
     with store.read() as conn:
         receipt = _copy_into(conn, dest)
@@ -407,22 +482,93 @@ def backup_protected_artifacts(
     )
 
 
+def _assert_not_live(dest: Path, *, operation: str) -> None:
+    """Fail closed when *dest* is a live database this operation would byte-replace.
+
+    Same-process live stores are detected through the ``EventStore`` registry
+    (restore handles those itself via the coordinated in-place swap, so this
+    guard is for backup); a foreign live WAL handle is detected through the
+    shm lock region.
+    """
+    live = EventStore.live_store_at(dest)
+    if live is not None:
+        raise BackupError(
+            f"{operation} destination {str(dest)!r} is a live store in this process; "
+            "replacing a file under an open handle produces a WAL chimera"
+        )
+    if _wal_sidecar_live(dest):
+        raise BackupError(
+            f"{operation} destination {str(dest)!r} is a live database held by another process; "
+            "stop that process before replacing the file"
+        )
+
+
+def _restore_into_live_store(store: EventStore, backup: Path) -> BackupReceipt:
+    """Coordinated restore onto *store*'s own live path (final flow audit F-1).
+
+    The pre-fix flow byte-replaced the main file under the open handle and
+    left the old WAL in place: fresh connections replayed stale frames over
+    the restored file (the "restore" regressed nothing) while the service's
+    handle went incoherent with untyped ``sqlite3.OperationalError``. The
+    coordinated swap holds the store lock across close → sidecar purge →
+    verified replace → in-place reopen, so the shared handle and every
+    subsequent operation are consistent with the restored bytes (the W3-1
+    in-place reopen pattern).
+    """
+    dest = Path(store.db_path)
+    with store._lock:  # noqa: SLF001 - same-process handle surgery (W3-1 precedent)
+        store.close()
+        try:
+            _purge_wal_sidecars(dest)
+            source = sqlite3.connect(f"file:{backup}?mode=ro", uri=True)
+            try:
+                receipt = _copy_into(source, dest, purge_sidecars=True)
+            finally:
+                source.close()
+        except BaseException:
+            store.reopen_in_place()
+            raise
+        store.reopen_in_place()
+    return BackupReceipt(
+        source_path=str(backup),
+        backup_path=receipt.backup_path,
+        event_count=receipt.event_count,
+        chain_head_hash=receipt.chain_head_hash,
+        size_bytes=receipt.size_bytes,
+        sha256=receipt.sha256,
+    )
+
+
 def restore_store(backup_path: str | Path, dest_path: str | Path, *, overwrite: bool = False) -> BackupReceipt:
     """Restore a verified backup to *dest_path* atomically.
 
     Refuses to overwrite an existing non-empty database unless *overwrite* is
-    set; restores always land through a same-directory temp file.
+    set; restores always land through a same-directory temp file. When
+    *dest_path* is the live store of this process the restore is coordinated
+    with the handle (F-1: close, purge WAL sidecars, verified replace,
+    in-place reopen); when a *foreign* process holds the destination open it
+    fails closed with a typed :class:`BackupError`.
     """
     backup = Path(backup_path)
     dest = Path(dest_path)
     info = inspect_backup(backup)
     if not info["ok"]:
         raise BackupError(f"refusing to restore an unverified backup {str(backup)!r}")
+    live = EventStore.live_store_at(dest)
+    if live is not None:
+        if not overwrite:
+            raise BackupError(f"restore destination {str(dest)!r} exists; pass overwrite=True to replace it")
+        return _restore_into_live_store(live, backup)
+    if _wal_sidecar_live(dest):
+        raise BackupError(
+            f"restore destination {str(dest)!r} is a live database held by another process; "
+            "stop that process (or restart the service onto the restored file) before restoring"
+        )
     if dest.exists() and dest.stat().st_size > 0 and not overwrite:
         raise BackupError(f"restore destination {str(dest)!r} exists; pass overwrite=True to replace it")
     source = sqlite3.connect(f"file:{backup}?mode=ro", uri=True)
     try:
-        receipt = _copy_into(source, dest)
+        receipt = _copy_into(source, dest, purge_sidecars=True)
     finally:
         source.close()
     return BackupReceipt(
@@ -574,7 +720,20 @@ def recover_projection(
     CURRENT after the repair.
     """
     swept = sweep_orphaned_write_temps(Path(projector._output_root))
-    receipt = projector.repair_if_stale()
+    # F-2: a manifest ahead of the store (poisoned upto_knowledge_seq, or a
+    # restore that regressed the store) also poisons the activation CAS marker,
+    # and the honest rebuild may legitimately shrink. Heal the marker first,
+    # then rebuild with shrink scoped to exactly this condition.
+    manifest = projector.active_manifest()
+    ahead = (
+        manifest is not None
+        and int(manifest.get("source_knowledge_high_watermark", -1)) > store.knowledge_high_watermark()
+    )
+    if ahead:
+        store.heal_lying_projection_watermark()
+        receipt = projector.rebuild(allow_shrink=True)
+    else:
+        receipt = projector.repair_if_stale()
     audit_receipts: tuple[AuditReceipt, ...] = ()
     if audit_log is not None:
 

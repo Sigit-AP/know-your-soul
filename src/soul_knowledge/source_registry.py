@@ -343,11 +343,11 @@ class SourceRegistry:
         if source_id is None:
             return conn.execute(
                 f"SELECT sv.* FROM source_version sv WHERE sv.source_state = 'CURRENT' AND {pending_exclusion} "
-                "ORDER BY sv.rowid DESC LIMIT 1"
+                "ORDER BY sv.rowid DESC LIMIT 1"  # nosec B608 -- hardcoded constant fragment
             ).fetchone()
         return conn.execute(
             f"SELECT sv.* FROM source_version sv WHERE sv.source_state = 'CURRENT' AND sv.source_id = ? "
-            f"AND {pending_exclusion} ORDER BY sv.rowid DESC LIMIT 1",
+            f"AND {pending_exclusion} ORDER BY sv.rowid DESC LIMIT 1",  # nosec B608 -- const; id bound
             (source_id.value,),
         ).fetchone()
 
@@ -365,6 +365,21 @@ class SourceRegistry:
                 (kind.value,),
             ).fetchone()
         return None if row is None else _row_to_source_version(row)
+
+    def latest_observed(self, kind: SourceKind) -> SourceVersion | None:
+        """Public read of the newest observed ``CURRENT`` version (offers included).
+
+        The offer-gated update pipeline (F-4) uses this to tell "no baseline
+        recorded yet" apart from "content unchanged" — ``detect_change``
+        returns ``None`` for both.
+        """
+        return self._latest(kind)
+
+    def latest_offer(self) -> RelearnOffer | None:
+        """The most recently emitted relearn offer, pending or decided (F-4)."""
+        with self._store.read() as conn:
+            row = conn.execute("SELECT payload_json FROM relearn_offer ORDER BY rowid DESC LIMIT 1").fetchone()
+        return None if row is None else RelearnOffer.model_validate(json.loads(str(row["payload_json"])))
 
     def supersede(self, source_version_id: str, superseded_by: str) -> SourceVersion:
         """Mark an old version superseded by a new one (retention, never deletion)."""

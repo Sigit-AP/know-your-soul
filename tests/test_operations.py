@@ -226,14 +226,13 @@ def test_health_detects_unapplied_migrations(tmp_path: Path) -> None:
 
 def test_readiness_requires_current_projection(tmp_path: Path) -> None:
     store, projector = populated(tmp_path)
-    not_ready = check_readiness(store, projector=projector)
-    assert not not_ready.ok
-    assert not not_ready.checks["projection_present"]
-    projector.rebuild()
+    # F-9: readiness is proactive — a lagging projection is repaired during
+    # the check itself instead of staying red until the first read heals it.
     ready = check_readiness(store, projector=projector)
     assert ready.ok
     assert ready.checks["projection_present"]
     assert ready.checks["projection_watermark"]
+    assert projector.active_manifest() is not None
     store.close()
 
 

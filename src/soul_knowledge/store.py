@@ -24,9 +24,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 import threading
 import time
+import weakref
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -56,6 +58,7 @@ __all__ = [
     "EventStore",
     "IdempotencyConflict",
     "InvalidRelation",
+    "PublishCapacityExceeded",
     "StoreError",
     "VersionConflict",
 ]
@@ -89,6 +92,40 @@ class IdempotencyConflict(StoreError):
     Replaying the first write's receipt here would silently drop the new
     write (audit wave-1 finding F3), so the reuse fails loud instead.
     """
+
+
+class PublishCapacityExceeded(StoreError):
+    """The write would push the published graph past its fail-closed byte cap.
+
+    Final flow audit F-3: the store accepted unbounded ``log_event`` growth
+    while every published artifact is capped, so enough writes wedged the
+    read model permanently. The write side now fails closed *before* the
+    store crosses the publish ceiling; the message carries the estimate, the
+    cap and the headroom so the refusal is self-explanatory.
+    """
+
+
+# Same-process registry of open file-backed stores (final flow audit F-1):
+# backup/restore must know when a destination path is a *live* store so the
+# replace can be coordinated with the handle (close → swap → reopen) instead
+# of leaving a WAL chimera under it. Values are weak: a garbage-collected
+# store simply disappears from the registry.
+_LIVE_STORES_LOCK = threading.Lock()
+_LIVE_STORES: weakref.WeakValueDictionary[str, EventStore] = weakref.WeakValueDictionary()
+
+# Publish-size estimator overheads (F-3). ``payload_json`` of the latest live
+# revision is the canonical (escaped) byte length of the stored node — the
+# published graph entry carries a subset of those fields plus the adapter
+# additions and JSON key structure, so a fixed per-node/per-edge overhead
+# keeps the estimate conservative (calibrated against the frozen corpus:
+# estimate ≈ 1.6× the real ``graph.json``).
+PUBLISH_ESTIMATE_NODE_OVERHEAD_BYTES = 512
+PUBLISH_ESTIMATE_EDGE_OVERHEAD_BYTES = 160
+PUBLISH_ESTIMATE_FIXED_BYTES = 1024
+# F-3: fraction of the projection's per-artifact publish cap at which the
+# write-side guard refuses further growth (headroom absorbs the estimator's
+# over-count and the other artifacts sharing the cap).
+PUBLISH_CAPACITY_RATIO = 0.95
 
 
 @dataclass(frozen=True)
@@ -182,6 +219,7 @@ class EventStore:
     ) -> None:
         self.db_path = str(db_path)
         self._migrations_dir = Path(migrations_dir) if migrations_dir is not None else DEFAULT_MIGRATIONS_DIR
+        self._busy_timeout_ms = int(busy_timeout_ms)
         if self.db_path != ":memory:":
             Path(self.db_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
@@ -193,8 +231,45 @@ class EventStore:
             self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.execute("PRAGMA synchronous = FULL")
         self.migrate()
+        if self.db_path != ":memory:":
+            with _LIVE_STORES_LOCK:
+                _LIVE_STORES[os.path.realpath(self.db_path)] = self
 
     # ------------------------------------------------------------- lifecycle
+
+    @classmethod
+    def live_store_at(cls, db_path: str | Path) -> EventStore | None:
+        """The open same-process store bound to *db_path*, if any (F-1).
+
+        Restore/backup use this to coordinate with a live handle instead of
+        byte-replacing a file out from under it (the WAL chimera). Only
+        same-process handles are visible here; a foreign process is detected
+        separately through the WAL sidecar locks.
+        """
+        if str(db_path) == ":memory:":
+            return None
+        with _LIVE_STORES_LOCK:
+            return _LIVE_STORES.get(os.path.realpath(str(db_path)))
+
+    def reopen_in_place(self) -> None:
+        """Reopen this store's connection against its db file after a byte-replace.
+
+        The store object is *shared* (service, projector, audit log, engines
+        all hold the same instance), so a file swap must never rebind a new
+        object — the connection is transplanted in place and every holder
+        stays valid (W3-1, F-1). A fresh EventStore performs the real connect
+        (pragmas + migrations), so the connection recipe stays owned here.
+        The caller must hold ``self._lock``.
+        """
+        fresh = EventStore(
+            self.db_path,
+            migrations_dir=self._migrations_dir,
+            busy_timeout_ms=self._busy_timeout_ms,
+        )
+        self._conn = fresh._conn
+        if self.db_path != ":memory:":
+            with _LIVE_STORES_LOCK:
+                _LIVE_STORES[os.path.realpath(self.db_path)] = self
 
     def close(self) -> None:
         with self._lock:
@@ -669,6 +744,50 @@ class EventStore:
             row = conn.execute(sql).fetchone()
         return int(row["total"] or 0)
 
+    # ----------------------------------------------------- publish capacity
+
+    def estimate_publish_bytes(
+        self,
+        *,
+        extra_payload_bytes: int = 0,
+        extra_nodes: int = 0,
+        extra_edges: int = 0,
+    ) -> int:
+        """Conservative upper estimate of the next published ``graph.json`` size.
+
+        Final flow audit F-3: the write-side guard and the readiness capacity
+        report share this estimate. It is built from the store alone — the
+        canonical ``payload_json`` length of every live latest revision plus a
+        fixed per-node/per-edge overhead — so it never reads the projection
+        and never under-counts the real artifact (calibrated against the
+        frozen corpus: estimate ≈ 1.6× the real ``graph.json``, always above
+        it). ``extra_*`` price in a prospective write before it commits.
+        """
+        with self.read() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n, COALESCE(SUM(LENGTH(nr.payload_json)), 0) AS bytes, "
+                "COALESCE(MAX(LENGTH(nr.node_id)), 0) AS max_id "
+                "FROM node_revision nr "
+                "JOIN (SELECT node_id, MAX(version) AS v FROM node_revision GROUP BY node_id) latest "
+                "ON latest.node_id = nr.node_id AND latest.v = nr.version "
+                "WHERE json_extract(nr.payload_json, '$.lifecycle_status') != 'superseded'"
+            ).fetchone()
+            relations = conn.execute("SELECT COUNT(*) AS n FROM node_relation").fetchone()
+        live_nodes = int(row["n"]) if row is not None else 0
+        node_bytes = int(row["bytes"]) if row is not None else 0
+        max_id = int(row["max_id"]) if row is not None else 0
+        relation_count = int(relations["n"]) if relations is not None else 0
+        # Every live node may also carry a parent edge, so the edge estimate
+        # counts relations plus live nodes (fail-closed over-count).
+        edges = relation_count + live_nodes + extra_edges
+        return (
+            node_bytes
+            + extra_payload_bytes
+            + PUBLISH_ESTIMATE_NODE_OVERHEAD_BYTES * (live_nodes + extra_nodes)
+            + (2 * max_id + PUBLISH_ESTIMATE_EDGE_OVERHEAD_BYTES) * edges
+            + PUBLISH_ESTIMATE_FIXED_BYTES
+        )
+
     # -------------------------------------------------------- invocation state
 
     def insert_journal(self, conn: sqlite3.Connection, invocation: Invocation) -> None:
@@ -756,6 +875,34 @@ class EventStore:
             ).fetchone()
 
     # ------------------------------------------------------------- projection
+
+    def heal_lying_projection_watermark(self) -> bool:
+        """Reset the activation watermark marker when it lies ahead of the store (F-2).
+
+        The projector's activation CAS (``active_projection_watermark`` in
+        ``system_state``) rejects a generation whose knowledge watermark is
+        below the active one, so out-of-order publication is impossible. A
+        rebuild with a future ``upto_knowledge_seq`` poisons that marker —
+        after which *no* honest rebuild can ever activate and the read model
+        freezes permanently, even across restarts. The marker can never
+        honestly exceed the store's real knowledge watermark, so pulling it
+        back to the real watermark is always safe. Returns True when a lie
+        was healed.
+        """
+        with self.transaction() as conn:
+            row = conn.execute("SELECT value FROM system_state WHERE key = 'active_projection_watermark'").fetchone()
+            if row is None:
+                return False
+            real_row = conn.execute("SELECT MAX(knowledge_seq) AS maximum FROM event_log").fetchone()
+            real = int(real_row["maximum"] or 0) if real_row is not None else 0
+            claimed = int(str(row["value"]))
+            if claimed <= real:
+                return False
+            conn.execute(
+                "UPDATE system_state SET value = ?, updated_at = ? WHERE key = 'active_projection_watermark'",
+                (str(real), _now_iso()),
+            )
+        return True
 
     def set_projection_version(self, version: str) -> None:
         with self.transaction() as conn:
