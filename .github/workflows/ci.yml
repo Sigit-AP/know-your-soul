@@ -54,7 +54,12 @@ jobs:
     # Full pytest suite with coverage. The fail-under threshold (93) is set
     # just below the measured baseline (94.2% on 2026-10-26, 6477 statements);
     # raise it as coverage improves, never lower it to make CI pass.
-    runs-on: ubuntu-latest
+    # OS matrix: ubuntu + macos (both POSIX; fcntl/unix-socket paths covered).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
 
