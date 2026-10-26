@@ -4,8 +4,11 @@ Task 7 of ``docs/superpowers/plans/2026-10-24-superpower-knowledge-soul.md``;
 spec sections 7, 8 and 13.1.
 
 A thin adapter over :mod:`soul_knowledge.http_api`'s shared dispatch: every
-command validates its JSON payload, invokes the ten-operation
-``KnowledgeService`` (or the operational commands ``rebuild``, ``backup``,
+command validates its JSON payload, invokes the fourteen-operation
+``KnowledgeService`` (the frozen ten v1 operations plus the contract-v2 G1
+retrieval verbs ``path`` / ``explain`` / ``affected`` / ``god_nodes`` —
+operator ruling 2026-10-26, addendum ``docs/contracts/retrieval-verbs-v2.md``)
+(or the operational commands ``rebuild``, ``backup``,
 ``restore``, ``health`` and the operator-gated relearn lifecycle
 ``relearn-scan``/``relearn-status``/``relearn-preview``/``relearn-apply``)
 through the same code path as the HTTP API, prints the canonical JSON result
@@ -57,7 +60,7 @@ DEFAULT_SOCKET_PATH = "soul-knowledge.sock"
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="soul-knowledge",
-        description="Deterministic local knowledge service: ten audited operations plus ops commands.",
+        description="Deterministic local knowledge service: fourteen audited operations plus ops commands.",
     )
     parser.add_argument("--store", default=DEFAULT_STORE_PATH, help="path to the SQLite event store")
     parser.add_argument("--output-root", default=DEFAULT_OUTPUT_ROOT, help="projection output directory")

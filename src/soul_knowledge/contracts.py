@@ -33,6 +33,8 @@ __all__ = [
     "MINIMUM_TOKEN_BUDGET",
     "AccessDecision",
     "AccessPolicy",
+    "AffectedNode",
+    "AffectedResponse",
     "AmbiguousDomain",
     "ApplyImprovementRequest",
     "ApprovalRequiredError",
@@ -41,6 +43,9 @@ __all__ = [
     "DueReviewView",
     "EvaluateRequest",
     "EvaluateResponse",
+    "ExplainResponse",
+    "GodNode",
+    "GodNodesResponse",
     "ImprovementNotFound",
     "ImprovementResponse",
     "InvalidProposal",
@@ -53,6 +58,7 @@ __all__ = [
     "NodeView",
     "OperationNotImplemented",
     "OperatorDecisionRequiredError",
+    "PathResponse",
     "PolicyArtifactError",
     "PrimaryRootMissing",
     "PromotionVerdict",
@@ -456,6 +462,156 @@ class SubtreeResponse(_ResponseMeta):
             "guards_hit": list(self.guards_hit),
             "knowledge_payload_tokens": self.knowledge_payload_tokens,
             "node_id": self.node_id,
+            "nodes": [node.model_dump(mode="json") for node in self.nodes],
+            "projection_version": self.projection_version,
+            "required_knowledge_watermark": self.required_knowledge_watermark,
+            "source_knowledge_high_watermark": self.source_knowledge_high_watermark,
+            "stale": self.stale,
+            "truncated": self.truncated,
+        }
+
+
+# ------------------------------------------------- retrieval verbs (v2, G1)
+#
+# Operator ruling 2026-10-26 (progress.md): the four Graphify-parity retrieval
+# verbs extend the surface as contract v2 — addendum
+# ``docs/contracts/retrieval-verbs-v2.md``. The frozen v1 contracts above are
+# untouched; every v2 response carries the same audit/projection metadata
+# envelope and the same frozen token-budget semantics.
+
+
+class PathResponse(_ResponseMeta):
+    """The ``knowledge.path`` response: one deterministic shortest path.
+
+    ``no_path`` is a typed *result*, never an exception. The path is atomic:
+    it is never truncated, so an undersized budget is a typed
+    ``MetadataExceedsBudget`` error rather than a dishonest partial path.
+    """
+
+    from_id: str
+    to_id: str
+    status: Literal["found", "no_path"]
+    hops: int
+    nodes: tuple[str, ...] = ()
+    edges: tuple[SubtreeEdge, ...] = ()
+    knowledge_payload_tokens: int = 0
+    estimated_tokens: int = 0
+
+    def canonical_payload(self) -> dict[str, Any]:
+        return {
+            "audit_event_id": self.audit_event_id,
+            "edges": [edge.model_dump(mode="json") for edge in self.edges],
+            "estimated_tokens": self.estimated_tokens,
+            "from_id": self.from_id,
+            "hops": self.hops,
+            "knowledge_payload_tokens": self.knowledge_payload_tokens,
+            "nodes": list(self.nodes),
+            "projection_version": self.projection_version,
+            "required_knowledge_watermark": self.required_knowledge_watermark,
+            "source_knowledge_high_watermark": self.source_knowledge_high_watermark,
+            "stale": self.stale,
+            "status": self.status,
+            "to_id": self.to_id,
+        }
+
+
+class ExplainResponse(_ResponseMeta):
+    """The ``knowledge.explain`` response: a relational neighborhood explanation.
+
+    Distinct from ``get_subtree``: this explains one node's typed relations
+    (sorted incoming/outgoing links plus per-relation counts), not a bounded
+    document subtree.
+    """
+
+    node: NodeView
+    outgoing: tuple[SubtreeEdge, ...]
+    incoming: tuple[SubtreeEdge, ...]
+    relation_counts: dict[str, int]
+    truncated: bool = False
+    knowledge_payload_tokens: int = 0
+    estimated_tokens: int = 0
+
+    def canonical_payload(self) -> dict[str, Any]:
+        return {
+            "audit_event_id": self.audit_event_id,
+            "estimated_tokens": self.estimated_tokens,
+            "incoming": [edge.model_dump(mode="json") for edge in self.incoming],
+            "knowledge_payload_tokens": self.knowledge_payload_tokens,
+            "node": self.node.model_dump(mode="json"),
+            "outgoing": [edge.model_dump(mode="json") for edge in self.outgoing],
+            "projection_version": self.projection_version,
+            "relation_counts": dict(self.relation_counts),
+            "required_knowledge_watermark": self.required_knowledge_watermark,
+            "source_knowledge_high_watermark": self.source_knowledge_high_watermark,
+            "stale": self.stale,
+            "truncated": self.truncated,
+        }
+
+
+class AffectedNode(BaseModel):
+    """One reverse-dependency hit (contract v2): ``node_id`` depends on the seed."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    node_id: str
+    depth: int
+    relation: str
+    via: str
+
+
+class AffectedResponse(_ResponseMeta):
+    """The ``knowledge.affected`` response: bounded transitive in-links."""
+
+    node_id: str
+    depth: int
+    affected: tuple[AffectedNode, ...]
+    guards_hit: tuple[str, ...] = ()
+    truncated: bool = False
+    knowledge_payload_tokens: int = 0
+    estimated_tokens: int = 0
+
+    def canonical_payload(self) -> dict[str, Any]:
+        return {
+            "affected": [hit.model_dump(mode="json") for hit in self.affected],
+            "audit_event_id": self.audit_event_id,
+            "depth": self.depth,
+            "estimated_tokens": self.estimated_tokens,
+            "guards_hit": list(self.guards_hit),
+            "knowledge_payload_tokens": self.knowledge_payload_tokens,
+            "node_id": self.node_id,
+            "projection_version": self.projection_version,
+            "required_knowledge_watermark": self.required_knowledge_watermark,
+            "source_knowledge_high_watermark": self.source_knowledge_high_watermark,
+            "stale": self.stale,
+            "truncated": self.truncated,
+        }
+
+
+class GodNode(BaseModel):
+    """One hub node ranked by measured degree (contract v2)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    node_id: str
+    summary: str
+    degree: int
+
+
+class GodNodesResponse(_ResponseMeta):
+    """The ``knowledge.god_nodes`` response: top hubs by measured degree."""
+
+    limit: int
+    nodes: tuple[GodNode, ...]
+    truncated: bool = False
+    knowledge_payload_tokens: int = 0
+    estimated_tokens: int = 0
+
+    def canonical_payload(self) -> dict[str, Any]:
+        return {
+            "audit_event_id": self.audit_event_id,
+            "estimated_tokens": self.estimated_tokens,
+            "knowledge_payload_tokens": self.knowledge_payload_tokens,
+            "limit": self.limit,
             "nodes": [node.model_dump(mode="json") for node in self.nodes],
             "projection_version": self.projection_version,
             "required_knowledge_watermark": self.required_knowledge_watermark,

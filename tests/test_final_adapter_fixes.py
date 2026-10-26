@@ -480,8 +480,14 @@ def test_ops_health_post_stays_200_when_healthy(stack: Any) -> None:
 
 
 def test_relearn_ops_do_not_extend_the_knowledge_surface() -> None:
-    """Hard rule: relearn exposure rides the ops route; the ten stay ten."""
-    assert len(KNOWLEDGE_OPERATIONS) == 10
+    """Hard rule: relearn exposure rides the ops route, never the knowledge surface.
+
+    The surface itself is fourteen operations: the frozen ten (v1) plus the
+    four contract-v2 G1 retrieval verbs (operator ruling 2026-10-26,
+    progress.md; addendum docs/contracts/retrieval-verbs-v2.md). Relearn adds
+    nothing to it.
+    """
+    assert len(KNOWLEDGE_OPERATIONS) == 14
     assert not any("relearn" in operation for operation in KNOWLEDGE_OPERATIONS)
     for operation in ("relearn_scan", "relearn_status", "relearn_preview", "relearn_apply"):
         assert operation in OPS_OPERATIONS
@@ -692,7 +698,12 @@ def test_mcp_projection_errors_are_typed_not_internal(tmp_path: Path, monkeypatc
     _run(scenario)
 
 
-def test_mcp_tools_stay_exactly_ten() -> None:
-    """The relearn exposure must not smuggle in an eleventh tool (spec 13.2)."""
-    assert len(mcp_server.EXPECTED_TOOLS) == 10
+def test_mcp_tools_stay_free_of_relearn() -> None:
+    """The relearn exposure never becomes a knowledge tool (spec 13.2).
+
+    The v1 pin was "exactly ten"; contract v2 (operator ruling 2026-10-26)
+    extends the surface to fourteen with the four G1 retrieval verbs — relearn
+    is still not among them.
+    """
+    assert len(mcp_server.EXPECTED_TOOLS) == 14
     assert not any("relearn" in tool for tool in mcp_server.EXPECTED_TOOLS)

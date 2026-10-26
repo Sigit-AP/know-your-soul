@@ -1,9 +1,13 @@
-"""The deterministic MCP adapter: ten knowledge operations, tools+resources only.
+"""The deterministic MCP adapter: fourteen knowledge operations, tools+resources only.
 
 Task 8 of ``docs/superpowers/plans/2026-10-24-superpower-knowledge-soul.md``;
 the binding adaptation contract is ``docs/research/hermes-mcp-contract.md``
 section 3.1 and the deep-research adaptations X1/X2/X6/X8
-(``docs/research/graphify-mcp-security-deep.md``).
+(``docs/research/graphify-mcp-security-deep.md``). The surface is the frozen
+ten v1 operations plus the contract-v2 G1 retrieval verbs
+(``knowledge_path`` / ``knowledge_explain`` / ``knowledge_affected`` /
+``knowledge_god_nodes``) — operator ruling 2026-10-26 (progress.md), addendum
+``docs/contracts/retrieval-verbs-v2.md``.
 
 Hard rules enforced here:
 
@@ -88,7 +92,9 @@ __all__ = [
 DEFAULT_RESOURCE_MAX_BYTES = 65_536
 SERVER_NAME = "soul-knowledge"
 
-# The ten spec operations (spec section 8), with ``.`` rendered as ``_`` so
+# The spec operations (contract v2: the frozen ten plus the four G1 retrieval
+# verbs — operator ruling 2026-10-26, addendum
+# ``docs/contracts/retrieval-verbs-v2.md``), with ``.`` rendered as ``_`` so
 # every tool name matches the MCP ``^[a-zA-Z0-9_-]{1,64}$`` constraint; Hermes
 # registers them as ``mcp__soul-knowledge__<name>``.
 _TOOL_TO_OPERATION: dict[str, str] = {
@@ -102,6 +108,10 @@ _TOOL_TO_OPERATION: dict[str, str] = {
     "knowledge_propose_improvement": "knowledge.propose_improvement",
     "knowledge_apply_improvement": "knowledge.apply_improvement",
     "knowledge_rollback": "knowledge.rollback",
+    "knowledge_path": "knowledge.path",
+    "knowledge_explain": "knowledge.explain",
+    "knowledge_affected": "knowledge.affected",
+    "knowledge_god_nodes": "knowledge.god_nodes",
 }
 EXPECTED_TOOLS: tuple[str, ...] = tuple(sorted(_TOOL_TO_OPERATION))
 
@@ -141,7 +151,7 @@ class ToolError(RuntimeError):
 
 
 def _tool_schemas(max_token_budget: int) -> dict[str, dict[str, Any]]:
-    """Strict JSON schemas for the ten tools; every one is closed to unknown keys."""
+    """Strict JSON schemas for the fourteen tools; every one is closed to unknown keys."""
     budget = {"type": "integer", "minimum": MINIMUM_TOKEN_BUDGET, "maximum": max_token_budget}
     depth = {"type": "integer", "minimum": 1, "maximum": 6}
     mode = {"enum": ["bfs", "dfs"]}
@@ -277,6 +287,43 @@ def _tool_schemas(max_token_budget: int) -> dict[str, dict[str, Any]]:
                 "idempotency_key": idempotency,
             },
         },
+        # Contract-v2 G1 retrieval verbs (addendum retrieval-verbs-v2.md).
+        "knowledge_path": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["from_id", "to_id"],
+            "properties": {
+                "from_id": required_node_id,
+                "to_id": required_node_id,
+                "token_budget": budget,
+            },
+        },
+        "knowledge_explain": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["node_id"],
+            "properties": {"node_id": required_node_id, "token_budget": budget},
+        },
+        "knowledge_affected": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["node_id"],
+            "properties": {
+                "node_id": required_node_id,
+                "depth": depth,
+                "max_nodes": {"type": "integer", "minimum": 1, "maximum": 1024},
+                "token_budget": budget,
+            },
+        },
+        "knowledge_god_nodes": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [],
+            "properties": {
+                "limit": {"type": "integer", "minimum": 1, "maximum": 64},
+                "token_budget": budget,
+            },
+        },
     }
 
 
@@ -291,6 +338,10 @@ _DESCRIPTIONS: dict[str, str] = {
     "knowledge_propose_improvement": "Persist a structured diff proposal pinned to a node version.",
     "knowledge_apply_improvement": "Apply a persisted proposal after approval and regression gates.",
     "knowledge_rollback": "Roll a node back to a prior version, or roll back a relearn cycle.",
+    "knowledge_path": "Find the deterministic shortest directed path between two nodes (no_path is a typed result).",
+    "knowledge_explain": "Explain one node's typed relational neighborhood (in/out links, per-relation counts).",
+    "knowledge_affected": "List the nodes that depend on this one (bounded reverse walk, typed).",
+    "knowledge_god_nodes": "List the top hub nodes by measured graph degree (deterministic, bounded).",
 }
 
 
@@ -665,6 +716,41 @@ class _Adapter:
         )
         return _model_payload(receipt)
 
+    # The four contract-v2 G1 retrieval verbs (addendum
+    # docs/contracts/retrieval-verbs-v2.md): read-only, audited, canonical
+    # payload parity with the CLI/API.
+
+    def _op_path(self, args: dict[str, Any]) -> dict[str, Any]:
+        return self._service.path(
+            args["from_id"],
+            args["to_id"],
+            token_budget=args.get("token_budget", 1024),
+            actor=self._actor,
+        ).canonical_payload()
+
+    def _op_explain(self, args: dict[str, Any]) -> dict[str, Any]:
+        return self._service.explain(
+            args["node_id"],
+            token_budget=args.get("token_budget", 1024),
+            actor=self._actor,
+        ).canonical_payload()
+
+    def _op_affected(self, args: dict[str, Any]) -> dict[str, Any]:
+        return self._service.affected(
+            args["node_id"],
+            depth=args.get("depth", 2),
+            max_nodes=args.get("max_nodes", 256),
+            token_budget=args.get("token_budget", 1024),
+            actor=self._actor,
+        ).canonical_payload()
+
+    def _op_god_nodes(self, args: dict[str, Any]) -> dict[str, Any]:
+        return self._service.god_nodes(
+            limit=args.get("limit", 10),
+            token_budget=args.get("token_budget", 1024),
+            actor=self._actor,
+        ).canonical_payload()
+
     # --------------------------------------------------------------- resources
 
     def list_resources(self) -> types.ListResourcesResult:
@@ -798,7 +884,7 @@ def build_server(
     max_token_budget: int = DEFAULT_MAX_TOKEN_BUDGET,
     resource_max_bytes: int = DEFAULT_RESOURCE_MAX_BYTES,
 ) -> Server:
-    """Bind the ten operations to one allowlisted graph root (resolved once)."""
+    """Bind the fourteen operations to one allowlisted graph root (resolved once)."""
     root = resolve_within_root(graph_root, ".")
     adapter = _Adapter(
         service,

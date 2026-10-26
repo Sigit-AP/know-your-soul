@@ -42,6 +42,8 @@ from soul_knowledge.contracts import (
     ACCESS_ONLY_TOKEN_CAP,
     DEFAULT_MAX_TOKEN_BUDGET,
     MINIMUM_TOKEN_BUDGET,
+    AffectedNode,
+    AffectedResponse,
     ApplyImprovementRequest,
     ApprovalRequiredError,
     BudgetExceedsMax,
@@ -49,6 +51,9 @@ from soul_knowledge.contracts import (
     DueReviewView,
     EvaluateRequest,
     EvaluateResponse,
+    ExplainResponse,
+    GodNode,
+    GodNodesResponse,
     ImprovementNotFound,
     ImprovementResponse,
     InvalidProposal,
@@ -60,6 +65,7 @@ from soul_knowledge.contracts import (
     NodeResponse,
     NodeView,
     OperatorDecisionRequiredError,
+    PathResponse,
     PrimaryRootMissing,
     ProposalResponse,
     ProposeImprovementRequest,
@@ -115,6 +121,7 @@ from soul_knowledge.retrieval import (
     BudgetedTraversal,
     LexicalIndex,
     PrimaryRouter,
+    RelationalGraph,
     estimated_tokens,
     query_terms,
     sanitize_text,
@@ -162,6 +169,7 @@ class _Snapshot:
         self.traversal = traversal
         self._router: PrimaryRouter | None = None
         self._index: LexicalIndex | None = None
+        self._relational: RelationalGraph | None = None
 
     @property
     def router(self) -> PrimaryRouter:
@@ -174,6 +182,13 @@ class _Snapshot:
         if self._index is None:
             self._index = LexicalIndex.from_graph_nodes(self.nodes.values())
         return self._index
+
+    @property
+    def relational(self) -> RelationalGraph:
+        """The contract-v2 relational view, cached with the snapshot."""
+        if self._relational is None:
+            self._relational = RelationalGraph(self.traversal.links)
+        return self._relational
 
     @property
     def watermark(self) -> int:
@@ -882,6 +897,287 @@ class KnowledgeService:
             raise
         self._finish_success(
             invocation, started, {"node_id": node_id, "nodes": len(response.nodes), "truncated": response.truncated}
+        )
+        return response
+
+    # ------------------------------------- retrieval verbs (contract v2, G1)
+    #
+    # Operator ruling 2026-10-26 (progress.md) and addendum
+    # ``docs/contracts/retrieval-verbs-v2.md``: path/explain/affected/god_nodes
+    # are read-only verbs over the published graph artifact. Each one is one
+    # audited invocation (``knowledge.<verb>``), linearizes at invocation
+    # start like every other read, and honors the frozen token-budget
+    # semantics: list payloads truncate deterministically (``truncated=True``);
+    # the path payload is atomic and fails typed when it cannot fit.
+
+    def _read_meta(self, invocation: Invocation, snapshot: _Snapshot, required_watermark: int) -> dict[str, Any]:
+        return {
+            "audit_event_id": invocation.audit_event_id,
+            "projection_version": snapshot.projection_version,
+            "required_knowledge_watermark": required_watermark,
+            "source_knowledge_high_watermark": snapshot.watermark,
+            "stale": False,
+        }
+
+    def _check_verb_budget(self, token_budget: int) -> None:
+        if token_budget < MINIMUM_TOKEN_BUDGET:
+            raise BudgetTooSmall(f"token_budget {token_budget} is below the {MINIMUM_TOKEN_BUDGET}-token minimum")
+        if token_budget > self._max_token_budget:
+            raise BudgetExceedsMax(f"token_budget {token_budget} exceeds the configured maximum")
+
+    @staticmethod
+    def _finalize_estimate(response: Any) -> Any:
+        """Fixed-point the self-referential ``estimated_tokens`` field."""
+        estimate = 0
+        for _ in range(12):
+            candidate = response.model_copy(update={"estimated_tokens": estimate})
+            new_estimate = estimated_tokens(candidate.canonical_payload())
+            response = candidate
+            if new_estimate == estimate:
+                break
+            estimate = new_estimate
+        return response
+
+    def path(self, from_id: str, to_id: str, *, token_budget: int = 1024, actor: str | None = None) -> PathResponse:
+        """The deterministic shortest directed path; ``no_path`` is a typed result."""
+        started = time.monotonic()
+        invocation = self._begin(
+            "knowledge.path", {"from_id": from_id, "to_id": to_id, "token_budget": token_budget}, actor, None
+        )
+        try:
+            self._check_verb_budget(token_budget)
+            required_watermark = self._store.knowledge_high_watermark()
+            snapshot = self._snapshot(required_watermark)
+            for endpoint in (from_id, to_id):
+                if endpoint not in snapshot.nodes:
+                    raise NodeNotFound(f"node {endpoint!r} is absent from the active projection")
+            outcome = snapshot.relational.shortest_path(from_id, to_id)
+            edges = tuple(
+                SubtreeEdge(source=link.source, target=link.target, relation=link.relation) for link in outcome.edges
+            )
+            response = self._finalize_estimate(
+                PathResponse(
+                    **self._read_meta(invocation, snapshot, required_watermark),
+                    from_id=from_id,
+                    to_id=to_id,
+                    status=outcome.status,
+                    hops=len(outcome.edges),
+                    nodes=outcome.nodes,
+                    edges=edges,
+                    knowledge_payload_tokens=estimated_tokens_of_payload(
+                        {"nodes": list(outcome.nodes), "edges": [edge.model_dump(mode="json") for edge in edges]}
+                    )
+                    if outcome.nodes
+                    else 0,
+                )
+            )
+            if response.estimated_tokens > token_budget:
+                # A path is atomic: never truncate it into a dishonest prefix.
+                raise MetadataExceedsBudget(
+                    f"the path response needs {response.estimated_tokens} tokens over the {token_budget}-token budget"
+                )
+        except KnowledgeError as error:
+            error.audit_event_id = invocation.audit_event_id
+            self._finish_failure(invocation, started, error)
+            raise
+        except Exception as error:
+            self._finish_failure(invocation, started, error)
+            raise
+        self._finish_success(
+            invocation,
+            started,
+            {"from_id": from_id, "to_id": to_id, "status": response.status, "hops": response.hops},
+        )
+        return response
+
+    def explain(self, node_id: str, *, token_budget: int = 1024, actor: str | None = None) -> ExplainResponse:
+        """A relational neighborhood explanation — typed incident links, not a subtree."""
+        started = time.monotonic()
+        invocation = self._begin("knowledge.explain", {"node_id": node_id, "token_budget": token_budget}, actor, None)
+        try:
+            self._check_verb_budget(token_budget)
+            required_watermark = self._store.knowledge_high_watermark()
+            snapshot = self._snapshot(required_watermark)
+            node = snapshot.nodes.get(node_id)
+            if node is None:
+                raise NodeNotFound(f"node {node_id!r} is absent from the active projection")
+            neighborhood = snapshot.relational.explain_neighborhood(node_id)
+            outgoing = tuple(
+                SubtreeEdge(source=link.source, target=link.target, relation=link.relation)
+                for link in neighborhood.outgoing
+            )
+            incoming = tuple(
+                SubtreeEdge(source=link.source, target=link.target, relation=link.relation)
+                for link in neighborhood.incoming
+            )
+            relation_counts = dict(neighborhood.relation_counts)
+            meta = self._read_meta(invocation, snapshot, required_watermark)
+            truncated = False
+            while True:
+                response = self._finalize_estimate(
+                    ExplainResponse(
+                        **meta,
+                        node=self._node_view(node),
+                        outgoing=outgoing,
+                        incoming=incoming,
+                        relation_counts=relation_counts,
+                        truncated=truncated,
+                        knowledge_payload_tokens=estimated_tokens_of_payload(
+                            {
+                                "incoming": [edge.model_dump(mode="json") for edge in incoming],
+                                "outgoing": [edge.model_dump(mode="json") for edge in outgoing],
+                            }
+                        ),
+                    )
+                )
+                if response.estimated_tokens <= token_budget:
+                    break
+                if not incoming and not outgoing:
+                    raise MetadataExceedsBudget("mandatory metadata exceeds the explain budget")
+                # Deterministic truncation: drop from the tail of the longer
+                # list; ties drop an incoming edge first.
+                if len(incoming) >= len(outgoing) and incoming:
+                    incoming = incoming[:-1]
+                else:
+                    outgoing = outgoing[:-1]
+                truncated = True
+        except KnowledgeError as error:
+            error.audit_event_id = invocation.audit_event_id
+            self._finish_failure(invocation, started, error)
+            raise
+        except Exception as error:
+            self._finish_failure(invocation, started, error)
+            raise
+        self._finish_success(
+            invocation,
+            started,
+            {
+                "node_id": node_id,
+                "incoming": len(response.incoming),
+                "outgoing": len(response.outgoing),
+                "truncated": response.truncated,
+            },
+        )
+        return response
+
+    def affected(
+        self,
+        node_id: str,
+        *,
+        depth: int = 2,
+        max_nodes: int = 256,
+        token_budget: int = 1024,
+        actor: str | None = None,
+    ) -> AffectedResponse:
+        """Reverse dependency walk: the nodes that depend on *node_id* (bounded, typed)."""
+        started = time.monotonic()
+        invocation = self._begin(
+            "knowledge.affected",
+            {"node_id": node_id, "depth": depth, "max_nodes": max_nodes, "token_budget": token_budget},
+            actor,
+            None,
+        )
+        try:
+            self._check_verb_budget(token_budget)
+            required_watermark = self._store.knowledge_high_watermark()
+            snapshot = self._snapshot(required_watermark)
+            if node_id not in snapshot.nodes:
+                raise NodeNotFound(f"node {node_id!r} is absent from the active projection")
+            report = snapshot.relational.affected(node_id, depth=depth, max_nodes=max_nodes)
+            hits = tuple(
+                AffectedNode(node_id=hit.node_id, depth=hit.depth, relation=hit.relation, via=hit.via)
+                for hit in report.hits
+            )
+            meta = self._read_meta(invocation, snapshot, required_watermark)
+            truncated = False
+            while True:
+                response = self._finalize_estimate(
+                    AffectedResponse(
+                        **meta,
+                        node_id=node_id,
+                        depth=depth,
+                        affected=hits,
+                        guards_hit=report.guards_hit,
+                        truncated=truncated,
+                        knowledge_payload_tokens=estimated_tokens_of_payload(
+                            {"affected": [hit.model_dump(mode="json") for hit in hits]}
+                        )
+                        if hits
+                        else 0,
+                    )
+                )
+                if response.estimated_tokens <= token_budget:
+                    break
+                if not hits:
+                    raise MetadataExceedsBudget("mandatory metadata exceeds the affected budget")
+                hits = hits[:-1]
+                truncated = True
+        except KnowledgeError as error:
+            error.audit_event_id = invocation.audit_event_id
+            self._finish_failure(invocation, started, error)
+            raise
+        except Exception as error:
+            self._finish_failure(invocation, started, error)
+            raise
+        self._finish_success(
+            invocation,
+            started,
+            {"node_id": node_id, "affected": len(response.affected), "truncated": response.truncated},
+        )
+        return response
+
+    def god_nodes(self, *, limit: int = 10, token_budget: int = 1024, actor: str | None = None) -> GodNodesResponse:
+        """The top hub nodes by measured graph degree — deterministic and bounded."""
+        started = time.monotonic()
+        invocation = self._begin("knowledge.god_nodes", {"limit": limit, "token_budget": token_budget}, actor, None)
+        try:
+            self._check_verb_budget(token_budget)
+            required_watermark = self._store.knowledge_high_watermark()
+            snapshot = self._snapshot(required_watermark)
+            ranked = snapshot.relational.god_nodes(limit=limit)
+            nodes = tuple(
+                GodNode(
+                    node_id=node_id,
+                    summary=_redacted_content(
+                        str(snapshot.nodes[node_id].get("label") or node_id), max_length=_MAX_SUMMARY_LENGTH
+                    )
+                    if node_id in snapshot.nodes
+                    else node_id,
+                    degree=degree,
+                )
+                for node_id, degree in ranked
+            )
+            meta = self._read_meta(invocation, snapshot, required_watermark)
+            truncated = False
+            while True:
+                response = self._finalize_estimate(
+                    GodNodesResponse(
+                        **meta,
+                        limit=limit,
+                        nodes=nodes,
+                        truncated=truncated,
+                        knowledge_payload_tokens=estimated_tokens_of_payload(
+                            {"nodes": [node.model_dump(mode="json") for node in nodes]}
+                        )
+                        if nodes
+                        else 0,
+                    )
+                )
+                if response.estimated_tokens <= token_budget:
+                    break
+                if not nodes:
+                    raise MetadataExceedsBudget("mandatory metadata exceeds the god_nodes budget")
+                nodes = nodes[:-1]
+                truncated = True
+        except KnowledgeError as error:
+            error.audit_event_id = invocation.audit_event_id
+            self._finish_failure(invocation, started, error)
+            raise
+        except Exception as error:
+            self._finish_failure(invocation, started, error)
+            raise
+        self._finish_success(
+            invocation, started, {"limit": limit, "nodes": len(response.nodes), "truncated": response.truncated}
         )
         return response
 

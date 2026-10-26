@@ -165,7 +165,7 @@ Every Task 10 acceptance bullet is a named test in
 | Acceptance bullet | Test | Status |
 |-------------------|------|--------|
 | Seven domains routed | `TestSevenDomainsEndToEnd` | **PASS** (real, frozen-corpus system) |
-| Exactly ten audited tools | `TestAuditedTools` | **PASS** (2 tests) |
+| Exactly ten audited tools (v1) — **superseded: fourteen tools under contract v2** (operator ruling 2026-10-26; addendum `docs/contracts/retrieval-verbs-v2.md`; the ten v1 operations unchanged) | `TestAuditedTools` | **PASS** (2 tests, updated to the fourteen-op pin) |
 | Three access paths | `TestThreeAccessPaths` | **PASS** (2 tests; CLI subprocess + local API + MCP, canonical payload parity minus per-invocation audit id and wall-clock expiry) |
 | One final audit per valid invocation | `TestExactlyOneFinalAudit::test_one_final_audit_per_valid_invocation` | **PASS** |
 | One final audit per recovered failure | `TestExactlyOneFinalAudit::test_one_final_audit_per_recovered_failure` | **PASS** (typed failure + crash-recovery journal, second recovery pass appends nothing) |

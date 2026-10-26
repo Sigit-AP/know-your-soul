@@ -1,7 +1,10 @@
 # Connecting Hermes Agent to the SOUL knowledge MCP server
 
 This product is a **pure external MCP consumer target**: Hermes supplies its
-own model and calls the ten knowledge operations as first-class tools. Hermes
+own model and calls the fourteen knowledge operations as first-class tools
+(the frozen ten v1 operations plus the contract-v2 G1 retrieval verbs —
+operator ruling 2026-10-26, addendum
+`docs/contracts/retrieval-verbs-v2.md`). Hermes
 source is never modified, and its configuration is only ever written through
 Hermes' own `hermes mcp` commands — never hand-edited.
 
@@ -48,12 +51,14 @@ hermes mcp test soul-knowledge
 hermes mcp list
 ```
 
-Hermes registers the ten operations as
+Hermes registers the fourteen operations as
 `mcp__soul-knowledge__knowledge_query`, `…__knowledge_get_node`,
 `…__knowledge_get_subtree`, `…__knowledge_log_event`,
 `…__knowledge_record_outcome`, `…__knowledge_evaluate`,
 `…__knowledge_review`, `…__knowledge_propose_improvement`,
-`…__knowledge_apply_improvement`, `…__knowledge_rollback` and calls them like
+`…__knowledge_apply_improvement`, `…__knowledge_rollback` — plus the four
+contract-v2 G1 retrieval verbs `…__knowledge_path`, `…__knowledge_explain`,
+`…__knowledge_affected`, `…__knowledge_god_nodes` — and calls them like
 native tools.
 
 **Do not** pass `--env`: the server needs no environment variables, and
@@ -112,6 +117,25 @@ Keep the loopback/Unix-socket boundary; do not expose the port externally.
 - Every invocation — including rejected ones — produces exactly one final
   audit event in the store, so Hermes-side calls are fully traceable.
 
+### The four G1 retrieval verbs (contract v2)
+
+Addendum `docs/contracts/retrieval-verbs-v2.md`. All four are read-only,
+deterministic (BFS over the graph's links list, sorted tie-breaks — no model),
+token-budgeted, and audited like every other operation:
+
+- `knowledge_path {from_id, to_id, token_budget?}` — the shortest directed
+  path; `status: "no_path"` is a typed result, never an error. The path is
+  atomic: an undersized budget is `METADATA_EXCEEDS_BUDGET`, never a partial
+  path.
+- `knowledge_explain {node_id, token_budget?}` — one node's relational
+  neighborhood: sorted incoming/outgoing typed links plus per-relation counts
+  (not a document subtree — that is `knowledge_get_subtree`).
+- `knowledge_affected {node_id, depth?, max_nodes?, token_budget?}` — the
+  reverse dependency walk: what depends on this node, transitively, bounded
+  (`depth` `[1,6]`), with typed `guards_hit`.
+- `knowledge_god_nodes {limit?, token_budget?}` — the top hub nodes by
+  measured graph degree (`limit` `[1,64]`, ordered by `(-degree, node_id)`).
+
 ## 5. Sanitized resources
 
 Four read-only resources are exposed, all sanitized (control/bidi/zero-width
@@ -129,9 +153,9 @@ Raw Graphify reports are never served; there are no PR/`gh` tools.
 When SOUL.md or the corpus changes, the system emits a deterministic
 `RelearnOffer` and sets `RELEARN_PENDING`. It never picks a mode itself: the
 RESET/ACCUMULATE decision is an explicit operator act. The lifecycle rides
-the **ops surface** (CLI subcommands and `POST /v1/ops/...`) — the ten
-knowledge operations and the ten MCP tools are unchanged, and no eleventh
-tool exists:
+the **ops surface** (CLI subcommands and `POST /v1/ops/...`) — the fourteen
+knowledge operations and the fourteen MCP tools are unchanged by it, and no
+relearn tool exists on the knowledge surface:
 
 ```bash
 soul-knowledge relearn-scan '{"path": "/path/to/corpus", "kind": "SOUL_CORPUS"}'

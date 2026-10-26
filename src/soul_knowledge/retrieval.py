@@ -37,11 +37,16 @@ __all__ = [
     "FIELD_WEIGHTS",
     "SEARCHABLE_FIELDS",
     "STOPWORDS",
+    "AffectedHit",
+    "AffectedReport",
     "BudgetedTraversal",
     "GraphLink",
     "LexicalIndex",
+    "NeighborhoodExplanation",
+    "PathOutcome",
     "PrimaryRouter",
     "RankedHit",
+    "RelationalGraph",
     "RouteOutcome",
     "TraversalReport",
     "estimated_tokens",
@@ -828,3 +833,180 @@ class BudgetedTraversal:
             cross_edges=tuple(cross),
             guards_hit=tuple(sorted(guards)),
         )
+
+
+# --------------------------------------- relational verbs (contract v2, G1)
+#
+# Operator ruling 2026-10-26 (progress.md): the Graphify-parity verbs
+# ``path`` / ``explain`` / ``affected`` / ``god_nodes`` join the surface as
+# contract v2 (addendum ``docs/contracts/retrieval-verbs-v2.md``). They read
+# the same ``graph.json`` links list as :class:`BudgetedTraversal` — never a
+# collapsed simple-graph edge view — and every ordering is a pure function of
+# the link rows: adjacency sorted by ``(relation, peer)``, rankings by
+# ``(-degree, node_id)``. No model, no randomness, no wall-clock input.
+
+
+@dataclass(frozen=True)
+class PathOutcome:
+    """The typed shortest-path verdict; ``no_path`` is a result, not an error.
+
+    ``nodes`` lists the path endpoints in order (a self-path is the singleton
+    ``(node,)`` with zero edges); ``edges`` carries the traversed typed links,
+    so parallel relations on one node pair survive verbatim.
+    """
+
+    status: Literal["found", "no_path"]
+    nodes: tuple[str, ...] = ()
+    edges: tuple[GraphLink, ...] = ()
+
+
+@dataclass(frozen=True)
+class NeighborhoodExplanation:
+    """One node's relational neighborhood: incident links plus per-relation counts."""
+
+    outgoing: tuple[GraphLink, ...]
+    incoming: tuple[GraphLink, ...]
+    relation_counts: tuple[tuple[str, int], ...]
+
+
+@dataclass(frozen=True)
+class AffectedHit:
+    """One reverse-dependency hit: ``node_id`` depends on the seed via ``via``."""
+
+    node_id: str
+    depth: int
+    relation: str
+    via: str
+
+
+@dataclass(frozen=True)
+class AffectedReport:
+    hits: tuple[AffectedHit, ...]
+    guards_hit: tuple[str, ...]
+
+
+class RelationalGraph:
+    """Directed relational views over the verbatim links list (contract v2).
+
+    Outgoing adjacency is sorted by ``(relation, target)`` and incoming by
+    ``(relation, source)``, so BFS discovery order, neighborhood listings and
+    degree rankings are all deterministic functions of the graph artifact.
+    """
+
+    def __init__(self, links: Iterable[GraphLink]) -> None:
+        outgoing: dict[str, list[GraphLink]] = {}
+        incoming: dict[str, list[GraphLink]] = {}
+        degree: dict[str, int] = {}
+        for link in links:
+            outgoing.setdefault(link.source, []).append(link)
+            incoming.setdefault(link.target, []).append(link)
+            # Measured degree: each link row counts, so parallel typed
+            # relations on one node pair contribute separately (the links
+            # list is the source of truth, never a collapsed edge view).
+            degree[link.source] = degree.get(link.source, 0) + 1
+            degree[link.target] = degree.get(link.target, 0) + 1
+        for neighbours in outgoing.values():
+            neighbours.sort(key=lambda link: (link.relation, link.target))
+        for neighbours in incoming.values():
+            neighbours.sort(key=lambda link: (link.relation, link.source))
+        self._outgoing = outgoing
+        self._incoming = incoming
+        self._degree = degree
+
+    def shortest_path(self, from_id: str, to_id: str) -> PathOutcome:
+        """BFS shortest directed path; ties break on the sorted adjacency.
+
+        First-discovery parents over the sorted adjacency make the
+        reconstructed path a pure function of the links list. A self-path is
+        the singleton node with zero edges; an unreachable (or unknown)
+        target is the typed ``no_path`` outcome, never an exception.
+        """
+        if from_id == to_id:
+            return PathOutcome(status="found", nodes=(from_id,), edges=())
+        parent: dict[str, GraphLink] = {}
+        seen = {from_id}
+        frontier: deque[str] = deque([from_id])
+        while frontier:
+            current = frontier.popleft()
+            for link in self._outgoing.get(current, []):
+                if link.target in seen:
+                    continue
+                seen.add(link.target)
+                parent[link.target] = link
+                if link.target == to_id:
+                    nodes = [to_id]
+                    edges: list[GraphLink] = []
+                    while nodes[-1] != from_id:
+                        edge = parent[nodes[-1]]
+                        edges.append(edge)
+                        nodes.append(edge.source)
+                    nodes.reverse()
+                    edges.reverse()
+                    return PathOutcome(status="found", nodes=tuple(nodes), edges=tuple(edges))
+                frontier.append(link.target)
+        return PathOutcome(status="no_path")
+
+    def explain_neighborhood(self, node_id: str) -> NeighborhoodExplanation:
+        """Incident links of one node, sorted, with per-relation counts.
+
+        This is a *relational* explanation — which typed relations connect
+        this node to which peers — not a document subtree (that is
+        :meth:`BudgetedTraversal.traverse`'s job).
+        """
+        outgoing = tuple(self._outgoing.get(node_id, ()))
+        incoming = tuple(self._incoming.get(node_id, ()))
+        counts: dict[str, int] = {}
+        for link in (*outgoing, *incoming):
+            counts[link.relation] = counts.get(link.relation, 0) + 1
+        return NeighborhoodExplanation(
+            outgoing=outgoing,
+            incoming=incoming,
+            relation_counts=tuple(sorted(counts.items())),
+        )
+
+    def affected(self, node_id: str, *, depth: int, max_nodes: int) -> AffectedReport:
+        """Reverse BFS: the nodes that depend on *node_id*, bounded by *depth*.
+
+        In-links are walked transitively up to *depth* hops (``[1,6]``, the
+        same bound as the traversal contract); the seed is never re-reported
+        through a cycle, and breadth/depth caps surface as typed guard names
+        in ``guards_hit`` rather than silently truncating.
+        """
+        if not 1 <= depth <= 6:
+            raise ValueError("depth must be within [1,6]")
+        if max_nodes < 1:
+            raise ValueError("max_nodes must be >= 1")
+        seen = {node_id}
+        hits: list[AffectedHit] = []
+        guards: set[str] = set()
+        frontier: deque[tuple[str, int]] = deque([(node_id, 0)])
+        exhausted = False
+        while frontier and not exhausted:
+            current, level = frontier.popleft()
+            if level >= depth:
+                if any(link.source not in seen for link in self._incoming.get(current, [])):
+                    guards.add("depth")
+                continue
+            for link in self._incoming.get(current, []):
+                if len(hits) >= max_nodes:
+                    guards.add("max_nodes")
+                    exhausted = True
+                    break
+                if link.source in seen:
+                    continue
+                seen.add(link.source)
+                hits.append(AffectedHit(node_id=link.source, depth=level + 1, relation=link.relation, via=current))
+                frontier.append((link.source, level + 1))
+        return AffectedReport(hits=tuple(hits), guards_hit=tuple(sorted(guards)))
+
+    def god_nodes(self, *, limit: int) -> tuple[tuple[str, int], ...]:
+        """The top hub nodes by measured degree: ``(-degree, node_id)`` order.
+
+        Degree counts every link row touching the node (in and out), so the
+        ranking is a deterministic measurement of the published artifact —
+        never a centrality approximation and never a model call.
+        """
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+        ranked = sorted(self._degree.items(), key=lambda item: (-item[1], item[0]))
+        return tuple(ranked[:limit])

@@ -110,6 +110,11 @@ def _valid_arguments(tool: str) -> dict[str, Any]:
         },
         "knowledge_apply_improvement": {"proposal_id": "p-1"},
         "knowledge_rollback": {},
+        # Contract v2 G1 retrieval verbs (operator ruling 2026-10-26).
+        "knowledge_path": {"from_id": "n-1", "to_id": "n-2"},
+        "knowledge_explain": {"node_id": "n-1"},
+        "knowledge_affected": {"node_id": "n-1"},
+        "knowledge_god_nodes": {},
     }[tool]
     return dict(base)
 
@@ -117,12 +122,15 @@ def _valid_arguments(tool: str) -> dict[str, Any]:
 # ------------------------------------------------------------ schema surface
 
 
-def test_tool_surface_is_exactly_the_ten_spec_operations() -> None:
-    assert len(EXPECTED_TOOLS) == 10
+def test_tool_surface_is_exactly_the_v2_operations() -> None:
+    """Contract v2 (operator ruling 2026-10-26; addendum
+    docs/contracts/retrieval-verbs-v2.md): the frozen ten spec operations plus
+    the four G1 retrieval verbs — fourteen tools, bijectively mapped."""
+    assert len(EXPECTED_TOOLS) == 14
     assert tuple(sorted(EXPECTED_TOOLS)) == EXPECTED_TOOLS
     assert set(EXPECTED_TOOLS) == set(_TOOL_TO_OPERATION)
     operations = set(_TOOL_TO_OPERATION.values())
-    assert len(operations) == 10  # the mapping is bijective
+    assert len(operations) == 14  # the mapping is bijective
     assert operations == {
         "knowledge.query",
         "knowledge.get_node",
@@ -134,10 +142,14 @@ def test_tool_surface_is_exactly_the_ten_spec_operations() -> None:
         "knowledge.propose_improvement",
         "knowledge.apply_improvement",
         "knowledge.rollback",
+        "knowledge.path",
+        "knowledge.explain",
+        "knowledge.affected",
+        "knowledge.god_nodes",
     }
 
 
-@given(index=st.integers(min_value=0, max_value=9))
+@given(index=st.integers(min_value=0, max_value=13))
 @settings(derandomize=True, max_examples=10, deadline=None)
 def test_every_tool_name_matches_the_mcp_constraint(index: int) -> None:
     assert _TOOL_NAME_RE.fullmatch(EXPECTED_TOOLS[index])
@@ -502,6 +514,7 @@ def test_an_internal_error_never_leaks_raw_exception_text() -> None:
 
 
 def test_required_sets_are_the_pinned_snapshot() -> None:
+    """Pinned required sets (contract v2: +4 G1 verbs — operator ruling 2026-10-26)."""
     required = {tool: tuple(schema.get("required", ())) for tool, schema in _tool_schemas(_MAX).items()}
     assert required == {
         "knowledge_query": ("purpose", "token_budget"),
@@ -514,6 +527,10 @@ def test_required_sets_are_the_pinned_snapshot() -> None:
         "knowledge_propose_improvement": ("node_id", "diff", "rationale"),
         "knowledge_apply_improvement": ("proposal_id",),
         "knowledge_rollback": (),
+        "knowledge_path": ("from_id", "to_id"),
+        "knowledge_explain": ("node_id",),
+        "knowledge_affected": ("node_id",),
+        "knowledge_god_nodes": (),
     }
 
 

@@ -4,12 +4,15 @@ Task 7 of ``docs/superpowers/plans/2026-10-24-superpower-knowledge-soul.md``;
 spec sections 7 (invocation/audit flow), 8 and 13.1.
 
 This module is a *thin adapter*: it validates transport payloads, forwards
-them to the ten-operation :class:`~soul_knowledge.service.KnowledgeService`
+them to the fourteen-operation :class:`~soul_knowledge.service.KnowledgeService`
+(the frozen ten v1 operations plus the contract-v2 G1 retrieval verbs
+``path`` / ``explain`` / ``affected`` / ``god_nodes`` — operator ruling
+2026-10-26, addendum ``docs/contracts/retrieval-verbs-v2.md``)
 (or the operational commands: projection rebuild, backup, restore, health and
 the operator-gated relearn lifecycle ``relearn_scan`` / ``relearn_status`` /
-``relearn_preview`` / ``relearn_apply`` — final-audit F-4; the ten knowledge
-operations are unchanged) and serializes the result. No business logic lives
-here.
+``relearn_preview`` / ``relearn_apply`` — final-audit F-4; the knowledge
+operations are unchanged by the relearn surface) and serializes the result.
+No business logic lives here.
 
 Audit discipline (spec 7.7):
 
@@ -119,6 +122,7 @@ logger = logging.getLogger(__name__)
 API_VERSION = "v1"
 DEFAULT_HOST_ALLOWLIST: tuple[str, ...] = ("localhost", "127.0.0.1", "::1")
 KNOWLEDGE_OPERATIONS: tuple[str, ...] = (
+    # The frozen ten v1 operations (spec section 8).
     "query",
     "get_node",
     "get_subtree",
@@ -129,6 +133,12 @@ KNOWLEDGE_OPERATIONS: tuple[str, ...] = (
     "propose_improvement",
     "apply_improvement",
     "rollback",
+    # Contract v2 (operator ruling 2026-10-26, progress.md; addendum
+    # docs/contracts/retrieval-verbs-v2.md): the four G1 retrieval verbs.
+    "path",
+    "explain",
+    "affected",
+    "god_nodes",
 )
 OPS_OPERATIONS: tuple[str, ...] = (
     "rebuild",
@@ -136,7 +146,7 @@ OPS_OPERATIONS: tuple[str, ...] = (
     "restore",
     "health",
     # Final-audit F-4 (adapter half): the operator-gated relearn lifecycle
-    # rides the ops route — the ten knowledge operations stay untouched.
+    # rides the ops route — the knowledge operations stay untouched by it.
     "relearn_scan",
     "relearn_status",
     "relearn_preview",
@@ -266,6 +276,32 @@ class _GetSubtreePayload(_Payload):
     token_budget: int = 1024
 
 
+# Contract-v2 retrieval verb payloads (addendum retrieval-verbs-v2.md).
+
+
+class _PathPayload(_Payload):
+    from_id: str = Field(min_length=1)
+    to_id: str = Field(min_length=1)
+    token_budget: int = 1024
+
+
+class _ExplainPayload(_Payload):
+    node_id: str = Field(min_length=1)
+    token_budget: int = 1024
+
+
+class _AffectedPayload(_Payload):
+    node_id: str = Field(min_length=1)
+    depth: int = Field(default=2, ge=1, le=6)
+    max_nodes: int = Field(default=256, ge=1, le=1024)
+    token_budget: int = 1024
+
+
+class _GodNodesPayload(_Payload):
+    limit: int = Field(default=10, ge=1, le=64)
+    token_budget: int = 1024
+
+
 class _RebuildPayload(_Payload):
     upto_knowledge_seq: int | None = None
 
@@ -369,6 +405,28 @@ def _call_apply(stack: LocalStack, request: ApplyImprovementRequest, actor: str,
 
 def _call_rollback(stack: LocalStack, request: RollbackRequest, actor: str, idem: str | None) -> Any:
     return stack.service.rollback(request, actor=actor, idempotency_key=idem)
+
+
+def _call_path(stack: LocalStack, request: _PathPayload, actor: str, idem: str | None) -> Any:
+    return stack.service.path(request.from_id, request.to_id, token_budget=request.token_budget, actor=actor)
+
+
+def _call_explain(stack: LocalStack, request: _ExplainPayload, actor: str, idem: str | None) -> Any:
+    return stack.service.explain(request.node_id, token_budget=request.token_budget, actor=actor)
+
+
+def _call_affected(stack: LocalStack, request: _AffectedPayload, actor: str, idem: str | None) -> Any:
+    return stack.service.affected(
+        request.node_id,
+        depth=request.depth,
+        max_nodes=request.max_nodes,
+        token_budget=request.token_budget,
+        actor=actor,
+    )
+
+
+def _call_god_nodes(stack: LocalStack, request: _GodNodesPayload, actor: str, idem: str | None) -> Any:
+    return stack.service.god_nodes(limit=request.limit, token_budget=request.token_budget, actor=actor)
 
 
 def _call_rebuild(stack: LocalStack, request: _RebuildPayload, actor: str, idem: str | None) -> Any:
@@ -495,6 +553,11 @@ _OPERATIONS: dict[str, _OpSpec] = {
     "propose_improvement": _OpSpec(_model_parse(ProposeImprovementRequest), _call_propose),
     "apply_improvement": _OpSpec(_model_parse(ApplyImprovementRequest), _call_apply),
     "rollback": _OpSpec(_model_parse(RollbackRequest), _call_rollback),
+    # Contract v2 retrieval verbs (addendum retrieval-verbs-v2.md).
+    "path": _OpSpec(_model_parse(_PathPayload), _call_path),
+    "explain": _OpSpec(_model_parse(_ExplainPayload), _call_explain),
+    "affected": _OpSpec(_model_parse(_AffectedPayload), _call_affected),
+    "god_nodes": _OpSpec(_model_parse(_GodNodesPayload), _call_god_nodes),
     "rebuild": _OpSpec(_model_parse(_RebuildPayload), _call_rebuild),
     "backup": _OpSpec(_model_parse(_BackupPayload), _call_backup),
     "restore": _OpSpec(_model_parse(_RestorePayload), _call_restore),

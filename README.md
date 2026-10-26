@@ -19,7 +19,7 @@ Python 3.14 modular monolith:
                  │ knowledge) │  │  /uvicorn) │  │  HTTP)     │
                  └─────┬──────┘  └─────┬──────┘  └─────┬──────┘
                        └───────────────┼───────────────┘
-                               KnowledgeService          ← ten audited operations
+                               KnowledgeService          ← fourteen audited operations
                                        │
         ┌──────────────────────────────┼──────────────────────────────┐
         │                              │                              │
@@ -40,9 +40,11 @@ Python 3.14 modular monolith:
   and fail closed (`src/soul_knowledge/runtime_guard.py`); outbound sockets
   are denied; MCP is tools+resources only, no sampling.
 
-## The ten operations
+## The fourteen operations
 
-Exposed identically on all three access paths:
+Exposed identically on all three access paths. The ten v1 operations (spec
+section 8) are frozen; contract v2 (operator ruling 2026-10-26, addendum
+`docs/contracts/retrieval-verbs-v2.md`) adds the four G1 retrieval verbs:
 
 | # | Operation | Purpose |
 |---|-----------|---------|
@@ -56,6 +58,10 @@ Exposed identically on all three access paths:
 | 8 | `propose_improvement` | Structured diff proposal (never autonomous rewriting) |
 | 9 | `apply_improvement` | Operator-gated apply with expected-version check and regression gate |
 | 10 | `rollback` | Byte-exact reversal of an applied improvement or relearn |
+| 11 | `path` | Deterministic shortest directed path between two nodes (`no_path` is a typed result) |
+| 12 | `explain` | Relational neighborhood explanation: typed in/out links plus per-relation counts |
+| 13 | `affected` | Reverse dependency walk: what depends on a node (bounded depth, typed guards) |
+| 14 | `god_nodes` | Top hub nodes by measured graph degree (deterministic, bounded) |
 
 Recommendation responses contain exactly `best_actions`, `recommendations`,
 `unnecessary_actions` — never raw SOUL text. Conditional access is
@@ -64,7 +70,7 @@ knowledge payload within 160 estimated tokens.
 
 ## Three access paths
 
-1. **CLI** — `soul-knowledge <operation>` for all ten operations plus
+1. **CLI** — `soul-knowledge <operation>` for all fourteen operations plus
    projection rebuild, backup, restore, and health.
 2. **Persistent local API** — versioned `/v1` JSON, Unix socket by default,
    optional loopback HTTP; API key required beyond loopback.

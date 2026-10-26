@@ -67,8 +67,11 @@ FEATURE_MATRIX = REPO_ROOT / "docs" / "research" / "graphify-feature-matrix.md"
 
 AT = datetime(2026, 10, 20, 12, tzinfo=UTC)
 
-# The ten audited knowledge operations (spec section 8; frozen surface).
-TEN_OPERATIONS = (
+# The audited knowledge operations. The ten v1 operations (spec section 8)
+# keep their exact semantics; contract v2 (operator ruling 2026-10-26,
+# progress.md; addendum docs/contracts/retrieval-verbs-v2.md) adds the four
+# G1 retrieval verbs, so the pinned surface is fourteen operations.
+V1_OPERATIONS = (
     "query",
     "get_node",
     "get_subtree",
@@ -80,7 +83,9 @@ TEN_OPERATIONS = (
     "apply_improvement",
     "rollback",
 )
-TEN_TOOLS = tuple(sorted(f"knowledge_{operation}" for operation in TEN_OPERATIONS))
+G1_OPERATIONS = ("path", "explain", "affected", "god_nodes")
+KNOWLEDGE_OPERATIONS_V2 = (*V1_OPERATIONS, *G1_OPERATIONS)
+EXPECTED_TOOLS_V2 = tuple(sorted(f"knowledge_{operation}" for operation in KNOWLEDGE_OPERATIONS_V2))
 
 
 def _load_bench() -> Any:
@@ -348,25 +353,31 @@ class TestSevenDomainsEndToEnd:
 
 
 class TestAuditedTools:
-    """Acceptance bullet: exactly ten audited tools; every call audited."""
+    """Acceptance bullet: exactly fourteen audited tools; every call audited.
 
-    def test_exactly_ten_audited_tools_exposed(self) -> None:
+    The v1 pin was "exactly ten" (spec section 8). Contract v2 (operator
+    ruling 2026-10-26, progress.md; addendum
+    docs/contracts/retrieval-verbs-v2.md) extends the surface with the four
+    G1 retrieval verbs; the ten v1 operations are unchanged semantically.
+    """
+
+    def test_exactly_fourteen_audited_tools_exposed(self) -> None:
         from soul_knowledge import http_api, mcp_server
         from soul_knowledge.service import KnowledgeService
 
-        assert tuple(sorted(http_api.KNOWLEDGE_OPERATIONS)) == tuple(sorted(TEN_OPERATIONS))
-        assert tuple(mcp_server.EXPECTED_TOOLS) == TEN_TOOLS
-        for operation in TEN_OPERATIONS:
+        assert tuple(sorted(http_api.KNOWLEDGE_OPERATIONS)) == tuple(sorted(KNOWLEDGE_OPERATIONS_V2))
+        assert tuple(mcp_server.EXPECTED_TOOLS) == EXPECTED_TOOLS_V2
+        for operation in KNOWLEDGE_OPERATIONS_V2:
             assert callable(getattr(KnowledgeService, operation)), operation
-        # The CLI exposes exactly the same ten knowledge commands (plus the
-        # documented ops commands), driven by the same KNOWLEDGE_OPERATIONS.
+        # The CLI exposes exactly the same fourteen knowledge commands (plus
+        # the documented ops commands), driven by the same KNOWLEDGE_OPERATIONS.
         subcommands = {
             name.replace("-", "_")
             for action in build_parser()._actions  # noqa: SLF001
             if isinstance(action, argparse._SubParsersAction)  # noqa: SLF001
             for name in action.choices
         }
-        assert set(TEN_OPERATIONS) <= subcommands
+        assert set(KNOWLEDGE_OPERATIONS_V2) <= subcommands
 
     def test_every_tool_action_returns_an_audit_event_id(self, tmp_path: Path) -> None:
         from soul_knowledge.contracts import (
@@ -410,16 +421,27 @@ class TestAuditedTools:
         audit_ids.append(applied.audit_event_id)
         rolled = service.rollback(RollbackRequest(node_id="n-gates"))
         audit_ids.append(rolled.audit_event_id)
+        # Contract v2 (operator ruling 2026-10-26; addendum
+        # docs/contracts/retrieval-verbs-v2.md): the four G1 retrieval verbs
+        # get the same exactly-one-audit-per-invocation guarantee.
+        pathed = service.path("P1", "n-gates")
+        audit_ids.append(pathed.audit_event_id)
+        explained = service.explain("n-gates")
+        audit_ids.append(explained.audit_event_id)
+        affected = service.affected("n-gates")
+        audit_ids.append(affected.audit_event_id)
+        gods = service.god_nodes(limit=5)
+        audit_ids.append(gods.audit_event_id)
 
         assert all(audit_ids), "every operation must return its audit event id"
-        assert len(set(audit_ids)) == 10, "each invocation owns a distinct audit event id"
-        # Exactly one final audit event per invocation: ten calls, ten audits.
-        assert store.audit_event_count() == audits_before + 10
+        assert len(set(audit_ids)) == 14, "each invocation owns a distinct audit event id"
+        # Exactly one final audit event per invocation: 14 calls, 14 audits.
+        assert store.audit_event_count() == audits_before + 14
         # A typed failure is also exactly one audit (spot check the envelope).
         with pytest.raises(NodeNotFound) as excinfo:
             service.get_node("n-missing")
         assert excinfo.value.audit_event_id
-        assert store.audit_event_count() == audits_before + 11
+        assert store.audit_event_count() == audits_before + 15
 
 
 class TestThreeAccessPaths:
@@ -786,7 +808,9 @@ class TestMcpContract:
         async def scenario() -> None:
             async with _session(server) as session:
                 listed = await session.list_tools()
-                assert len(listed.tools) == 10
+                # Contract v2 (operator ruling 2026-10-26): fourteen tools —
+                # the frozen ten plus the four G1 retrieval verbs.
+                assert len(listed.tools) == 14
                 for tool in listed.tools:
                     assert "project_path" not in tool.input_schema.get("properties", {}), tool.name
                     result = await _call_tool(session, tool.name, {"project_path": "/etc"})
