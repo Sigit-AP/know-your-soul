@@ -22,9 +22,12 @@ soul-knowledge = "soul_knowledge.cli:main"
 
 [dependency-groups]
 dev = [
+    "bandit==1.9.4",
     "hypothesis==6.170.9",
+    "pip-audit==2.10.1",
     "pyright==1.1.414",
     "pytest==9.1.1",
+    "pytest-cov==7.1.0",
     "ruff==0.17.2",
 ]
 

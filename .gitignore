@@ -8,4 +8,6 @@ graphify-out/
 .hermes-knowledge/
 *.sqlite3-wal
 *.sqlite3-shm
-bench/results/
+bench/results/*
+# Release evidence: the fresh green ledger cited by docs/verification.md stays tracked.
+!bench/results/ledger-20261026T031852Z.json

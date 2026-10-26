@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.14"
+
+jobs:
+  lint:
+    # Ruff lint + format. `ruff format --check` is scoped to Python sources:
+    # docs/ embeds code blocks that ruff would reformat, and docs are owned
+    # outside the code gate. `uv lock --check` pins lock/pyproject consistency.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: uv.lock is consistent with pyproject.toml
+        run: uv lock --check
+
+      - name: ruff check
+        run: uv run --frozen ruff check
+
+      - name: ruff format --check
+        run: uv run --frozen ruff format --check src tests bench
+
+  types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: pyright
+        run: uv run --frozen pyright
+
+  test:
+    # Full pytest suite with coverage. The fail-under threshold (93) is set
+    # just below the measured baseline (94.2% on 2026-10-26, 6477 statements);
+    # raise it as coverage improves, never lower it to make CI pass.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: pytest with coverage
+        run: >
+          uv run --frozen pytest tests/ -q
+          --cov=soul_knowledge --cov-report=term --cov-report=xml
+          --cov-fail-under=93
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  security:
+    # bandit -ll: fail on medium+ severity static findings. B608 hits in src/
+    # are suppressed per-line with justified `# nosec` comments (parameterized
+    # queries / constant SQL fragments) — do not add blanket config skips.
+    # pip-audit: fail on any known vulnerability. Plain (non-strict) mode: the
+    # project itself is skipped ("not on PyPI"), which --strict would count as
+    # a failure.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: bandit (static security analysis)
+        run: uv run --frozen bandit -ll -r src
+
+      - name: pip-audit (dependency vulnerabilities)
+        run: uv run --frozen pip-audit
+
+  bench-check:
+    # `bench/run.py check` runs the no-system self-checks only (cases schema,
+    # frozen corpus integrity, estimator parity). The paired `run` benchmark
+    # is heavy and stays out of CI.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: bench self-checks
+        run: uv run --frozen python bench/run.py check
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build image
+        run: docker build -f deploy/Dockerfile -t soul-knowledge:ci .
