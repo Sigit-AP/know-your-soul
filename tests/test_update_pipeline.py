@@ -16,7 +16,7 @@ import pytest
 
 from soul_knowledge.domain import EventKind, LifecycleStatus, PrimaryDomain
 from soul_knowledge.fragment_generator import file_scoped_id
-from soul_knowledge.importer import SeedImporter
+from soul_knowledge.importer import SeedImporter, injective_section_key
 from soul_knowledge.projection import GraphProjector, ProjectorBusy, ShrinkGuardError
 from soul_knowledge.source_watcher import ChangeKind, SourceChange, SourceWatcher
 from soul_knowledge.store import EventStore
@@ -83,7 +83,7 @@ def _watched(
 def test_removed_source_is_retired_and_leaves_the_projection(tmp_path: Path) -> None:
     store, importer, projector = _populated(tmp_path)
     alpha_root = file_scoped_id("alpha.md")
-    alpha_lesson = f"{alpha_root}_first_lesson"
+    alpha_lesson = f"{alpha_root}.{injective_section_key('First Lesson')}"
     before_ids = _graph_ids(tmp_path)
     assert {alpha_root, alpha_lesson, file_scoped_id("beta.md")} <= before_ids
     alpha_version = store.node_version(alpha_root)

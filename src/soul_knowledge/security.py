@@ -138,12 +138,142 @@ _PII_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
 
 _CREDENTIAL_KEY_RE = re.compile(r"(?i)(api[_-]?key|secret|password|passwd|token|authorization|credential)")
 
+# ------------------------------------------------- redaction match view
+#
+# Wave-3 W3-4: pattern matching over the *raw* string is silently bypassed
+# by zero-width-split secrets (``AKIA\u200bIOSF…``), fullwidth separators
+# (``password：…``) and homoglyph credential keys (Cyrillic ``а`` in
+# ``pаssword``). ``redact_text`` therefore takes a second pass over a
+# *match view* — NFKC (folds fullwidth/compatibility shapes), every format
+# character stripped (zero-width, bidi controls, BOM — re-joining split
+# secrets), and common Cyrillic/Greek homoglyphs folded onto their Latin
+# lookalikes. The normalized view is returned only when it actually exposes
+# a hidden secret shape; clean input stays byte-identical, so the frozen
+# token-budget contract is untouched for clean corpora.
+
+# Best-effort homoglyph fold for MATCHING, not a Unicode confusable
+# database: the Cyrillic/Greek letters that render as Latin lookalikes.
+_HOMOGLYPH_FOLD = str.maketrans(
+    {
+        "а": "a",
+        "А": "A",
+        "е": "e",
+        "Е": "E",
+        "о": "o",
+        "О": "O",
+        "р": "p",
+        "Р": "P",
+        "с": "c",
+        "С": "C",
+        "х": "x",
+        "Х": "X",
+        "у": "y",
+        "У": "Y",
+        "н": "h",
+        "Н": "H",
+        "і": "i",
+        "І": "I",
+        "ј": "j",
+        "Ј": "J",
+        "ѕ": "s",
+        "Ѕ": "S",
+        "ԁ": "d",
+        "м": "m",
+        "М": "M",
+        "т": "t",
+        "Т": "T",
+        "в": "b",
+        "В": "B",
+        "к": "k",
+        "К": "K",
+        "ο": "o",
+        "Ο": "O",
+        "ρ": "p",
+        "Ρ": "P",
+        "ν": "v",
+        "Ν": "N",
+        "χ": "x",
+        "Χ": "X",
+        "υ": "u",
+        "Υ": "Y",
+        "τ": "t",
+        "Τ": "T",
+        "κ": "k",
+        "Κ": "K",
+        "ι": "i",
+        "Ι": "I",
+        "α": "a",
+        "Α": "A",
+        "ε": "e",
+        "Ε": "E",
+        "σ": "s",
+    }
+)
+
+
+def _redaction_match_view(text: str) -> str:
+    """NFKC + control-strip + homoglyph fold view used for secret matching only.
+
+    Every Unicode format (Cf: zero-width, bidi, BOM) and control (Cc:
+    tab/newline/…) character is dropped, re-joining secrets split by
+    invisible or whitespace controls (``AKIA\\u200bIOSF…``, ``AKIA\\tIOSF…``).
+    Plain spaces survive: several pinned patterns require a ``\\s+``
+    separator, and the raw-text pass has already matched anything the
+    control-strip would hide behind one.
+    """
+    view = unicodedata.normalize("NFKC", text)
+    view = "".join(char for char in view if unicodedata.category(char) not in ("Cf", "Cc"))
+    return view.translate(_HOMOGLYPH_FOLD)
+
+
+# High-entropy token runs (wave-3 W3-4): long base64-ish blobs carry API
+# keys and session tokens that match no pinned prefix shape. A run is
+# redacted only when it spans at least three character classes (lower /
+# upper / digit / symbol); pure-hex runs (any single case) are hash-shaped
+# content — sha256 pins, git objects, content digests — and are deliberately
+# left alone, as are UUIDs (36 chars, below the 40-char floor). Standalone
+# pure-hex *secrets* remain reachable only through the credential-assignment
+# pattern — a documented design boundary.
+_ENTROPY_RUN_RE = re.compile(r"[A-Za-z0-9+/=_\-]{40,}")
+_PURE_HEX_RE = re.compile(r"[0-9a-fA-F]+")
+
+
+def _redact_entropy_runs(text: str) -> str:
+    def _sub(match: re.Match[str]) -> str:
+        run = match.group(0)
+        if _PURE_HEX_RE.fullmatch(run):
+            return run
+        classes = (
+            any(char.islower() for char in run),
+            any(char.isupper() for char in run),
+            any(char.isdigit() for char in run),
+            any(char in "+/=_-" for char in run),
+        )
+        return "[REDACTED:high-entropy token]" if sum(classes) >= 3 else run
+
+    return _ENTROPY_RUN_RE.sub(_sub, text)
+
 
 def redact_text(text: str) -> str:
-    """Replace every known secret shape and basic PII with a redaction marker."""
+    """Replace every known secret shape and basic PII with a redaction marker.
+
+    Two passes (wave-3 W3-4): the pinned patterns plus the high-entropy run
+    rule over the raw text, then — only when the normalization view differs
+    AND exposes a shape the raw text hid — the redacted *normalized* text is
+    returned. Clean input is byte-identical.
+    """
     redacted = text
     for name, pattern in (*SECRET_PATTERNS, *_PII_PATTERNS):
         redacted = pattern.sub(f"[REDACTED:{name}]", redacted)
+    redacted = _redact_entropy_runs(redacted)
+    view = _redaction_match_view(redacted)
+    if view != redacted:
+        scrubbed = view
+        for name, pattern in (*SECRET_PATTERNS, *_PII_PATTERNS):
+            scrubbed = pattern.sub(f"[REDACTED:{name}]", scrubbed)
+        scrubbed = _redact_entropy_runs(scrubbed)
+        if scrubbed != view:
+            return scrubbed
     return redacted
 
 

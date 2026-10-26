@@ -49,11 +49,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from graphify.ids import make_id
 from pydantic import BaseModel, ConfigDict
 
 from soul_knowledge.domain import Event, EventKind, Node, RelationKind, canonical_json, new_id, quantize_score
-from soul_knowledge.fragment_generator import file_scoped_id, slugify
 from soul_knowledge.graphify_adapter import (
     ADAPTER_VERSION,
     CONFIDENCE_BY_RELATION,
@@ -62,8 +60,15 @@ from soul_knowledge.graphify_adapter import (
     PINNED_HUB_POLICY,
     GraphifyAdapter,
 )
+from soul_knowledge.importer import injective_file_id, injective_section_key
 from soul_knowledge.read_model_validator import ReadModelValidator
-from soul_knowledge.security import DEFAULT_MAX_TEXT_LENGTH, SECRET_PATTERNS, redact_text, sanitize_text
+from soul_knowledge.security import (
+    DEFAULT_MAX_TEXT_LENGTH,
+    SECRET_PATTERNS,
+    _redaction_match_view,
+    redact_text,
+    sanitize_text,
+)
 from soul_knowledge.store import EventStore
 
 try:
@@ -118,7 +123,9 @@ ARTIFACT_MAX_BYTES = 64 * 1024
 # Summary enrichment (ruling "Opsi A", 2026-10-25): a projected node label is
 # the heading plus the leading sentence(s) of its source section, sanitized
 # and length-bounded. The cap matches the read-side ``ResultNode.summary``
-# limit so no downstream truncation can cut a term mid-word.
+# limit and is enforced on the WRITE side at a word boundary (wave-3 W3-5):
+# the heading itself is capped too, so no downstream truncation can cut a
+# term mid-word and the bench ceiling never counts an undeliverable label.
 ENRICHED_SUMMARY_MAX_LENGTH = 256
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
@@ -257,9 +264,10 @@ def _section_fragments(body_lines: list[str]) -> tuple[list[str], list[str]]:
 def _source_section_fragments(text: str, source_file: str) -> dict[str, tuple[list[str], list[str]]]:
     """Map every node id a source file projects to its section's fragments.
 
-    The id walk replicates the pinned fragment generator exactly (title
-    handling, slugify, ``make_id`` occurrence suffixes), so the key set is
-    precisely the node ids the importer derived from the same bytes.
+    The id walk replicates the importer's injective re-scoping exactly
+    (title handling, encoded heading keys, occurrence suffixes; wave-3
+    W3-2), so the key set is precisely the node ids the importer derived
+    from the same bytes.
     """
     lines = text.split("\n")
     headings: list[tuple[int, str, int]] = []
@@ -267,7 +275,7 @@ def _source_section_fragments(text: str, source_file: str) -> dict[str, tuple[li
         match = _HEADING_RE.match(line)
         if match:
             headings.append((len(match.group(1)), match.group(2), index))
-    file_id = file_scoped_id(source_file)
+    file_id = injective_file_id(source_file)
     sections = headings
     result: dict[str, tuple[list[str], list[str]]] = {}
     if headings and headings[0][0] == 1:
@@ -278,24 +286,44 @@ def _source_section_fragments(text: str, source_file: str) -> dict[str, tuple[li
         result[file_id] = _section_fragments(lines)
     used: dict[str, int] = {}
     for position, (_level, heading, line_index) in enumerate(sections):
-        base = slugify(heading)
-        occurrence = used.get(base, 0) + 1
-        used[base] = occurrence
-        section_id = make_id(file_id, base if occurrence == 1 else f"{base}_{occurrence}")
+        key = injective_section_key(heading)
+        occurrence = used.get(key, 0) + 1
+        used[key] = occurrence
+        section_id = f"{file_id}.{key}" if occurrence == 1 else f"{file_id}.{key}-n{occurrence}"
         end = sections[position + 1][2] if position + 1 < len(sections) else len(lines)
         result[section_id] = _section_fragments(lines[line_index + 1 : end])
     return result
 
 
 def _clean_sentence(sentence: str) -> str:
-    """Sanitize one sentence for publication: secrets redacted, control/bidi
-    and zero-width characters stripped, emphasis removed, paths masked."""
-    cleaned = redact_text(sentence)
-    cleaned = "".join(char for char in cleaned if unicodedata.category(char) not in {"Cc", "Cf"})
+    """Sanitize one sentence for publication: control/bidi/zero-width
+    characters stripped, emphasis removed, whitespace collapsed, paths
+    masked — and secrets redacted LAST (wave-3 W3-3: redact-then-strip
+    reconstituted zero-width-split secrets into validator-matching shapes;
+    the service read path has always stripped first, redacted last)."""
+    cleaned = "".join(char for char in sentence if unicodedata.category(char) not in {"Cc", "Cf"})
     cleaned = _EMPHASIS_RE.sub("", cleaned)
+    cleaned = _WHITESPACE_RE.sub(" ", cleaned)
     cleaned = _ABS_PATH_RE.sub("[path]", cleaned)
     cleaned = _DRIVE_PATH_RE.sub("[path]", cleaned)
-    return _WHITESPACE_RE.sub(" ", cleaned).strip()
+    return redact_text(cleaned).strip()
+
+
+def _truncate_at_word_boundary(text: str, max_length: int) -> str:
+    """Cap *text* at *max_length*, cutting at the last whole word (W3-5).
+
+    Write-side truncation on a word boundary: the published label is then
+    byte-identical to what the read-side 256-char limit can deliver, so the
+    bench ceiling never counts an undeliverable label. A single word longer
+    than the cap is hard-cut — nothing better exists.
+    """
+    if len(text) <= max_length:
+        return text
+    window = text[: max_length + 1]
+    boundary = window.rfind(" ")
+    if boundary > 0:
+        return window[:boundary]
+    return text[:max_length]
 
 
 def enriched_summary(
@@ -312,8 +340,11 @@ def enriched_summary(
     sentence that does not merely restate an included lead — the ruling's
     "kalimat pertama". Only whole fragments are appended, in source order; a
     fragment that would overflow the cap ends the fill, and raw body text
-    beyond the first sentence is never published.
+    beyond the first sentence is never published. The heading itself is
+    capped on the write side at a word boundary (W3-5), so the returned
+    label never exceeds *max_length*.
     """
+    heading = _truncate_at_word_boundary(heading, max_length)
     body = ""
     included: list[str] = []
     for lead in fragments[0]:
@@ -473,9 +504,15 @@ class GraphProjector:
 
     @classmethod
     def _sanitize_entry(cls, value: str, node_id: str, field: str) -> str:
-        """Typed-cap check plus publish sanitization for one free-text entry."""
+        """Typed-cap check plus publish sanitization for one free-text entry.
+
+        Wave-3 W3-6: after ``sanitize_text`` (which keeps ``\\t\\n\\r``),
+        every remaining whitespace run is collapsed to a single space, so no
+        published field can carry raw newlines/tabs that read surfaces would
+        fuse words over or that would pollute markdown consumers.
+        """
         cls._check_publish_text(value, field=field, node_id=node_id)
-        return sanitize_text(value)
+        return _WHITESPACE_RE.sub(" ", sanitize_text(value)).strip()
 
     def _source_sentences(self, nodes: dict[str, Node]) -> dict[str, tuple[list[str], list[str]]]:
         """node_id -> section fragments, hash-verified (Opsi A).
@@ -521,10 +558,22 @@ class GraphProjector:
 
     @staticmethod
     def _secret_category(text: str) -> str | None:
-        """The shared SECRET_PATTERNS category matching *text*, or ``None``."""
+        """The shared SECRET_PATTERNS category matching *text*, or ``None``.
+
+        Wave-3 W3-4: matching runs over the raw text AND the normalized
+        redaction match view (NFKC + control/format strip + homoglyph
+        fold), so a zero-width-split, fullwidth or homoglyph-obfuscated
+        secret shape in a node field is quarantined exactly like its
+        plaintext form.
+        """
         for name, pattern in SECRET_PATTERNS:
             if pattern.search(text) is not None:
                 return name
+        view = _redaction_match_view(text)
+        if view != text:
+            for name, pattern in SECRET_PATTERNS:
+                if pattern.search(view) is not None:
+                    return name
         return None
 
     def _quarantine_secret_nodes(self, node_dicts: dict[str, dict[str, Any]]) -> list[tuple[str, str, str]]:
@@ -638,20 +687,30 @@ class GraphProjector:
             # Identifiers are untouched; the read-model validator already fails
             # closed on ids outside the semantic charset.
             #
+            # Wave-3: raw whitespace controls that survive sanitize_text are
+            # collapsed to single spaces (W3-6 — read surfaces fused words over
+            # raw newlines), and redaction runs LAST (W3-3/W3-4 — a heading
+            # whose secret shape only appears after normalization is still
+            # redacted before it can reach an artifact).
+            #
             # R2: the 64 KiB text cap is enforced here, eagerly and typed, so
             # an oversized store field fails the build as an
             # ``OversizedArtifactError`` naming the node before the whole
             # generation is assembled in memory.
             self._check_publish_text(node.summary, field="summary", node_id=node_id)
-            summary = sanitize_text(node.summary) if node.summary else ""
+            summary = self._sanitize_entry(node.summary, node_id, "summary") if node.summary else ""
             if summary:
                 # Opsi A: heading + defined-term digest / leading sentences.
+                # The heading is NOT pre-redacted here: a secret-shaped
+                # heading is *quarantined* (per-node fail-closed + typed
+                # audit, wave-2 F7) — redacting it would silently keep the
+                # node and lose the security event. Enriched body sentences
+                # are redacted inside ``_clean_sentence``.
                 summary = enriched_summary(summary, sentences_by_node.get(node_id, ([], [])))
             raw_source = str(
                 node.payload.get("source_file") or (node.provenance[-1] if node.provenance else "soul://store")
             )
-            self._check_publish_text(raw_source, field="source_file", node_id=node_id)
-            source_file = sanitize_text(raw_source)
+            source_file = self._sanitize_entry(raw_source, node_id, "source_file")
             node_dicts[node_id] = {
                 "id": node.node_id,
                 "label": summary or node.node_id,
@@ -874,6 +933,18 @@ class GraphProjector:
             os.fsync(dir_fd)
         finally:
             os.close(dir_fd)
+        # Durability (SUB-29 side finding, closed in wave 3): the generation
+        # directory's own fsync persists its *contents*; the directory
+        # *entry* for a brand-new generation persists only when the parent
+        # chain is fsynced — generations/ (its mkdir entry) and the output
+        # root (generations/' entry). Without this a power loss can strand a
+        # fully written generation behind a missing directory entry.
+        for ancestor in (generation_dir.parent, self._output_root):
+            ancestor_fd = os.open(ancestor, os.O_RDONLY)
+            try:
+                os.fsync(ancestor_fd)
+            finally:
+                os.close(ancestor_fd)
         return generation_dir, manifest, len(node_list), len(link_list)
 
     def _write_if_changed(self, path: Path, data: bytes) -> bool:

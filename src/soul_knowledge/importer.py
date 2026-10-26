@@ -38,13 +38,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from pathlib import Path
+import re
+from pathlib import Path, PurePosixPath
 
 from pydantic import BaseModel, ConfigDict
 
 from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, Relation, RelationKind
 from soul_knowledge.events import Invocation
-from soul_knowledge.fragment_generator import FRAGMENT_GENERATOR_VERSION
+from soul_knowledge.fragment_generator import FRAGMENT_GENERATOR_VERSION, file_scoped_id
 from soul_knowledge.graphify_adapter import GraphifyAdapter
 from soul_knowledge.security import OversizedPayloadError, resolve_within_root
 from soul_knowledge.source_registry import ParserVersions, SourceKind, SourceRegistry
@@ -58,6 +59,8 @@ __all__ = [
     "ImportManifestError",
     "ImportReceipt",
     "SeedImporter",
+    "injective_file_id",
+    "injective_section_key",
 ]
 
 KNOWLEDGE_ROOT_ID = "KROOT"
@@ -84,6 +87,130 @@ DEFAULT_PARSER_VERSIONS = ParserVersions(
 
 class ImportManifestError(RuntimeError):
     """The incremental import manifest is missing, unreadable or mis-anchored."""
+
+
+# ---------------------------------------------------------- injective ids
+#
+# Wave-3 W3-2: the fragment generator's ``file_scoped_id`` (Graphify's
+# ``make_id`` recipe) is *lossy*: it casefolds and collapses every non-word
+# run (``-``, space, ``.`` ...) to ``_``, so ``a-b.md`` ≡ ``a_b.md`` ≡
+# ``a b.md`` and ``a/b_c.md`` ≡ ``a_b/c.md`` — two corpus files silently
+# merged into one node set. The importer therefore re-scopes every fragment
+# onto the injective scheme below before any event is written.
+#
+# Encoding E: every ``\w`` character (letters, digits, ``_``, Unicode word
+# characters) is kept verbatim; the escape marker ``-`` and every non-``\w``
+# character become ``-<lowercase hex codepoint>-``. E is *provably*
+# injective: an image string decodes uniquely (literal runs are ``\w+``;
+# every ``-`` opens an escape group of hex digits closed by the next ``-``;
+# ``-`` never appears literally), so distinct strings never share an image.
+#
+# * File id: the normalized path stem (same normalization as the legacy
+#   recipe: separator style, ``..`` collapse, final-suffix drop), encoded
+#   per ``/``-segment and joined with ``:``. ``:`` never appears inside an
+#   E-image, so the segment split is unambiguous and distinct normalized
+#   paths yield distinct ids. Path-separator ``:`` keeps ids inside the
+#   read-model validator's semantic charset (``[\w.:-]+``, no ``/``/``..``).
+# * Section id: ``<file id>.<E(heading)>`` plus an ``-n<occurrence>`` suffix
+#   for repeated identical headings. File ids never contain ``.`` and E-image
+#   keys never contain ``.`` or the substring ``-n<digits>`` (``n`` is not a
+#   hex digit, so a valid escape group cannot start it), so the composition
+#   is injective in (path, heading, occurrence) and a file id can never
+#   collide with a section id.
+#
+# Ids stay deterministic and host-stable (pure functions of the relative
+# path / heading text), and pure ``\w``-only names keep their natural ids
+# (``alpha.md`` -> ``alpha``).
+
+_ID_LITERAL_RE = re.compile(r"\w", re.UNICODE)
+
+_EMPTY_FILE_ID = "doc-"
+"""Fallback for an empty normalized stem; never an E-image (dangling escape)."""
+
+
+def _escape_id_text(text: str) -> str:
+    """Reversible, injective encoding of arbitrary text into the id charset."""
+    parts: list[str] = []
+    for char in text:
+        if char != "-" and _ID_LITERAL_RE.fullmatch(char):
+            parts.append(char)
+        else:
+            parts.append(f"-{ord(char):x}-")
+    return "".join(parts)
+
+
+def injective_file_id(rel_path: str) -> str:
+    """The collision-free node id for a source file, derived from its path.
+
+    Injective modulo the declared path normalization: two corpus-relative
+    markdown paths whose normalized stems differ always map to different
+    ids (closes wave-3 W3-2). Deterministic and host-stable.
+    """
+    normalized = rel_path.replace("\\", "/").lstrip("/")
+    while ".." in normalized:
+        normalized = normalized.replace("..", "")
+    stem = PurePosixPath(normalized).with_suffix("").as_posix()
+    # Empty segments arise only from (leading) slash equivalences the legacy
+    # recipe also collapsed; they carry no identity and are dropped.
+    segments = [segment for segment in stem.split("/") if segment]
+    encoded = ":".join(_escape_id_text(segment) for segment in segments)
+    return encoded or _EMPTY_FILE_ID
+
+
+def injective_section_key(heading: str) -> str:
+    """The injective per-heading key used to compose section node ids."""
+    return _escape_id_text(heading)
+
+
+def _section_node_id(file_id: str, heading: str, occurrence: int) -> str:
+    base = f"{file_id}.{injective_section_key(heading)}"
+    return base if occurrence == 1 else f"{base}-n{occurrence}"
+
+
+def _remap_fragment_ids(
+    nodes: list[dict], edges: list[dict], scope: str
+) -> tuple[list[dict], list[dict], dict[str, str]]:
+    """Re-scope one fragment's old (lossy) ids onto the injective scheme.
+
+    The fragment generator is a frozen contract, so the remap happens here,
+    at the import boundary, before any event reaches the store. Section ids
+    are re-derived from the fragment's own node order and labels (the
+    generator emits the file node first, then section nodes in heading
+    order), with occurrence numbering per encoded heading — exactly the walk
+    the projector's enrichment replica performs from the same source bytes.
+
+    Returns ``(nodes, edges, id_map)``; ``references`` edge *targets* keep
+    their old ids here and are resolved against the live store's scope index
+    by the caller.
+    """
+    if not nodes:
+        return [], edges, {}
+    old_file_id = str(nodes[0]["id"])
+    new_file_id = injective_file_id(scope)
+    id_map: dict[str, str] = {old_file_id: new_file_id}
+    used: dict[str, int] = {}
+    new_nodes: list[dict] = []
+    for index, item in enumerate(nodes):
+        old_id = str(item["id"])
+        if index == 0:
+            new_id = new_file_id
+        else:
+            heading = str(item.get("label") or old_id)
+            key = injective_section_key(heading)
+            occurrence = used.get(key, 0) + 1
+            used[key] = occurrence
+            new_id = _section_node_id(new_file_id, heading, occurrence)
+        id_map[old_id] = new_id
+        new_nodes.append({**item, "id": new_id})
+    new_edges: list[dict] = []
+    for edge in edges:
+        remapped = dict(edge)
+        if str(remapped.get("source")) in id_map:
+            remapped["source"] = id_map[str(remapped["source"])]
+        if remapped.get("relation") == "contains" and str(remapped.get("target")) in id_map:
+            remapped["target"] = id_map[str(remapped["target"])]
+        new_edges.append(remapped)
+    return new_nodes, new_edges, id_map
 
 
 def _read_contained_file(root: str | Path, path: str | Path, *, max_bytes: int = MAX_IMPORT_FILE_BYTES) -> bytes:
@@ -210,23 +337,29 @@ class SeedImporter:
         version = self._registry.observe(path.resolve(), SourceKind.OPERATOR_IMPORT, self._parser_versions)
         self.ensure_roots(version.source_version_id)
         fragment = self._adapter.fragment_from_markdown(source_file=scope, content=content)
+        # W3-2: re-scope the fragment's lossy ``make_id`` ids onto the
+        # injective scheme before any event reaches the store, so two corpus
+        # files whose legacy ids collide can never merge into one node set.
+        nodes, edges, _id_map = _remap_fragment_ids(
+            [dict(item) for item in fragment.nodes], [dict(item) for item in fragment.edges], scope
+        )
 
         children: dict[str, int] = {}
-        for edge in fragment.edges:
+        for edge in edges:
             if edge.get("relation") == "contains":
                 children[str(edge["source"])] = children.get(str(edge["source"]), 0) + 1
 
         node_ids: list[str] = []
         appended = 0
         replays = 0
-        for index, item in enumerate(fragment.nodes):
+        for index, item in enumerate(nodes):
             node_id = str(item["id"])
             if index == 0:
                 kind, parent_id = NodeKind.CHILD, domain.value
             else:
                 kind = NodeKind.BRANCH if children.get(node_id) else NodeKind.LEAF
                 parent_id = next(
-                    (str(edge["source"]) for edge in fragment.edges if edge.get("target") == node_id),
+                    (str(edge["source"]) for edge in edges if edge.get("target") == node_id),
                     domain.value,
                 )
             node = Node(
@@ -261,7 +394,7 @@ class SeedImporter:
             relations_added += 0 if receipt.idempotent_replay else 1
             appended += 0 if receipt.idempotent_replay else 1
             replays += 1 if receipt.idempotent_replay else 0
-        for edge in fragment.edges:
+        for edge in edges:
             if edge.get("relation") != "contains":
                 continue
             source_id, target_id = str(edge["source"]), str(edge["target"])
@@ -276,12 +409,22 @@ class SeedImporter:
             replays += 1 if receipt.idempotent_replay else 0
 
         unresolved: list[str] = []
-        for edge in fragment.edges:
-            if edge.get("relation") != "references":
+        reference_edges = [edge for edge in edges if edge.get("relation") == "references"]
+        # Wikilink targets arrive as *legacy* lossy ids (the frozen generator
+        # recipe); resolve them to the target file's injective id through the
+        # live store's scope index. A legacy id shared by two live scopes is
+        # ambiguous and fails safe to unresolved — never a guessed target.
+        target_map: dict[str, str | None] | None = None
+        for edge in reference_edges:
+            if target_map is None:
+                target_map = self._live_reference_targets()
+            legacy_target = str(edge["target"])
+            if legacy_target not in target_map:
+                unresolved.append(legacy_target)
                 continue
-            target_id = str(edge["target"])
-            if self._store.node_version(target_id) == 0:
-                unresolved.append(target_id)
+            target_id = target_map[legacy_target]
+            if target_id is None or self._store.node_version(target_id) == 0:
+                unresolved.append(legacy_target)
                 continue
             source_id = str(edge["source"])
             receipt = self._relate(
@@ -442,6 +585,31 @@ class SeedImporter:
         return tuple(retired)
 
     # -------------------------------------------------------------- plumbing
+
+    def _live_reference_targets(self) -> dict[str, str | None]:
+        """Legacy wikilink target id -> the live target's injective id.
+
+        Keyed by the *legacy* ``file_scoped_id`` of every live import scope
+        (what the frozen generator emits as a ``references`` edge target);
+        valued by that scope's injective file id. A legacy id shared by two
+        live scopes is a genuine legacy collision and maps to ``None`` —
+        ambiguous, never guessed.
+        """
+        live: dict[str, Node] = {}
+        for event in self._store.replay_domain():
+            if event.kind is EventKind.NODE_UPSERT and event.node is not None:
+                live[event.node_id] = event.node
+            elif event.kind is EventKind.NODE_RETIRE:
+                live.pop(event.node_id, None)
+        scopes: dict[str, set[str]] = {}
+        for node in live.values():
+            scope = node.payload.get("source_file")
+            if isinstance(scope, str) and scope and "://" not in scope:
+                scopes.setdefault(file_scoped_id(scope), set()).add(scope)
+        return {
+            legacy: injective_file_id(sorted(scope_set)[0]) if len(scope_set) == 1 else None
+            for legacy, scope_set in scopes.items()
+        }
 
     def _upsert(self, node: Node, source_version_id: str, *, idempotency_key: str):
         return self._store.append_domain(

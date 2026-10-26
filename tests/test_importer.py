@@ -17,8 +17,7 @@ from pathlib import Path
 import pytest
 
 from soul_knowledge.domain import NodeKind, PrimaryDomain, RelationKind
-from soul_knowledge.fragment_generator import file_scoped_id
-from soul_knowledge.importer import ImportManifestError, SeedImporter
+from soul_knowledge.importer import ImportManifestError, SeedImporter, injective_file_id, injective_section_key
 from soul_knowledge.source_registry import SourceKind, SourceRegistry
 from soul_knowledge.store import EventStore
 
@@ -134,13 +133,13 @@ def test_parent_relation_integrity_and_unresolved_links(tmp_path: Path) -> None:
     receipt = importer.import_file(alpha, domain=PrimaryDomain.P1, source_uri="soul://corpus/alpha.md")
     # [[beta]] and [[ghost]] cannot resolve yet; both are reported, neither stored.
     assert receipt.unresolved_links == ("beta", "ghost")
-    file_id = file_scoped_id("alpha.md")
+    file_id = injective_file_id("alpha.md")
     root_relations = store.relations_from(PrimaryDomain.P1.value)
     assert any(r.kind is RelationKind.PARENT_OF and r.target_node_id == file_id for r in root_relations)
     file_relations = store.relations_from(file_id)
     sections = {r.target_node_id for r in file_relations if r.kind is RelationKind.PARENT_OF}
-    assert f"{file_id}_first_lesson" in sections
-    assert f"{file_id}_second_lesson" in sections
+    assert f"{file_id}.{injective_section_key('First Lesson')}" in sections
+    assert f"{file_id}.{injective_section_key('Second Lesson')}" in sections
     assert not any(r.kind is RelationKind.DEPENDS_ON for r in file_relations)
     # Once the target file exists, a re-import resolves the link deterministically.
     _write(tmp_path / "beta.md", BETA)
@@ -148,7 +147,7 @@ def test_parent_relation_integrity_and_unresolved_links(tmp_path: Path) -> None:
     again = importer.import_file(alpha, domain=PrimaryDomain.P1, source_uri="soul://corpus/alpha.md")
     assert again.unresolved_links == ("ghost",)
     resolved = store.relations_from(file_id)
-    assert any(r.kind is RelationKind.DEPENDS_ON and r.target_node_id == file_scoped_id("beta.md") for r in resolved)
+    assert any(r.kind is RelationKind.DEPENDS_ON and r.target_node_id == injective_file_id("beta.md") for r in resolved)
 
 
 def test_manifest_anchored_incremental_import(tmp_path: Path) -> None:

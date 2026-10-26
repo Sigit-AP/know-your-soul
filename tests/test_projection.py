@@ -32,7 +32,7 @@ from soul_knowledge.fragment_generator import (
     file_scoped_id,
 )
 from soul_knowledge.graphify_adapter import GraphifyAdapter
-from soul_knowledge.importer import SeedImporter
+from soul_knowledge.importer import SeedImporter, injective_section_key
 from soul_knowledge.projection import (
     ARTIFACT_NAMES,
     FragmentCache,
@@ -239,7 +239,7 @@ def test_doc_change_triggers_deterministic_update(tmp_path: Path) -> None:
     assert [change.kind for change in changes] == [ChangeKind.CHANGED]
     graph = _graph_json(tmp_path)
     ids = {node["id"] for node in graph["nodes"]}
-    assert f"{file_scoped_id('alpha.md')}_extra_lesson" in ids
+    assert f"alpha.{injective_section_key('Extra Lesson')}" in ids
 
 
 def test_single_writer_lock_and_pending_drain(tmp_path: Path) -> None:
@@ -318,7 +318,7 @@ def test_shrink_guard_blocks_silent_loss(tmp_path: Path) -> None:
     store, _ = _populated(tmp_path)
     projector = _projector(store, tmp_path)
     first = projector.rebuild()
-    for node_id in (f"{file_scoped_id('beta.md')}_counterexample", file_scoped_id("beta.md")):
+    for node_id in (f"beta.{injective_section_key('Counterexample')}", file_scoped_id("beta.md")):
         store.append_domain(
             Event(kind=EventKind.NODE_RETIRE, node_id=node_id, domain=PrimaryDomain.P1),
             idempotency_key=f"retire:{node_id}",
@@ -684,7 +684,7 @@ def test_projection_enriches_section_summary_with_defined_term_digest(tmp_path: 
     store, projector = _enriched(tmp_path)
     projector.rebuild()
     labels = _labels(tmp_path)
-    section_id = f"{file_scoped_id('guide.md')}_terms"
+    section_id = f"guide.{injective_section_key('Terms')}"
     # `**Term** — gloss` leads are the section's own mini-headings: a digest
     # of them is label-like knowledge, capped and in source order.
     assert labels[section_id] == "Terms — Alpha Term; Beta Term"
@@ -722,7 +722,7 @@ def test_enrichment_degrades_when_source_is_missing(tmp_path: Path) -> None:
     projector.rebuild()
     labels = _labels(tmp_path)
     assert labels[file_scoped_id("guide.md")] == "Guide"
-    assert labels[f"{file_scoped_id('guide.md')}_terms"] == "Terms"
+    assert labels[f"guide.{injective_section_key('Terms')}"] == "Terms"
 
 
 def test_enrichment_degrades_when_source_drifts_from_its_recorded_hash(tmp_path: Path) -> None:
