@@ -269,8 +269,17 @@ def svg_header(width: int, height: int, comment: str) -> list[str]:
     ]
 
 
-def text(x: float, y: float, s: str, size: int = 12, fill: str = TEXT, anchor: str = "start",
-         weight: str = "normal", family: str | None = None, opacity: float = 1.0) -> str:
+def text(
+    x: float,
+    y: float,
+    s: str,
+    size: int = 12,
+    fill: str = TEXT,
+    anchor: str = "start",
+    weight: str = "normal",
+    family: str | None = None,
+    opacity: float = 1.0,
+) -> str:
     fam = f' font-family="{family}"' if family else ""
     return (
         f'<text x="{x:.1f}" y="{y:.1f}" font-size="{size}" fill="{fill}" text-anchor="{anchor}"'
@@ -317,17 +326,22 @@ def render_graph_formation(graph: dict, timeline: list[tuple[str, str]], out: Pa
     n_rel = sum(1 for k, _ in timeline if k.endswith("relation.add"))
 
     parts = svg_header(
-        width, height,
+        width,
+        height,
         "know-your-soul graph formation — real projection of bench/corpus; regenerate: "
         "uv run python tools/generate_visual_assets.py",
     )
     parts.append(text(40, 52, "How the graph is formed", 26, TEXT, weight="bold"))
-    parts.append(text(
-        40, 78,
-        f"Real projection of the frozen bench corpus: {len(file_nodes)} files → "
-        f"{len(nodes)} nodes → {len(edges)} typed edges (hand-rolled deterministic radial layout)",
-        13, MUTED,
-    ))
+    parts.append(
+        text(
+            40,
+            78,
+            f"Real projection of the frozen bench corpus: {len(file_nodes)} files → "
+            f"{len(nodes)} nodes → {len(edges)} typed edges (hand-rolled deterministic radial layout)",
+            13,
+            MUTED,
+        )
+    )
 
     # Pipeline panel (left column) — real counts.
     px, py, pw = 40.0, 110.0, 240.0
@@ -342,8 +356,7 @@ def render_graph_formation(graph: dict, timeline: list[tuple[str, str]], out: Pa
     sy = py + 60.0
     for title, line1, line2 in steps:
         parts.append(
-            f'<rect x="{px + 16}" y="{sy}" width="{pw - 32}" height="86" rx="8"'
-            f' fill="{BG}" stroke="{BORDER}"/>'
+            f'<rect x="{px + 16}" y="{sy}" width="{pw - 32}" height="86" rx="8" fill="{BG}" stroke="{BORDER}"/>'
         )
         parts.append(text(px + 30, sy + 26, title, 13, ACCENT, weight="bold"))
         parts.append(text(px + 30, sy + 48, line1, 12, TEXT))
@@ -386,29 +399,34 @@ def render_graph_formation(graph: dict, timeline: list[tuple[str, str]], out: Pa
         color = DOMAIN_COLORS.get(dom, ACCENT)
         if nid == "KROOT":
             r, label, lfill, lsize = 11.0, "KROOT", TEXT, 12
-            parts.append(
-                f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r}" fill="{BG}"'
-                f' stroke="{TEXT}" stroke-width="2"/>'
-            )
+            parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r}" fill="{BG}" stroke="{TEXT}" stroke-width="2"/>')
         elif kind == "child":
             r, label, lfill, lsize = 5.5, short_label(node), MUTED, 9
-            parts.append(
-                f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r}" fill="{color}"'
-                f' stroke="{BG}" stroke-width="1"/>'
-            )
+            parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r}" fill="{color}" stroke="{BG}" stroke-width="1"/>')
         else:  # domain root
             r, label, lfill, lsize = 9.0, nid, color, 13
-            parts.append(
-                f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r}" fill="{color}"'
-                f' stroke="{BG}" stroke-width="1.5"/>'
+            parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r}" fill="{color}" stroke="{BG}" stroke-width="1.5"/>')
+        parts.append(
+            text(
+                x,
+                y - r - 5,
+                label,
+                lsize,
+                lfill,
+                anchor="middle",
+                weight="bold" if kind != "child" else "normal",
+                family=MONO,
             )
-        parts.append(text(x, y - r - 5, label, lsize, lfill, anchor="middle",
-                          weight="bold" if kind != "child" else "normal", family=MONO))
-    parts.append(text(
-        gx, gy + gh + 40,
-        "Nodes coloured by primary domain · edges are real parent_of relations from the projected graph.json",
-        11, MUTED,
-    ))
+        )
+    parts.append(
+        text(
+            gx,
+            gy + gh + 40,
+            "Nodes coloured by primary domain · edges are real parent_of relations from the projected graph.json",
+            11,
+            MUTED,
+        )
+    )
     write_svg(out, parts)
 
 
@@ -422,28 +440,42 @@ def polyline(points: list[tuple[float, float]], color: str, width_: float = 2.0)
     return f'<polyline points="{pts}" fill="none" stroke="{color}" stroke-width="{width_}" stroke-linejoin="round"/>'
 
 
-def render_learning_timeline(curve: list[dict[str, float]], timeline: list[tuple[str, str]],
-                             node_label: str, out: Path) -> None:
+def render_learning_timeline(
+    curve: list[dict[str, float]], timeline: list[tuple[str, str]], node_label: str, out: Path
+) -> None:
     width, height = 1240, 860
     parts = svg_header(
-        width, height,
+        width,
+        height,
         "know-your-soul learning timeline — real ScoreEngine P/M/E over a deterministic "
         "outcome scenario + real event-store growth; regenerate: uv run python "
         "tools/generate_visual_assets.py",
     )
     parts.append(text(40, 52, "Learning over time", 26, TEXT, weight="bold"))
-    parts.append(text(
-        40, 78,
-        "P/M/E scores from the frozen scoring engine (contract 1.0.0) over recorded outcomes "
-        "· event-store growth from the real seed import",
-        13, MUTED,
-    ))
+    parts.append(
+        text(
+            40,
+            78,
+            "P/M/E scores from the frozen scoring engine (contract 1.0.0) over recorded outcomes "
+            "· event-store growth from the real seed import",
+            13,
+            MUTED,
+        )
+    )
 
     # --- Panel A: P/M/E evolution -------------------------------------------
     ax, ay, aw, ah = 60.0, 130.0, 1120.0, 340.0
     parts.append(panel(ax - 20, ay - 24, aw + 40, ah + 78))
-    parts.append(text(ax, ay - 2, f"P / M / E score evolution — node “{node_label}” (deterministic 12-outcome demo)",
-                      14, TEXT, weight="bold"))
+    parts.append(
+        text(
+            ax,
+            ay - 2,
+            f"P / M / E score evolution — node “{node_label}” (deterministic 12-outcome demo)",
+            14,
+            TEXT,
+            weight="bold",
+        )
+    )
     vmax = max(1.0, max(max(c["p"], c["m"], c["e"]) for c in curve) * 1.15)
     n = len(curve)
 
@@ -470,26 +502,33 @@ def render_learning_timeline(curve: list[dict[str, float]], timeline: list[tuple
         parts.append(text(xmap(i), ay + ah + 18, str(c["step"]), 10, MUTED, anchor="middle", family=MONO))
     parts.append(text(ax + aw - 40, ay + ah + 40, "recorded outcome →", 11, MUTED, anchor="end"))
     lx = ax + 60
-    for name, color in (("P · proficiency", SCORE_COLORS["P"]), ("M · maturity", SCORE_COLORS["M"]),
-                        ("E · effectiveness", SCORE_COLORS["E"])):
+    for name, color in (
+        ("P · proficiency", SCORE_COLORS["P"]),
+        ("M · maturity", SCORE_COLORS["M"]),
+        ("E · effectiveness", SCORE_COLORS["E"]),
+    ):
         parts.append(
-            f'<line x1="{lx}" y1="{ay + 16}" x2="{lx + 26}" y2="{ay + 16}"'
-            f' stroke="{color}" stroke-width="3"/>'
+            f'<line x1="{lx}" y1="{ay + 16}" x2="{lx + 26}" y2="{ay + 16}" stroke="{color}" stroke-width="3"/>'
         )
         parts.append(text(lx + 34, ay + 20, name, 11, TEXT))
         lx += 170
     finals = curve[-1]
-    parts.append(text(
-        ax + aw - 40, ay + 20,
-        f"final: P={finals['p']:.3f} M={finals['m']:.3f} E={finals['e']:.3f} · level {finals['level']}",
-        11, MUTED, anchor="end", family=MONO,
-    ))
+    parts.append(
+        text(
+            ax + aw - 40,
+            ay + 20,
+            f"final: P={finals['p']:.3f} M={finals['m']:.3f} E={finals['e']:.3f} · level {finals['level']}",
+            11,
+            MUTED,
+            anchor="end",
+            family=MONO,
+        )
+    )
 
     # --- Panel B: event-store growth ----------------------------------------
     bx, by, bw, bh = 60.0, 560.0, 1120.0, 220.0
     parts.append(panel(bx - 20, by - 24, bw + 40, bh + 78))
-    parts.append(text(bx, by - 2, "Event-store growth during seed import (real replay order)", 14, TEXT,
-                      weight="bold"))
+    parts.append(text(bx, by - 2, "Event-store growth during seed import (real replay order)", 14, TEXT, weight="bold"))
     nodes_c, edges_c = 0, 0
     series_n: list[tuple[float, float]] = []
     series_e: list[tuple[float, float]] = []
@@ -522,8 +561,9 @@ def render_learning_timeline(curve: list[dict[str, float]], timeline: list[tuple
     parts.append(text(bx + 60, by + 18, f"— nodes (node.upsert, {nodes_c})", 11, ACCENT))
     parts.append(text(bx + 300, by + 18, f"— relations (relation.add, {edges_c})", 11, "#3fb950"))
     parts.append(text(bx + bw - 40, by + bh + 36, "domain event sequence →", 11, MUTED, anchor="end"))
-    parts.append(text(bx + 40, by + bh + 36, f"{total} knowledge-affecting events, immutable, replay-ordered",
-                      11, MUTED))
+    parts.append(
+        text(bx + 40, by + bh + 36, f"{total} knowledge-affecting events, immutable, replay-ordered", 11, MUTED)
+    )
     write_svg(out, parts)
 
 
@@ -547,19 +587,24 @@ def render_bench_impact(ledger_path: Path, ledger: dict, out: Path) -> None:
     bx, bw = 300.0, 760.0  # bar origin / full width == 100 %
 
     parts = svg_header(
-        width, height,
+        width,
+        height,
         f"know-your-soul bench impact — real ledger {ledger_path.name}; regenerate: "
         "uv run python tools/generate_visual_assets.py",
     )
     parts.append(text(40, 52, "Bench impact — token saving per case", 26, TEXT, weight="bold"))
     gate_version = ledger.get("gate", {}).get("gate_version", "?")
-    parts.append(text(
-        40, 78,
-        f"{len(cases)} measured cases · mean saving {mean_saving * 100:.1f}% vs raw-corpus baseline "
-        f"({baseline:,} est. tokens) · {accepted}/{len(cases)} accepted (gate {gate_version})"
-        f" · ledger {ledger_path.name}",
-        13, MUTED,
-    ))
+    parts.append(
+        text(
+            40,
+            78,
+            f"{len(cases)} measured cases · mean saving {mean_saving * 100:.1f}% vs raw-corpus baseline "
+            f"({baseline:,} est. tokens) · {accepted}/{len(cases)} accepted (gate {gate_version})"
+            f" · ledger {ledger_path.name}",
+            13,
+            MUTED,
+        )
+    )
 
     for frac in (0.0, 0.25, 0.5, 0.75, 1.0):
         xx = bx + bw * frac
@@ -567,15 +612,19 @@ def render_bench_impact(ledger_path: Path, ledger: dict, out: Path) -> None:
             f'<line x1="{xx:.1f}" y1="{top - 10}" x2="{xx:.1f}" y2="{top + row_h * len(cases)}"'
             f' stroke="{BORDER}" stroke-width="1"/>'
         )
-        parts.append(text(xx, top + row_h * len(cases) + 18, f"{frac * 100:.0f}%", 10, MUTED,
-                          anchor="middle", family=MONO))
+        parts.append(
+            text(xx, top + row_h * len(cases) + 18, f"{frac * 100:.0f}%", 10, MUTED, anchor="middle", family=MONO)
+        )
     mean_x = bx + bw * mean_saving
     parts.append(
         f'<line x1="{mean_x:.1f}" y1="{top - 14}" x2="{mean_x:.1f}" y2="{top + row_h * len(cases)}"'
         f' stroke="{ACCENT}" stroke-width="1.6" stroke-dasharray="6 4"/>'
     )
-    parts.append(text(mean_x, top - 20, f"mean {mean_saving * 100:.1f}%", 11, ACCENT, anchor="middle",
-                      weight="bold", family=MONO))
+    parts.append(
+        text(
+            mean_x, top - 20, f"mean {mean_saving * 100:.1f}%", 11, ACCENT, anchor="middle", weight="bold", family=MONO
+        )
+    )
 
     for i, c in enumerate(cases):
         yy = top + i * row_h
@@ -588,8 +637,7 @@ def render_bench_impact(ledger_path: Path, ledger: dict, out: Path) -> None:
             f'<rect x="{bx}" y="{yy + 4}" width="{bar_w:.1f}" height="{row_h - 9}" rx="3"'
             f' fill="{color}" opacity="0.9"/>'
         )
-        parts.append(text(bx + bar_w + 8, yy + row_h / 2 + 4, f"{ratio * 100:.1f}%", 11, TEXT,
-                          family=MONO))
+        parts.append(text(bx + bar_w + 8, yy + row_h / 2 + 4, f"{ratio * 100:.1f}%", 11, TEXT, family=MONO))
         p50 = c.get("latency_ms", {}).get("p50")
         sys_tokens = c.get("system_estimated_tokens", 0)
         right = f"{sys_tokens:,} tok"
@@ -599,12 +647,16 @@ def render_bench_impact(ledger_path: Path, ledger: dict, out: Path) -> None:
         mark = "✓" if verdict == "accepted" else "✗"
         mfill = "#3fb950" if verdict == "accepted" else "#ff7b72"
         parts.append(text(bx + bw + 16, yy + row_h / 2 + 4, f"{mark} {right}", 10, mfill, family=MONO))
-    parts.append(text(
-        40, height - 40,
-        "Bars: 1 − (system response tokens / raw-corpus baseline) · quality gate: quality_system ≥ "
-        "per-case compliant ceiling · colours: expected primary domain",
-        11, MUTED,
-    ))
+    parts.append(
+        text(
+            40,
+            height - 40,
+            "Bars: 1 − (system response tokens / raw-corpus baseline) · quality gate: quality_system ≥ "
+            "per-case compliant ceiling · colours: expected primary domain",
+            11,
+            MUTED,
+        )
+    )
     # Domain legend.
     lx = bx
     for dom in sorted(DOMAIN_COLORS):
@@ -622,55 +674,83 @@ def render_bench_impact(ledger_path: Path, ledger: dict, out: Path) -> None:
 def render_architecture(out: Path) -> None:
     width, height = 1240, 920
     parts = svg_header(
-        width, height,
+        width,
+        height,
         "know-your-soul layered architecture — real module map of src/know_your_soul; "
         "regenerate: uv run python tools/generate_visual_assets.py",
     )
-    parts.append(text(40, 52, "Architecture — layered, deterministic, local-first", 26, TEXT,
-                      weight="bold"))
-    parts.append(text(
-        40, 78,
-        "Real module structure of src/know_your_soul · no model, provider, or vector calls anywhere",
-        13, MUTED,
-    ))
+    parts.append(text(40, 52, "Architecture — layered, deterministic, local-first", 26, TEXT, weight="bold"))
+    parts.append(
+        text(
+            40,
+            78,
+            "Real module structure of src/know_your_soul · no model, provider, or vector calls anywhere",
+            13,
+            MUTED,
+        )
+    )
 
     layers = [
-        ("ADAPTERS", "#1f6feb33", [
-            ("cli.py", "know-your-soul CLI"),
-            ("mcp_server.py", "MCP tools"),
-            ("http_api.py", "REST / unix socket"),
-            ("source_watcher.py", "gated relearn offers"),
-        ]),
-        ("SERVICE", "#1f6feb22", [
-            ("service.py", "KnowledgeService · 14 ops"),
-            ("contracts.py", "frozen request/response"),
-            ("retrieval.py", "query · path · explain"),
-            ("improvement.py", "propose / apply / rollback"),
-        ]),
-        ("DOMAIN + SCORING", "#3fb95022", [
-            ("domain.py", "Node · Event · Evidence"),
-            ("scoring.py", "P/M/E engine (contract 1.0.0)"),
-            ("review.py", "quality review"),
-            ("relearn.py", "operator-gated relearn"),
-        ]),
-        ("PROJECTION", "#ffa65722", [
-            ("projection.py", "GraphProjector · generations/"),
-            ("graphify_adapter.py", "pinned partitioner"),
-            ("read_model_validator.py", "artifact gate"),
-            ("fragment_generator.py", "fragment cache"),
-        ]),
-        ("EVENTS + STORE", "#f778ba22", [
-            ("store.py", "SQLite event store"),
-            ("events.py", "immutable domain events"),
-            ("audit.py", "invocation audit log"),
-            ("backup.py", "atomic backup / restore"),
-        ]),
-        ("CROSS-CUTTING", "#8b949e22", [
-            ("security.py", "sanitise · redact"),
-            ("runtime_guard.py", "fail-closed guards"),
-            ("observability.py", "metrics · health"),
-            ("source_registry.py", "source versions"),
-        ]),
+        (
+            "ADAPTERS",
+            "#1f6feb33",
+            [
+                ("cli.py", "know-your-soul CLI"),
+                ("mcp_server.py", "MCP tools"),
+                ("http_api.py", "REST / unix socket"),
+                ("source_watcher.py", "gated relearn offers"),
+            ],
+        ),
+        (
+            "SERVICE",
+            "#1f6feb22",
+            [
+                ("service.py", "KnowledgeService · 14 ops"),
+                ("contracts.py", "frozen request/response"),
+                ("retrieval.py", "query · path · explain"),
+                ("improvement.py", "propose / apply / rollback"),
+            ],
+        ),
+        (
+            "DOMAIN + SCORING",
+            "#3fb95022",
+            [
+                ("domain.py", "Node · Event · Evidence"),
+                ("scoring.py", "P/M/E engine (contract 1.0.0)"),
+                ("review.py", "quality review"),
+                ("relearn.py", "operator-gated relearn"),
+            ],
+        ),
+        (
+            "PROJECTION",
+            "#ffa65722",
+            [
+                ("projection.py", "GraphProjector · generations/"),
+                ("graphify_adapter.py", "pinned partitioner"),
+                ("read_model_validator.py", "artifact gate"),
+                ("fragment_generator.py", "fragment cache"),
+            ],
+        ),
+        (
+            "EVENTS + STORE",
+            "#f778ba22",
+            [
+                ("store.py", "SQLite event store"),
+                ("events.py", "immutable domain events"),
+                ("audit.py", "invocation audit log"),
+                ("backup.py", "atomic backup / restore"),
+            ],
+        ),
+        (
+            "CROSS-CUTTING",
+            "#8b949e22",
+            [
+                ("security.py", "sanitise · redact"),
+                ("runtime_guard.py", "fail-closed guards"),
+                ("observability.py", "metrics · health"),
+                ("source_registry.py", "source versions"),
+            ],
+        ),
     ]
 
     lx, ly = 60.0, 116.0
@@ -687,8 +767,7 @@ def render_architecture(out: Path) -> None:
             mx = lx + i * bw_ + 6
             my = ly + 18
             parts.append(
-                f'<rect x="{mx:.1f}" y="{my}" width="{bw_ - 12:.1f}" height="64" rx="8"'
-                f' fill="{BG}" stroke="{BORDER}"/>'
+                f'<rect x="{mx:.1f}" y="{my}" width="{bw_ - 12:.1f}" height="64" rx="8" fill="{BG}" stroke="{BORDER}"/>'
             )
             parts.append(text(mx + 12, my + 26, mod, 12, ACCENT, family=MONO, weight="bold"))
             parts.append(text(mx + 12, my + 46, desc, 10, MUTED))
@@ -703,12 +782,16 @@ def render_architecture(out: Path) -> None:
         '<defs><marker id="arr2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">'
         f'<path d="M0,0 L6,3 L0,6" fill="none" stroke="{MUTED}" stroke-width="1.2"/></marker></defs>'
     )
-    parts.append(text(
-        60, height - 34,
-        "Dependency direction: adapters → service → domain/scoring → projection → event store; "
-        "the store is the single source of truth, projections are disposable and content-addressed.",
-        11, MUTED,
-    ))
+    parts.append(
+        text(
+            60,
+            height - 34,
+            "Dependency direction: adapters → service → domain/scoring → projection → event store; "
+            "the store is the single source of truth, projections are disposable and content-addressed.",
+            11,
+            MUTED,
+        )
+    )
     write_svg(out, parts)
 
 
@@ -723,12 +806,14 @@ def generate_all(out_dir: Path, ledger: str | None) -> dict[str, Path]:
         graph, timeline, store_path = build_projection(Path(tmp))
         # Scoring demo re-opens the same store against a real child node.
         child_ids = sorted(n["id"] for n in graph["nodes"] if n.get("kind") == "child")
-        demo_node = next(n for n in child_ids if "heuristics" in n) if any(
-            "heuristics" in n for n in child_ids) else child_ids[0]
+        demo_node = (
+            next(n for n in child_ids if "heuristics" in n)
+            if any("heuristics" in n for n in child_ids)
+            else child_ids[0]
+        )
         curve = run_scoring_demo(store_path, demo_node)
         demo_label = next(
-            n.get("source_file", n["id"]).removesuffix(".md")
-            for n in graph["nodes"] if n["id"] == demo_node
+            n.get("source_file", n["id"]).removesuffix(".md") for n in graph["nodes"] if n["id"] == demo_node
         )
     ledger_path, ledger_data = load_bench_ledger(ledger)
 
@@ -749,8 +834,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", default=str(DEFAULT_OUT_DIR), help="output directory")
     parser.add_argument("--ledger", default=None, help="pin a bench ledger file (default: newest measured)")
-    parser.add_argument("--check", action="store_true",
-                        help="regenerate into a temp dir and byte-compare against --out")
+    parser.add_argument(
+        "--check", action="store_true", help="regenerate into a temp dir and byte-compare against --out"
+    )
     args = parser.parse_args()
     out_dir = Path(args.out)
 
@@ -760,7 +846,8 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="kys-visual-check-") as tmp:
             regenerated = generate_all(Path(tmp), args.ledger)
             mismatches = [
-                name for name, fresh in regenerated.items()
+                name
+                for name, fresh in regenerated.items()
                 if not (out_dir / name).exists() or not filecmp.cmp(fresh, out_dir / name, shallow=False)
             ]
         if mismatches:
