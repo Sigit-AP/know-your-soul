@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- know-your-soul learning timeline — real ScoreEngine P/M/E over a deterministic outcome scenario + real event-store growth; regenerate: uv run python tools/generate_visual_assets.py -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="860" viewBox="0 0 1240 860" font-family="ui-sans-serif, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+<rect width="1240" height="860" fill="#0d1117"/>
+<text x="40.0" y="52.0" font-size="26" fill="#e6edf3" text-anchor="start" font-weight="bold" opacity="1.0">Learning over time</text>
+<text x="40.0" y="78.0" font-size="13" fill="#8b949e" text-anchor="start" font-weight="normal" opacity="1.0">P/M/E scores from the frozen scoring engine (contract 1.0.0) over recorded outcomes · event-store growth from the real seed import</text>
+<rect x="40.0" y="106.0" width="1160.0" height="418.0" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+<text x="60.0" y="128.0" font-size="14" fill="#e6edf3" text-anchor="start" font-weight="bold" opacity="1.0">P / M / E score evolution — node “06-heuristics-catalog” (deterministic 12-outcome demo)</text>
+<line x1="100.0" y1="470.0" x2="1140.0" y2="470.0" stroke="#30363d" stroke-width="1" stroke-dasharray="3 4"/>
+<text x="90.0" y="474.0" font-size="9" fill="#8b949e" text-anchor="end" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">0.00</text>
+<line x1="100.0" y1="390.0" x2="1140.0" y2="390.0" stroke="#30363d" stroke-width="1" stroke-dasharray="3 4"/>
+<text x="90.0" y="394.0" font-size="9" fill="#8b949e" text-anchor="end" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">0.26</text>
+<line x1="100.0" y1="310.0" x2="1140.0" y2="310.0" stroke="#30363d" stroke-width="1" stroke-dasharray="3 4"/>
+<text x="90.0" y="314.0" font-size="9" fill="#8b949e" text-anchor="end" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">0.52</text>
+<line x1="100.0" y1="230.0" x2="1140.0" y2="230.0" stroke="#30363d" stroke-width="1" stroke-dasharray="3 4"/>
+<text x="90.0" y="234.0" font-size="9" fill="#8b949e" text-anchor="end" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">0.77</text>
+<line x1="100.0" y1="150.0" x2="1140.0" y2="150.0" stroke="#30363d" stroke-width="1" stroke-dasharray="3 4"/>
+<text x="90.0" y="154.0" font-size="9" fill="#8b949e" text-anchor="end" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">1.03</text>
+<polyline points="100.0,248.5 194.5,240.8 289.1,237.8 383.6,233.6 478.2,230.3 572.7,227.2 667.3,224.0 761.8,224.8 856.4,221.9 950.9,219.3 1045.5,216.5 1140.0,213.4" fill="none" stroke="#58a6ff" stroke-width="2.0" stroke-linejoin="round"/>
+<circle cx="100.0" cy="248.5" r="3.4" fill="#58a6ff" stroke="#0d1117"/>
+<circle cx="194.5" cy="240.8" r="3.4" fill="#58a6ff" stroke="#0d1117"/>
+<circle cx="289.1" cy="237.8" r="3.4" fill="#58a6ff" stroke="#0d1117"/>
+<circle cx="383.6" cy="233.6" r="3.4" fill="#58a6ff" stroke="#0d1117"/>
+<circle cx="478.2" cy="230.3" r="3.4" fill="#58a6ff" stroke="#0d1117"/>
+<circle cx="572.7" cy="227.2" r="3.4" fill="#58a6ff" stroke="#0d1117"/>
+<circle cx="667.3" cy="224.0" r="3.4" fill="#58a6ff" stroke="#0d1117"/>
+<circle cx="761.8" cy="224.8" r="3.4" fill="#58a6ff" stroke="#0d1117"/>
+<circle cx="856.4" cy="221.9" r="3.4" fill="#58a6ff" stroke="#0d1117"/>
+<circle cx="950.9" cy="219.3" r="3.4" fill="#58a6ff" stroke="#0d1117"/>
+<circle cx="1045.5" cy="216.5" r="3.4" fill="#58a6ff" stroke="#0d1117"/>
+<circle cx="1140.0" cy="213.4" r="3.4" fill="#58a6ff" stroke="#0d1117"/>
+<polyline points="100.0,470.0 194.5,470.0 289.1,470.0 383.6,470.0 478.2,470.0 572.7,470.0 667.3,470.0 761.8,470.0 856.4,470.0 950.9,372.9 1045.5,369.4 1140.0,364.5" fill="none" stroke="#3fb950" stroke-width="2.0" stroke-linejoin="round"/>
+<circle cx="100.0" cy="470.0" r="3.4" fill="#3fb950" stroke="#0d1117"/>
+<circle cx="194.5" cy="470.0" r="3.4" fill="#3fb950" stroke="#0d1117"/>
+<circle cx="289.1" cy="470.0" r="3.4" fill="#3fb950" stroke="#0d1117"/>
+<circle cx="383.6" cy="470.0" r="3.4" fill="#3fb950" stroke="#0d1117"/>
+<circle cx="478.2" cy="470.0" r="3.4" fill="#3fb950" stroke="#0d1117"/>
+<circle cx="572.7" cy="470.0" r="3.4" fill="#3fb950" stroke="#0d1117"/>
+<circle cx="667.3" cy="470.0" r="3.4" fill="#3fb950" stroke="#0d1117"/>
+<circle cx="761.8" cy="470.0" r="3.4" fill="#3fb950" stroke="#0d1117"/>
+<circle cx="856.4" cy="470.0" r="3.4" fill="#3fb950" stroke="#0d1117"/>
+<circle cx="950.9" cy="372.9" r="3.4" fill="#3fb950" stroke="#0d1117"/>
+<circle cx="1045.5" cy="369.4" r="3.4" fill="#3fb950" stroke="#0d1117"/>
+<circle cx="1140.0" cy="364.5" r="3.4" fill="#3fb950" stroke="#0d1117"/>
+<polyline points="100.0,234.5 194.5,213.2 289.1,205.6 383.6,201.3 478.2,197.1 572.7,195.7 667.3,194.4 761.8,197.8 856.4,195.7 950.9,194.5 1045.5,193.4 1140.0,191.7" fill="none" stroke="#ffa657" stroke-width="2.0" stroke-linejoin="round"/>
+<circle cx="100.0" cy="234.5" r="3.4" fill="#ffa657" stroke="#0d1117"/>
+<circle cx="194.5" cy="213.2" r="3.4" fill="#ffa657" stroke="#0d1117"/>
+<circle cx="289.1" cy="205.6" r="3.4" fill="#ffa657" stroke="#0d1117"/>
+<circle cx="383.6" cy="201.3" r="3.4" fill="#ffa657" stroke="#0d1117"/>
+<circle cx="478.2" cy="197.1" r="3.4" fill="#ffa657" stroke="#0d1117"/>
+<circle cx="572.7" cy="195.7" r="3.4" fill="#ffa657" stroke="#0d1117"/>
+<circle cx="667.3" cy="194.4" r="3.4" fill="#ffa657" stroke="#0d1117"/>
+<circle cx="761.8" cy="197.8" r="3.4" fill="#ffa657" stroke="#0d1117"/>
+<circle cx="856.4" cy="195.7" r="3.4" fill="#ffa657" stroke="#0d1117"/>
+<circle cx="950.9" cy="194.5" r="3.4" fill="#ffa657" stroke="#0d1117"/>
+<circle cx="1045.5" cy="193.4" r="3.4" fill="#ffa657" stroke="#0d1117"/>
+<circle cx="1140.0" cy="191.7" r="3.4" fill="#ffa657" stroke="#0d1117"/>
+<text x="100.0" y="488.0" font-size="10" fill="#8b949e" text-anchor="middle" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">1</text>
+<text x="194.5" y="488.0" font-size="10" fill="#8b949e" text-anchor="middle" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">2</text>
+<text x="289.1" y="488.0" font-size="10" fill="#8b949e" text-anchor="middle" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">3</text>
+<text x="383.6" y="488.0" font-size="10" fill="#8b949e" text-anchor="middle" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">4</text>
+<text x="478.2" y="488.0" font-size="10" fill="#8b949e" text-anchor="middle" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">5</text>
+<text x="572.7" y="488.0" font-size="10" fill="#8b949e" text-anchor="middle" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">6</text>
+<text x="667.3" y="488.0" font-size="10" fill="#8b949e" text-anchor="middle" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">7</text>
+<text x="761.8" y="488.0" font-size="10" fill="#8b949e" text-anchor="middle" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">8</text>
+<text x="856.4" y="488.0" font-size="10" fill="#8b949e" text-anchor="middle" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">9</text>
+<text x="950.9" y="488.0" font-size="10" fill="#8b949e" text-anchor="middle" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">10</text>
+<text x="1045.5" y="488.0" font-size="10" fill="#8b949e" text-anchor="middle" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">11</text>
+<text x="1140.0" y="488.0" font-size="10" fill="#8b949e" text-anchor="middle" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">12</text>
+<text x="1140.0" y="510.0" font-size="11" fill="#8b949e" text-anchor="end" font-weight="normal" opacity="1.0">recorded outcome →</text>
+<line x1="120.0" y1="146.0" x2="146.0" y2="146.0" stroke="#58a6ff" stroke-width="3"/>
+<text x="154.0" y="150.0" font-size="11" fill="#e6edf3" text-anchor="start" font-weight="normal" opacity="1.0">P · proficiency</text>
+<line x1="290.0" y1="146.0" x2="316.0" y2="146.0" stroke="#3fb950" stroke-width="3"/>
+<text x="324.0" y="150.0" font-size="11" fill="#e6edf3" text-anchor="start" font-weight="normal" opacity="1.0">M · maturity</text>
+<line x1="460.0" y1="146.0" x2="486.0" y2="146.0" stroke="#ffa657" stroke-width="3"/>
+<text x="494.0" y="150.0" font-size="11" fill="#e6edf3" text-anchor="start" font-weight="normal" opacity="1.0">E · effectiveness</text>
+<text x="1140.0" y="150.0" font-size="11" fill="#8b949e" text-anchor="end" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">final: P=0.828 M=0.341 E=0.898 · level 2</text>
+<rect x="40.0" y="536.0" width="1160.0" height="298.0" rx="10" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+<text x="60.0" y="558.0" font-size="14" fill="#e6edf3" text-anchor="start" font-weight="bold" opacity="1.0">Event-store growth during seed import (real replay order)</text>
+<line x1="100.0" y1="780.0" x2="1140.0" y2="780.0" stroke="#30363d" stroke-width="1" stroke-dasharray="3 4"/>
+<text x="90.0" y="784.0" font-size="9" fill="#8b949e" text-anchor="end" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">0</text>
+<line x1="100.0" y1="689.1" x2="1140.0" y2="689.1" stroke="#30363d" stroke-width="1" stroke-dasharray="3 4"/>
+<text x="90.0" y="693.1" font-size="9" fill="#8b949e" text-anchor="end" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">18</text>
+<line x1="100.0" y1="598.2" x2="1140.0" y2="598.2" stroke="#30363d" stroke-width="1" stroke-dasharray="3 4"/>
+<text x="90.0" y="602.2" font-size="9" fill="#8b949e" text-anchor="end" font-weight="normal" opacity="1.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">36</text>
+<polyline points="100.0,774.9 114.9,769.9 129.7,769.9 144.6,764.8 159.4,764.8 174.3,759.8 189.1,759.8 204.0,754.7 218.9,754.7 233.7,749.7 248.6,749.7 263.4,744.6 278.3,744.6 293.1,739.6 308.0,739.6 322.9,734.5 337.7,734.5 352.6,729.5 367.4,729.5 382.3,724.4 397.1,724.4 412.0,719.4 426.9,719.4 441.7,714.3 456.6,714.3 471.4,709.3 486.3,709.3 501.1,704.2 516.0,704.2 530.9,699.2 545.7,699.2 560.6,694.1 575.4,694.1 590.3,689.1 605.1,689.1 620.0,684.0 634.9,684.0 649.7,679.0 664.6,679.0 679.4,673.9 694.3,673.9 709.1,668.9 724.0,668.9 738.9,663.8 753.7,663.8 768.6,658.8 783.4,658.8 798.3,653.7 813.1,653.7 828.0,648.7 842.9,648.7 857.7,643.6 872.6,643.6 887.4,638.6 902.3,638.6 917.1,633.5 932.0,633.5 946.9,628.5 961.7,628.5 976.6,623.4 991.4,623.4 1006.3,618.4 1021.1,618.4 1036.0,613.3 1050.9,613.3 1065.7,608.3 1080.6,608.3 1095.4,603.2 1110.3,603.2 1125.1,598.2 1140.0,598.2" fill="none" stroke="#58a6ff" stroke-width="2.0" stroke-linejoin="round"/>
+<polyline points="100.0,780.0 114.9,780.0 129.7,774.9 144.6,774.9 159.4,769.9 174.3,769.9 189.1,764.8 204.0,764.8 218.9,759.8 233.7,759.8 248.6,754.7 263.4,754.7 278.3,749.7 293.1,749.7 308.0,744.6 322.9,744.6 337.7,739.6 352.6,739.6 367.4,734.5 382.3,734.5 397.1,729.5 412.0,729.5 426.9,724.4 441.7,724.4 456.6,719.4 471.4,719.4 486.3,714.3 501.1,714.3 516.0,709.3 530.9,709.3 545.7,704.2 560.6,704.2 575.4,699.2 590.3,699.2 605.1,694.1 620.0,694.1 634.9,689.1 649.7,689.1 664.6,684.0 679.4,684.0 694.3,679.0 709.1,679.0 724.0,673.9 738.9,673.9 753.7,668.9 768.6,668.9 783.4,663.8 798.3,663.8 813.1,658.8 828.0,658.8 842.9,653.7 857.7,653.7 872.6,648.7 887.4,648.7 902.3,643.6 917.1,643.6 932.0,638.6 946.9,638.6 961.7,633.5 976.6,633.5 991.4,628.5 1006.3,628.5 1021.1,623.4 1036.0,623.4 1050.9,618.4 1065.7,618.4 1080.6,613.3 1095.4,613.3 1110.3,608.3 1125.1,608.3 1140.0,603.2" fill="none" stroke="#3fb950" stroke-width="2.0" stroke-linejoin="round"/>
+<text x="120.0" y="578.0" font-size="11" fill="#58a6ff" text-anchor="start" font-weight="normal" opacity="1.0">— nodes (node.upsert, 36)</text>
+<text x="360.0" y="578.0" font-size="11" fill="#3fb950" text-anchor="start" font-weight="normal" opacity="1.0">— relations (relation.add, 35)</text>
+<text x="1140.0" y="816.0" font-size="11" fill="#8b949e" text-anchor="end" font-weight="normal" opacity="1.0">domain event sequence →</text>
+<text x="100.0" y="816.0" font-size="11" fill="#8b949e" text-anchor="start" font-weight="normal" opacity="1.0">71 knowledge-affecting events, immutable, replay-ordered</text>
+</svg>
