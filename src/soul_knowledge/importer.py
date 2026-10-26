@@ -477,13 +477,24 @@ class SeedImporter:
                         "utf-8"
                     )
                 )
-            except (OSError, json.JSONDecodeError) as error:
+            except (OSError, ValueError) as error:
+                # ValueError covers both JSONDecodeError and UnicodeDecodeError
+                # (F-SUB45-2): every unreadable manifest fails closed typed.
                 raise ImportManifestError(f"unreadable import manifest {manifest_path}: {error}") from error
+            if not isinstance(stored, dict):
+                raise ImportManifestError(
+                    f"unreadable import manifest {manifest_path}: expected a JSON object, got {type(stored).__name__}"
+                )
             if stored.get("root") != str(root):
                 raise ImportManifestError(
                     f"import manifest is anchored to {stored.get('root')!r}, not {str(root)!r}; refusing to trust it"
                 )
-            previous = dict(stored.get("files", {}))
+            files = stored.get("files", {})
+            if not isinstance(files, dict) or any(not isinstance(entry, dict) for entry in files.values()):
+                raise ImportManifestError(
+                    f"unreadable import manifest {manifest_path}: 'files' must map paths to entry objects"
+                )
+            previous = dict(files)
 
         current: dict[str, str] = {}
         for file in sorted(root.rglob("*.md"), key=lambda item: item.as_posix()):

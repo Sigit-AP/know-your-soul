@@ -269,13 +269,13 @@ def test_a_corrupt_manifest_fails_closed(garbage: str) -> None:
             importer.import_directory(corpus.root, domain=PrimaryDomain.P1)
         return
     if isinstance(stored, dict) and stored.get("root") == str(corpus.root.resolve()):
-        return  # a well-anchored manifest is legitimately accepted
-    if not isinstance(stored, dict):
-        # Known gap F-SUB45-2 (reported, not fixed — src out of scope): a
-        # valid-JSON non-object manifest escapes as a bare AttributeError
-        # instead of the typed ImportManifestError the module documents.
-        return
-    # A parseable manifest anchored elsewhere (or anchorless) fails closed.
+        files = stored.get("files", {})
+        if isinstance(files, dict) and all(isinstance(entry, dict) for entry in files.values()):
+            return  # a well-formed, well-anchored manifest is legitimately accepted
+    # Anything else — unparseable, valid-JSON non-object, mis-anchored, or a
+    # malformed files section — fails closed with the typed error (F-SUB45-2,
+    # fixed in SUB-47: previously a non-object manifest escaped as a bare
+    # AttributeError and invalid UTF-8 as UnicodeDecodeError).
     with pytest.raises(ImportManifestError):
         importer.import_directory(corpus.root, domain=PrimaryDomain.P1)
 

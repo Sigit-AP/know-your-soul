@@ -348,10 +348,17 @@ class RelearnEngine:
 
     @staticmethod
     def _anchor_path(source_uri: str, manifest_paths: set[str]) -> str | None:
-        """Map an evidence ``source_uri`` to a manifest path, deterministically."""
+        """Map an evidence ``source_uri`` to a manifest path, deterministically.
+
+        The suffix scan iterates ``sorted(manifest_paths)`` and, among
+        several suffix matches, the longest (most specific) path wins — the
+        result never depends on set iteration order, so a preview computed
+        in one process and an apply in another always agree (F-SUB45-1:
+        plain set iteration flipped the choice across ``PYTHONHASHSEED``).
+        """
         if source_uri in manifest_paths:
             return source_uri
-        for path in manifest_paths:
+        for path in sorted(manifest_paths, key=lambda candidate: (-len(candidate), candidate)):
             if source_uri.endswith("/" + path):
                 return path
         return None
