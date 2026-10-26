@@ -6,9 +6,10 @@ spec sections 7, 8 and 13.1.
 A thin adapter over :mod:`soul_knowledge.http_api`'s shared dispatch: every
 command validates its JSON payload, invokes the ten-operation
 ``KnowledgeService`` (or the operational commands ``rebuild``, ``backup``,
-``restore``, ``health``) through the same code path as the HTTP API, prints
-the canonical JSON result on stdout, and prints the consistent error envelope
-on stderr. Exit codes:
+``restore``, ``health`` and the operator-gated relearn lifecycle
+``relearn-scan``/``relearn-status``/``relearn-preview``/``relearn-apply``)
+through the same code path as the HTTP API, prints the canonical JSON result
+on stdout, and prints the consistent error envelope on stderr. Exit codes:
 
 * ``0`` — success (``health`` additionally requires ``ok: true``);
 * ``1`` — the service rejected a valid request (typed error, journaled by the

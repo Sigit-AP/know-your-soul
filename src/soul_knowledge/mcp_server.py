@@ -38,7 +38,7 @@ import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from mcp import types
 from mcp.server.lowlevel import Server
@@ -63,9 +63,9 @@ from soul_knowledge.domain import (
     storage_payload,
 )
 from soul_knowledge.events import Invocation, InvocationOutcome
-from soul_knowledge.http_api import DEFAULT_HOST_ALLOWLIST, BoundaryMiddleware
+from soul_knowledge.http_api import DEFAULT_HOST_ALLOWLIST, BoundaryDenialRecorder, BoundaryMiddleware
 from soul_knowledge.improvement import ApprovalRecord, DiffOperation
-from soul_knowledge.projection import GraphProjector
+from soul_knowledge.projection import GraphProjector, ProjectionError
 from soul_knowledge.security import (
     DEFAULT_MAX_PAYLOAD_BYTES,
     assert_bind_allowed,
@@ -120,7 +120,12 @@ _DIFF_OPS = [
     "add_relation",
     "set_status",
 ]
-_RESOURCE_URIS = ("soul://projection/manifest", "soul://projection/stats", "soul://projection/nodes")
+_RESOURCE_URIS = (
+    "soul://projection/manifest",
+    "soul://projection/stats",
+    "soul://projection/nodes",
+    "soul://relearn/status",
+)
 
 
 class ToolError(RuntimeError):
@@ -497,6 +502,10 @@ class _Adapter:
         except StoreError as error:
             # ``store.commit`` writes the failure audit before re-raising.
             return self._error_result(type(error).__name__, str(error), None)
+        except ProjectionError as error:
+            # Final-audit F-5: projection contract violations (busy, shrink
+            # guard, oversized artifact) are typed, never INTERNAL_ERROR.
+            return self._error_result(type(error).__name__, str(error), None)
         except Exception:  # noqa: BLE001 - never leak raw exception text
             return self._error_result("INTERNAL_ERROR", "the operation failed with an internal error", None)
         return types.CallToolResult(
@@ -666,9 +675,47 @@ class _Adapter:
                     ("soul://projection/manifest", "projection-manifest", "Sanitized active projection manifest."),
                     ("soul://projection/stats", "projection-stats", "Sanitized node/edge counts and watermarks."),
                     ("soul://projection/nodes", "projection-nodes", "Sanitized, size-capped node summaries."),
+                    (
+                        "soul://relearn/status",
+                        "relearn-status",
+                        "Relearn gate: pending offer plus read-only RESET/ACCUMULATE preview counts.",
+                    ),
                 )
             ]
         )
+
+    def _relearn_status_payload(self) -> dict[str, Any]:
+        """The pending relearn offer and both mode previews, read-only (F-4).
+
+        Final-audit F-4: the operator decision needs the ``offer_id`` and the
+        per-mode consequences visible; MCP exposes exactly that, read-only —
+        the approval itself is an operator act on the CLI/HTTP ops surface,
+        never an eleventh tool (spec 13.1/13.2). Evidence id lists stay on
+        the ops surface; this resource carries counts only, so it stays well
+        under the size cap. Status and previews ride the service's public
+        relearn gate (each an audited read invocation).
+        """
+        status = self._service.relearn_status(actor=self._actor)
+        payload: dict[str, Any] = {
+            "relearn_state": status.state,
+            "pending_offer": status.pending_offer.model_dump(mode="json") if status.pending_offer else None,
+            "active_source_version_id": status.active_source_version_id,
+        }
+        if status.pending_offer is None:
+            return payload
+        modes: tuple[Literal["RESET", "ACCUMULATE"], ...] = ("RESET", "ACCUMULATE")
+        previews: dict[str, Any] = {}
+        for mode in modes:
+            preview = self._service.preview_relearn(mode, actor=self._actor)
+            previews[mode] = {
+                "evidence_carried": preview.evidence_carried,
+                "evidence_quarantined": preview.evidence_quarantined,
+                "nodes_reused": preview.nodes_reused,
+                "scores_after": preview.scores_after,
+                "promotion_blocked": preview.promotion_blocked,
+            }
+        payload["previews"] = previews
+        return payload
 
     def _active_manifest(self) -> dict[str, Any]:
         manifest = self._service._projector.active_manifest()  # noqa: SLF001 - same-package wiring
@@ -702,6 +749,8 @@ class _Adapter:
             entries = entries[:-1]
 
     def _resource_payload(self, uri: str) -> dict[str, Any]:
+        if uri == "soul://relearn/status":
+            return self._relearn_status_payload()
         manifest = self._active_manifest()
         if uri == "soul://projection/manifest":
             return manifest
@@ -880,12 +929,16 @@ def main(argv: list[str] | None = None) -> int:
 
         # Wave-2 F3: the streamable-HTTP app is wrapped in the same boundary
         # middleware as the Task 7 API — Host allowlist plus per-request API
-        # key authentication (a configured key gates loopback too).
+        # key authentication (a configured key gates loopback too). Final-audit
+        # S-6: boundary denials append the same aggregated tamper-evident audit
+        # events as the HTTP API, through the service's own store.
+        denial_recorder = BoundaryDenialRecorder(service._store)  # noqa: SLF001 - same-package wiring
         app = BoundaryMiddleware(
             server.streamable_http_app(),
             api_key=api_key,
             host_allowlist=DEFAULT_HOST_ALLOWLIST,
             max_body_bytes=DEFAULT_MAX_PAYLOAD_BYTES,
+            denial_recorder=denial_recorder.record,
         )
         uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
         return 0

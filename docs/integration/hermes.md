@@ -114,11 +114,44 @@ Keep the loopback/Unix-socket boundary; do not expose the port externally.
 
 ## 5. Sanitized resources
 
-Three read-only resources are exposed, all sanitized (control/bidi/zero-width
+Four read-only resources are exposed, all sanitized (control/bidi/zero-width
 stripping, secret redaction), canonical-JSON, and capped at 64 KiB:
 
 - `soul://projection/manifest` — the active projection manifest;
 - `soul://projection/stats` — node/edge counts, watermarks, content hash;
-- `soul://projection/nodes` — bounded node summaries with a truncation flag.
+- `soul://projection/nodes` — bounded node summaries with a truncation flag;
+- `soul://relearn/status` — the relearn gate (below).
 
 Raw Graphify reports are never served; there are no PR/`gh` tools.
+
+## 6. Relearn operations (operator-gated, spec 13.3)
+
+When SOUL.md or the corpus changes, the system emits a deterministic
+`RelearnOffer` and sets `RELEARN_PENDING`. It never picks a mode itself: the
+RESET/ACCUMULATE decision is an explicit operator act. The lifecycle rides
+the **ops surface** (CLI subcommands and `POST /v1/ops/...`) — the ten
+knowledge operations and the ten MCP tools are unchanged, and no eleventh
+tool exists:
+
+```bash
+soul-knowledge relearn-scan '{"path": "/path/to/corpus", "kind": "SOUL_CORPUS"}'
+soul-knowledge relearn-status            # pending offer + offer_id, or null
+soul-knowledge relearn-preview '{"mode": "RESET"}'       # or "ACCUMULATE"
+soul-knowledge relearn-apply '{"mode": "RESET", "approval": {"offer_id": "...", "approved_by": "you"}}'
+```
+
+`relearn-scan` registers the baseline on first run (offer `null`) and emits
+an offer only when the source fingerprint changes. `relearn-apply` is
+refused with a typed `OperatorDecisionRequired` unless the approval names
+the pending `offer_id` and mode; every apply takes a verified atomic backup
+(receipt carries `relearn_id`), and `knowledge_rollback` /
+`POST /v1/knowledge/rollback {"relearn_id": "..."}` restores the exact
+pre-relearn state.
+
+Over MCP the gate is **read-only**: `soul://relearn/status` returns the
+`relearn_state`, the pending offer (including its `offer_id` and the file
+diff), and per-mode preview *counts* (`evidence_carried`,
+`evidence_quarantined`, `nodes_reused`, `promotion_blocked`). A resource
+read never writes. The approval itself is deliberately not an MCP tool —
+the operator decides on the CLI/HTTP ops surface, while Hermes (or any MCP
+client) can see that a decision is pending and what each mode would do.

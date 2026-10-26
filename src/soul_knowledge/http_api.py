@@ -5,8 +5,11 @@ spec sections 7 (invocation/audit flow), 8 and 13.1.
 
 This module is a *thin adapter*: it validates transport payloads, forwards
 them to the ten-operation :class:`~soul_knowledge.service.KnowledgeService`
-(or the operational commands: projection rebuild, backup, restore, health)
-and serializes the result. No business logic lives here.
+(or the operational commands: projection rebuild, backup, restore, health and
+the operator-gated relearn lifecycle ``relearn_scan`` / ``relearn_status`` /
+``relearn_preview`` / ``relearn_apply`` — final-audit F-4; the ten knowledge
+operations are unchanged) and serializes the result. No business logic lives
+here.
 
 Audit discipline (spec 7.7):
 
@@ -34,6 +37,7 @@ stack's ``ops_root`` (default: the store's directory) via
 from __future__ import annotations
 
 import asyncio
+import errno
 import hashlib
 import hmac
 import json
@@ -41,11 +45,13 @@ import logging
 import os
 import socket
 import stat
+import threading
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import uvicorn
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -56,7 +62,7 @@ from starlette.responses import Response
 from starlette.routing import Route
 
 from soul_knowledge.audit import AuditLog
-from soul_knowledge.backup import backup_store, restore_store
+from soul_knowledge.backup import BackupError, backup_store, restore_store
 from soul_knowledge.contracts import (
     ApplyImprovementRequest,
     EvaluateRequest,
@@ -68,8 +74,9 @@ from soul_knowledge.contracts import (
 )
 from soul_knowledge.domain import Evidence, Node, canonical_json, new_id
 from soul_knowledge.events import Invocation, InvocationOutcome
-from soul_knowledge.observability import check_readiness
-from soul_knowledge.projection import GraphProjector
+from soul_knowledge.observability import HealthReport, check_readiness
+from soul_knowledge.projection import GraphProjector, ProjectionError
+from soul_knowledge.relearn import RelearnApproval
 from soul_knowledge.security import (
     DEFAULT_MAX_PAYLOAD_BYTES,
     BindPolicyError,
@@ -84,6 +91,7 @@ from soul_knowledge.security import (
     sanitize_text,
 )
 from soul_knowledge.service import KnowledgeService
+from soul_knowledge.source_registry import SourceKind
 from soul_knowledge.store import EventStore, StoreError
 
 __all__ = [
@@ -92,6 +100,7 @@ __all__ = [
     "KNOWLEDGE_OPERATIONS",
     "OPS_OPERATIONS",
     "AdapterValidationError",
+    "BoundaryDenialRecorder",
     "BoundaryMiddleware",
     "LocalStack",
     "UnknownOperation",
@@ -121,7 +130,18 @@ KNOWLEDGE_OPERATIONS: tuple[str, ...] = (
     "apply_improvement",
     "rollback",
 )
-OPS_OPERATIONS: tuple[str, ...] = ("rebuild", "backup", "restore", "health")
+OPS_OPERATIONS: tuple[str, ...] = (
+    "rebuild",
+    "backup",
+    "restore",
+    "health",
+    # Final-audit F-4 (adapter half): the operator-gated relearn lifecycle
+    # rides the ops route — the ten knowledge operations stay untouched.
+    "relearn_scan",
+    "relearn_status",
+    "relearn_preview",
+    "relearn_apply",
+)
 
 _MAX_ERROR_MESSAGE = 512
 
@@ -258,6 +278,26 @@ class _RestorePayload(_Payload):
     backup_path: str = Field(min_length=1)
     dest_path: str = Field(min_length=1)
     overwrite: bool = False
+
+
+class _RelearnScanPayload(_Payload):
+    path: str = Field(min_length=1)
+    kind: SourceKind = SourceKind.SOUL_CORPUS
+
+
+class _RelearnPreviewPayload(_Payload):
+    mode: Literal["RESET", "ACCUMULATE"]
+
+
+class _RelearnApprovalPayload(_Payload):
+    offer_id: str = Field(min_length=1)
+    approved_by: str = Field(min_length=1)
+    decided_at: datetime | None = None
+
+
+class _RelearnApplyPayload(_Payload):
+    mode: Literal["RESET", "ACCUMULATE"]
+    approval: _RelearnApprovalPayload
 
 
 # ------------------------------------------------------------------ dispatch
@@ -411,6 +451,39 @@ def _call_health(stack: LocalStack, request: _EmptyPayload, actor: str, idem: st
     return check_readiness(stack.store, projector=stack.projector)
 
 
+def _call_relearn_scan(stack: LocalStack, request: _RelearnScanPayload, actor: str, idem: str | None) -> Any:
+    """Scan a source path; emit (and return) a RelearnOffer iff it changed.
+
+    Final-audit F-4: this is the operator-reachable half of the spec-13.3
+    trigger, riding the service's public ``offer_relearn`` (audited). The
+    engine never selects a mode — an offer only sets ``RELEARN_PENDING`` and
+    waits for ``relearn_apply``. Unlike backup/restore, *path* is a source to
+    hash (read-only), so it is not confined to ``ops_root``.
+    """
+    offer = stack.service.offer_relearn(Path(request.path), request.kind, actor=actor)
+    status = stack.service.relearn_status(actor=actor)
+    return {"offer": offer, "relearn_state": status.state}
+
+
+def _call_relearn_status(stack: LocalStack, request: _EmptyPayload, actor: str, idem: str | None) -> Any:
+    """The relearn gate: state, the pending offer (with its id), the baseline."""
+    return stack.service.relearn_status(actor=actor)
+
+
+def _call_relearn_preview(stack: LocalStack, request: _RelearnPreviewPayload, actor: str, idem: str | None) -> Any:
+    return stack.service.preview_relearn(request.mode, actor=actor)
+
+
+def _call_relearn_apply(stack: LocalStack, request: _RelearnApplyPayload, actor: str, idem: str | None) -> Any:
+    approval = RelearnApproval(
+        offer_id=request.approval.offer_id,
+        mode=request.mode,
+        approved_by=request.approval.approved_by,
+        decided_at=request.approval.decided_at or datetime.now(UTC),
+    )
+    return stack.service.apply_relearn(request.mode, approval, actor=actor, idempotency_key=idem)
+
+
 _OPERATIONS: dict[str, _OpSpec] = {
     "query": _OpSpec(_model_parse(QueryRequest), _call_query),
     "get_node": _OpSpec(_model_parse(_GetNodePayload), _call_get_node),
@@ -426,6 +499,10 @@ _OPERATIONS: dict[str, _OpSpec] = {
     "backup": _OpSpec(_model_parse(_BackupPayload), _call_backup),
     "restore": _OpSpec(_model_parse(_RestorePayload), _call_restore),
     "health": _OpSpec(_model_parse(_EmptyPayload), _call_health),
+    "relearn_scan": _OpSpec(_model_parse(_RelearnScanPayload), _call_relearn_scan),
+    "relearn_status": _OpSpec(_model_parse(_EmptyPayload), _call_relearn_status),
+    "relearn_preview": _OpSpec(_model_parse(_RelearnPreviewPayload), _call_relearn_preview),
+    "relearn_apply": _OpSpec(_model_parse(_RelearnApplyPayload), _call_relearn_apply),
 }
 
 
@@ -555,6 +632,9 @@ _STATUS_BY_CODE: dict[str, int] = {
     "REQUEST_TIMEOUT": 408,
     "UNSUPPORTED_MEDIA_TYPE": 415,
     "CLIENT_DISCONNECTED": 400,
+    # Service-level relearn gate refusals (final-audit F-4).
+    "OPERATOR_DECISION_REQUIRED": 409,
+    "UNKNOWN_RELEARN": 404,
 }
 
 _STATUS_BY_TYPE: dict[str, int] = {
@@ -565,7 +645,43 @@ _STATUS_BY_TYPE: dict[str, int] = {
     "RegressionGateFailure": 422,
     "ProposalValidationError": 400,
     "BackupError": 400,
+    # Relearn contract failures (StoreError subclass; code = type name).
+    "NoPendingRelearn": 409,
+    "OperatorDecisionRequired": 409,
+    "UnknownRelearn": 404,
+    # ProjectionError family: typed whether or not the core declares it a
+    # StoreError — the wire result is identical either way (final-audit F-5).
+    "ProjectorBusy": 503,
+    "StalePublicationError": 409,
+    "ShrinkGuardError": 422,
+    "ProjectionValidationError": 422,
+    "OversizedArtifactError": 507,
 }
+
+# Transient-by-contract types: the caller may retry as-is.
+_RETRYABLE_TYPES: frozenset[str] = frozenset({"ProjectorBusy", "StalePublicationError"})
+
+# Final-audit F-5: the BackupError/ProjectionError family collapses into the
+# INTERNAL envelope when it does not ride the StoreError hierarchy — with the
+# actionable message sanitized off the wire and a status/body code mismatch.
+# This table is the adapter-side guarantee: the wire code is the type name
+# (the StoreError pattern), the status and retryable flag are honest, and the
+# (redacted) message survives. When the core declares these as StoreError,
+# the StoreError branches produce the identical result via _STATUS_BY_TYPE.
+_OPS_ERROR_MAP: dict[str, tuple[str, int, bool]] = {
+    "BackupError": ("BackupError", 400, False),
+    "ProjectorBusy": ("ProjectorBusy", 503, True),
+    "StalePublicationError": ("StalePublicationError", 409, True),
+    "ShrinkGuardError": ("ShrinkGuardError", 422, False),
+    "ProjectionValidationError": ("ProjectionValidationError", 422, False),
+    "OversizedArtifactError": ("OversizedArtifactError", 507, False),
+}
+
+
+def _ops_error_mapping(error: BaseException) -> tuple[str, int, bool] | None:
+    if not isinstance(error, (BackupError, ProjectionError)):
+        return None
+    return _OPS_ERROR_MAP.get(type(error).__name__)
 
 
 def status_for_error(error: BaseException) -> int:
@@ -578,6 +694,9 @@ def status_for_error(error: BaseException) -> int:
         return 403 if isinstance(error, HostNotAllowedError) else 401
     if isinstance(error, StoreError):
         return _STATUS_BY_TYPE.get(type(error).__name__, 422)
+    mapped = _ops_error_mapping(error)
+    if mapped is not None:
+        return mapped[1]
     return _STATUS_BY_TYPE.get(type(error).__name__, 500)
 
 
@@ -598,7 +717,12 @@ def error_envelope(error: BaseException) -> dict[str, Any]:
     elif isinstance(error, PathEscapeError):
         code, retryable, audit_event_id = "PATH_ESCAPE", False, None
     elif isinstance(error, StoreError):
-        code, retryable, audit_event_id = type(error).__name__, False, None
+        code = type(error).__name__
+        retryable = code in _RETRYABLE_TYPES
+        audit_event_id = None
+    elif (mapped := _ops_error_mapping(error)) is not None:
+        code, _, retryable = mapped
+        audit_event_id = None
     else:
         code, retryable, audit_event_id = "INTERNAL", False, None
     message = redact_text(str(error))[:_MAX_ERROR_MESSAGE]
@@ -623,7 +747,14 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _record_security_denial(stack: LocalStack, scope: Mapping[str, Any], error: BaseException) -> None:
+def _record_security_denial(
+    store: EventStore,
+    scope: Mapping[str, Any],
+    error: BaseException,
+    *,
+    denial_count: int = 1,
+    window_seconds: float | None = None,
+) -> None:
     """Append one tamper-evident audit event for a boundary security denial.
 
     Wave-2 F9(a): a 401/403 rejection is not an invocation (spec 7.7), so it
@@ -631,7 +762,9 @@ def _record_security_denial(stack: LocalStack, scope: Mapping[str, Any], error: 
     appends a standalone ``security.boundary_denial`` event to the store's
     hash-chained event log through the existing public ``insert_event`` API.
     The payload carries reason, peer, host, method and path — never any
-    presented key material.
+    presented key material. ``denial_count`` accounts for the denials this
+    single event covers (final-audit S-5 aggregation); it is 1 when the
+    recorder writes every denial individually.
     """
     reason = "host_not_allowed" if isinstance(error, HostNotAllowedError) else "unauthorized"
     client = scope.get("client")
@@ -644,9 +777,11 @@ def _record_security_denial(stack: LocalStack, scope: Mapping[str, Any], error: 
         "host": host,
         "method": str(scope.get("method", "")),
         "path": str(scope.get("path", "")),
+        "denial_count": denial_count,
+        "window_seconds": window_seconds,
     }
-    with stack.store.transaction() as conn:
-        stack.store.insert_event(
+    with store.transaction() as conn:
+        store.insert_event(
             conn,
             event_id=new_id(),
             kind="audit",
@@ -656,6 +791,58 @@ def _record_security_denial(stack: LocalStack, scope: Mapping[str, Any], error: 
             occurred_at=_now_iso(),
             payload=payload,
         )
+
+
+class BoundaryDenialRecorder:
+    """Windowed aggregation for boundary-denial audit writes (final-audit S-5).
+
+    An unauthenticated wrong-key storm used to append one ~683-byte
+    hash-chained event per request, letting any remote keyless caller grow
+    the store without bound and bury the audit signal. The recorder writes
+    the first occurrence of each distinct denial — keyed by
+    ``(reason, remote_addr, message)``, so a missing-key rejection and a
+    wrong-key rejection from the same peer are both audited individually
+    (the wave-2 F9(a) contract) — then suppresses *identical repeats*
+    inside ``window_seconds`` and folds their count into the next event
+    after the window. The trail stays complete (every denial is accounted by
+    exactly one event's ``denial_count``) but a homogeneous storm is bounded
+    to one event per window. The key map itself is capped; beyond the cap an
+    unseen key is written immediately (fidelity over aggregation), so the
+    map can never be grown without bound either.
+    """
+
+    _MAX_TRACKED_KEYS = 4096
+
+    def __init__(
+        self,
+        store: EventStore,
+        *,
+        window_seconds: float = 60.0,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._store = store
+        self._window = float(window_seconds)
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._last_recorded: dict[tuple[str, str, str], float] = {}
+        self._suppressed: dict[tuple[str, str, str], int] = {}
+
+    def record(self, scope: Mapping[str, Any], error: BaseException) -> None:
+        """The ``denial_recorder`` hook for :class:`BoundaryMiddleware`."""
+        reason = "host_not_allowed" if isinstance(error, HostNotAllowedError) else "unauthorized"
+        client = scope.get("client")
+        remote_addr = str(client[0]) if client else "local"
+        key = (reason, remote_addr, str(error)[:256])
+        with self._lock:
+            now = self._clock()
+            last = self._last_recorded.get(key)
+            if last is not None and now - last < self._window:
+                self._suppressed[key] = self._suppressed.get(key, 0) + 1
+                return
+            count = self._suppressed.pop(key, 0) + 1
+            if len(self._last_recorded) < self._MAX_TRACKED_KEYS or key in self._last_recorded:
+                self._last_recorded[key] = now
+        _record_security_denial(self._store, scope, error, denial_count=count, window_seconds=self._window)
 
 
 class BoundaryMiddleware:
@@ -837,13 +1024,14 @@ def create_app(
         Route("/v1/ops/{operation}", ops, methods=["POST"]),
     ]
     app = Starlette(routes=routes)
+    denial_recorder = BoundaryDenialRecorder(stack.store)
     return BoundaryMiddleware(
         app,
         api_key=api_key,
         host_allowlist=host_allowlist,
         max_body_bytes=max_body_bytes,
         body_timeout_seconds=body_timeout_seconds,
-        denial_recorder=lambda scope, error: _record_security_denial(stack, scope, error),
+        denial_recorder=denial_recorder.record,
     )
 
 
@@ -883,29 +1071,76 @@ async def _handle(stack: LocalStack, operation: str, request: Request, max_body_
             logger.exception("unhandled internal error serving %s", operation)
             envelope["error"]["message"] = "internal error"
         return _json_response(envelope, status=status_for_error(error))
-    return _json_response(to_jsonable(result))
+    status = 200
+    if operation == "health" and isinstance(result, HealthReport):
+        # Final-audit F-8: POST /v1/ops/health must agree with GET /v1/health —
+        # monitoring wired to the wrong verb must not see green when degraded.
+        status = 200 if result.ok else 503
+    return _json_response(to_jsonable(result), status=status)
 
 
 # --------------------------------------------------------------------- serve
 
 
-def _bind_unix_socket(socket_path: str | Path, *, backlog: int = 2048) -> socket.socket:
-    """Bind a unix socket with owner-only (``0o600``) permissions, race-free.
+def _unlink_stale_socket(path: Path) -> None:
+    """Remove *path* iff it is a stale socket; fail closed on anything else.
 
-    Uvicorn's own ``uds=`` path chmods the socket ``0o666`` after binding
-    (wave-2 F2); binding it ourselves, chmodding ``0o600`` immediately and
-    handing uvicorn the file descriptor closes the world-writable window
-    regardless of the ambient umask.
+    Final-audit S-3: a leftover socket file is stale exactly when nothing
+    answers a connect (``ECONNREFUSED``/``ENOENT``) — a bound-but-dead socket
+    from a previous run. A live listener (or a socket that cannot even be
+    probed) and any non-socket — a regular file, a symlink, whatever an
+    accident or an attacker dropped at the path — is never unlinked; the
+    bind refuses with :class:`BindPolicyError` instead.
+    """
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        return
+    if not stat.S_ISSOCK(info.st_mode):
+        raise BindPolicyError(
+            f"refusing to bind {str(path)!r}: the path exists and is not a socket "
+            f"(mode {stat.S_IFMT(info.st_mode):05o}); remove it manually if it is truly stale"
+        )
+    probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        probe.settimeout(1.0)
+        probe.connect(str(path))
+    except OSError as error:
+        if error.errno not in (errno.ECONNREFUSED, errno.ENOENT):
+            raise BindPolicyError(
+                f"refusing to bind {str(path)!r}: cannot verify the existing socket is stale ({error})"
+            ) from error
+        path.unlink()
+    else:
+        raise BindPolicyError(f"refusing to bind {str(path)!r}: a live listener answers on the existing socket")
+    finally:
+        probe.close()
+
+
+def _bind_unix_socket(socket_path: str | Path, *, backlog: int = 2048) -> socket.socket:
+    """Bind a unix socket, created owner-only (``0o600``) atomically, restartable.
+
+    The socket inode is born ``0o600``: a temporary ``0o177`` umask around
+    ``bind`` makes the permission atomic — literally race-free, with no
+    bind→chmod window and no path-based chmod for a swapped symlink to ride
+    (final-audit S-4; Linux ``fchmod`` on a socket fd is a silent no-op, so
+    the umask is the only honest option). A stale socket file from a
+    previous run is unlinked first — after verifying it is a socket and no
+    listener answers (:func:`_unlink_stale_socket`, final-audit S-3) — so
+    restarts never die on ``EADDRINUSE``.
     """
     path = Path(socket_path)
+    _unlink_stale_socket(path)
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    previous_umask = os.umask(0o177)
     try:
         sock.bind(str(path))
-        os.chmod(path, 0o600)
         sock.listen(backlog)
     except BaseException:
         sock.close()
         raise
+    finally:
+        os.umask(previous_umask)
     return sock
 
 
@@ -951,5 +1186,13 @@ def serve(
     try:
         uvicorn.Server(config).run()
     finally:
-        if listener is not None:
+        if listener is not None and socket_path is not None:
             listener.close()
+            # S-3: a clean shutdown removes the socket file so the next start
+            # never meets it; _bind_unix_socket covers the crash case anyway.
+            # If the path no longer names a stale socket (swapped, replaced
+            # by a live listener) the unlink refuses — cleanup never raises.
+            try:
+                _unlink_stale_socket(Path(socket_path))
+            except BindPolicyError:
+                logger.warning("leaving socket path %r in place: it no longer names our stale socket", socket_path)
