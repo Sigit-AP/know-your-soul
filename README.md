@@ -1,4 +1,4 @@
-# Super Power Knowledge SOUL
+# Know Your Soul
 
 A standalone, deterministic knowledge graph, audit, scoring, and
 controlled-improvement service for the SOUL corpus. Hermes accesses it
@@ -15,8 +15,8 @@ Python 3.14 modular monolith:
 ```
                  ┌────────────┐  ┌────────────┐  ┌────────────┐
                  │    CLI     │  │ local API  │  │ MCP server │   three access paths
-                 │ (soul-     │  │ (Starlette │  │ (stdio /   │   over ONE service
-                 │ knowledge) │  │  /uvicorn) │  │  HTTP)     │
+                 │ (know-your-│  │ (Starlette │  │ (stdio /   │   over ONE service
+                 │  soul)     │  │  /uvicorn) │  │  HTTP)     │
                  └─────┬──────┘  └─────┬──────┘  └─────┬──────┘
                        └───────────────┼───────────────┘
                                KnowledgeService          ← fourteen audited operations
@@ -37,7 +37,7 @@ Python 3.14 modular monolith:
   `docs/contracts/`); scoring uses exact Decimal arithmetic; no formula or
   threshold may change without a new contract version.
 * **Boundary:** provider/vector/model packages and entry points are forbidden
-  and fail closed (`src/soul_knowledge/runtime_guard.py`); outbound sockets
+  and fail closed (`src/know_your_soul/runtime_guard.py`); outbound sockets
   are denied; MCP is tools+resources only, no sampling.
 
 ## The fourteen operations
@@ -70,7 +70,7 @@ knowledge payload within 160 estimated tokens.
 
 ## Three access paths
 
-1. **CLI** — `soul-knowledge <operation>` for all fourteen operations plus the
+1. **CLI** — `know-your-soul <operation>` for all fourteen operations plus the
    operator ops: projection rebuild, backup, restore, health, and the
    operator-gated relearn lifecycle (`relearn-scan`, `relearn-status`,
    `relearn-preview`, `relearn-apply`).

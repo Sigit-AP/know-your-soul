@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# soul-knowledge container: deterministic, offline, non-root.
+# know-your-soul container: deterministic, offline, non-root.
 #
 # The runtime needs no outbound network (the runtime guard denies provider
 # imports, credentials and sockets); network access is only used at build time
@@ -25,7 +25,9 @@ COPY --from=build /usr/local/bin /usr/local/bin
 USER soul
 VOLUME ["/data"]
 # Default store location inside the container; projections live next to it.
-ENV SOUL_STORE=/data/soul.sqlite3
-# The `soul-knowledge` console script ships in the package (cli.py) and is
-# installed by the build above; e.g.: docker run --rm <image> soul-knowledge --help
-ENTRYPOINT ["soul-knowledge"]
+# The CLI resolves the store default from KNOW_YOUR_SOUL_STORE; the pre-rename
+# SOUL_STORE name is still honored (deprecated, warns on stderr).
+ENV KNOW_YOUR_SOUL_STORE=/data/know-your-soul.sqlite3
+# The `know-your-soul` console script ships in the package (cli.py) and is
+# installed by the build above; e.g.: docker run --rm <image> know-your-soul --help
+ENTRYPOINT ["know-your-soul"]

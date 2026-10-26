@@ -36,9 +36,9 @@ from typing import Any
 import pytest
 from mcp import types
 
-from soul_knowledge import cli, http_api, mcp_server
-from soul_knowledge.backup import BackupError
-from soul_knowledge.domain import (
+from know_your_soul import cli, http_api, mcp_server
+from know_your_soul.backup import BackupError
+from know_your_soul.domain import (
     Event,
     EventKind,
     Node,
@@ -47,7 +47,7 @@ from soul_knowledge.domain import (
     Relation,
     RelationKind,
 )
-from soul_knowledge.http_api import (
+from know_your_soul.http_api import (
     KNOWLEDGE_OPERATIONS,
     OPS_OPERATIONS,
     BoundaryDenialRecorder,
@@ -56,16 +56,16 @@ from soul_knowledge.http_api import (
     error_envelope,
     status_for_error,
 )
-from soul_knowledge.projection import (
+from know_your_soul.projection import (
     OversizedArtifactError,
     ProjectionValidationError,
     ProjectorBusy,
     ShrinkGuardError,
     StalePublicationError,
 )
-from soul_knowledge.security import BindPolicyError, UnauthorizedError
-from soul_knowledge.source_registry import RELEARN_PENDING, SourceKind
-from soul_knowledge.store import EventStore
+from know_your_soul.security import BindPolicyError, UnauthorizedError
+from know_your_soul.source_registry import RELEARN_PENDING, SourceKind
+from know_your_soul.store import EventStore
 from test_http_api import _post, asgi_call
 from test_mcp_server import _run, _session
 
@@ -631,7 +631,7 @@ def test_mcp_relearn_status_resource(tmp_path: Path) -> None:
     offer = service.offer_relearn(corpus, SourceKind.SOUL_CORPUS)
     assert offer is not None
 
-    from soul_knowledge.mcp_server import build_server
+    from know_your_soul.mcp_server import build_server
 
     server = build_server(service, graph_root=tmp_path / "graph")
     domain_before = store.execute_raw("SELECT COUNT(*) AS n FROM event_log WHERE kind = 'domain'").fetchone()["n"]
@@ -661,7 +661,7 @@ def test_mcp_relearn_status_resource_without_pending_offer(tmp_path: Path) -> No
     from test_mcp_server import _seeded
 
     _, _, service = _seeded(tmp_path)
-    from soul_knowledge.mcp_server import build_server
+    from know_your_soul.mcp_server import build_server
 
     server = build_server(service, graph_root=tmp_path / "graph")
 

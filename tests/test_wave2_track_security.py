@@ -20,7 +20,7 @@ from typing import Any
 
 import pytest
 
-from soul_knowledge.domain import (
+from know_your_soul.domain import (
     Event,
     EventKind,
     Node,
@@ -28,11 +28,11 @@ from soul_knowledge.domain import (
     PrimaryDomain,
     canonical_json,
 )
-from soul_knowledge.http_api import build_stack, create_app
-from soul_knowledge.importer import SeedImporter
-from soul_knowledge.projection import GraphProjector
-from soul_knowledge.read_model_validator import ReadModelValidator
-from soul_knowledge.store import EventStore
+from know_your_soul.http_api import build_stack, create_app
+from know_your_soul.importer import SeedImporter
+from know_your_soul.projection import GraphProjector
+from know_your_soul.read_model_validator import ReadModelValidator
+from know_your_soul.store import EventStore
 
 # Canonical AWS documentation example key shape (matches AKIA[0-9A-Z]{16}).
 SECRET = "AKIA" + "IOSFODNN7EXAMPLE"
@@ -194,7 +194,7 @@ def test_f7_secret_bearing_node_is_quarantined_and_reads_survive(stack: Any, cap
         ),
         key="test:f7:upsert:n-evil",
     )
-    with caplog.at_level(logging.WARNING, logger="soul_knowledge.projection"):
+    with caplog.at_level(logging.WARNING, logger="know_your_soul.projection"):
         receipt = stack.projector.rebuild()  # RED: raises ProjectionValidationError
     assert receipt.node_count == int(before["node_count"]), "the poisoned node must be excluded, not published"
 
@@ -405,7 +405,7 @@ def test_f9_client_disconnect_is_caught_and_logged_without_traceback(
         return {"type": "http.disconnect"}
 
     app = create_app(stack)
-    with caplog.at_level(logging.INFO, logger="soul_knowledge.http_api"):
+    with caplog.at_level(logging.INFO, logger="know_your_soul.http_api"):
         status, _, raw = asgi_call(
             app,
             "POST",

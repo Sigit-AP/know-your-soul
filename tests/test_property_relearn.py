@@ -36,7 +36,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from soul_knowledge.domain import (
+from know_your_soul.domain import (
     Event,
     EventKind,
     Evidence,
@@ -45,7 +45,7 @@ from soul_knowledge.domain import (
     PrimaryDomain,
     ScoreVector,
 )
-from soul_knowledge.relearn import (
+from know_your_soul.relearn import (
     _RESET_SCORES,
     MIXED_SOURCE_VERSIONS,
     BackupUnavailable,
@@ -57,13 +57,13 @@ from soul_knowledge.relearn import (
     RelearnError,
     UnknownRelearn,
 )
-from soul_knowledge.source_registry import (
+from know_your_soul.source_registry import (
     RELEARN_PENDING,
     ParserVersions,
     SourceKind,
     SourceRegistry,
 )
-from soul_knowledge.store import EventStore, IdempotencyConflict
+from know_your_soul.store import EventStore, IdempotencyConflict
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 

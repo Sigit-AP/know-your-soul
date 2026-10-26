@@ -37,8 +37,8 @@ from typing import Any, Literal
 
 from pydantic import ValidationError
 
-from soul_knowledge.audit import AuditLog, failure_outcome, success_outcome
-from soul_knowledge.contracts import (
+from know_your_soul.audit import AuditLog, failure_outcome, success_outcome
+from know_your_soul.contracts import (
     ACCESS_ONLY_TOKEN_CAP,
     DEFAULT_MAX_TOKEN_BUDGET,
     MINIMUM_TOKEN_BUDGET,
@@ -87,10 +87,10 @@ from soul_knowledge.contracts import (
     estimated_tokens_of_payload,
     score_text,
 )
-from soul_knowledge.domain import Event, EventKind, Evidence, Node, canonical_json, quantize_score, storage_payload
-from soul_knowledge.events import Invocation, InvocationOutcome, WriteReceipt
-from soul_knowledge.importer import DEFAULT_PARSER_VERSIONS
-from soul_knowledge.improvement import (
+from know_your_soul.domain import Event, EventKind, Evidence, Node, canonical_json, quantize_score, storage_payload
+from know_your_soul.events import Invocation, InvocationOutcome, WriteReceipt
+from know_your_soul.importer import DEFAULT_PARSER_VERSIONS
+from know_your_soul.improvement import (
     ApprovalRequired,
     ProposalValidationError,
     RegressionGateFailure,
@@ -101,10 +101,10 @@ from soul_knowledge.improvement import (
     propose,
     rollback_improvement,
 )
-from soul_knowledge.improvement import UnknownNode as ImprovementUnknownNode
-from soul_knowledge.projection import ARTIFACT_MAX_BYTES, GraphProjector, ProjectorBusy
-from soul_knowledge.read_model_validator import ReadModelValidator
-from soul_knowledge.relearn import (
+from know_your_soul.improvement import UnknownNode as ImprovementUnknownNode
+from know_your_soul.projection import ARTIFACT_MAX_BYTES, GraphProjector, ProjectorBusy
+from know_your_soul.read_model_validator import ReadModelValidator
+from know_your_soul.relearn import (
     BackupUnavailable,
     MixedSourceVersions,
     NoPendingRelearn,
@@ -117,7 +117,7 @@ from soul_knowledge.relearn import (
     RelearnStatus,
     UnknownRelearn,
 )
-from soul_knowledge.retrieval import (
+from know_your_soul.retrieval import (
     BudgetedTraversal,
     LexicalIndex,
     PrimaryRouter,
@@ -126,13 +126,13 @@ from soul_knowledge.retrieval import (
     query_terms,
     sanitize_text,
 )
-from soul_knowledge.review import ReviewEngine
-from soul_knowledge.review import UnknownNode as ReviewUnknownNode
-from soul_knowledge.scheduler import DueReviewScheduler
-from soul_knowledge.scoring import ScoreEngine, UnknownNodeError
-from soul_knowledge.security import redact_text
-from soul_knowledge.source_registry import ParserVersions, RelearnOffer, SourceKind
-from soul_knowledge.store import PUBLISH_CAPACITY_RATIO, EventStore, PublishCapacityExceeded, StoreError
+from know_your_soul.review import ReviewEngine
+from know_your_soul.review import UnknownNode as ReviewUnknownNode
+from know_your_soul.scheduler import DueReviewScheduler
+from know_your_soul.scoring import ScoreEngine, UnknownNodeError
+from know_your_soul.security import redact_text
+from know_your_soul.source_registry import ParserVersions, RelearnOffer, SourceKind
+from know_your_soul.store import PUBLISH_CAPACITY_RATIO, EventStore, PublishCapacityExceeded, StoreError
 
 __all__ = ["InvalidPublishCapacity", "KnowledgeService"]
 
@@ -162,7 +162,7 @@ def _redacted_content(text: str, *, max_length: int) -> str:
 
     Defense-in-depth (residual audit wave-1, R1): the publish gate already
     fails closed on secret shapes, but every read surface additionally passes
-    content text through :func:`soul_knowledge.security.redact_text`. Clean
+    content text through :func:`know_your_soul.security.redact_text`. Clean
     input is byte-identical (``redact_text`` only rewrites pattern matches),
     so the frozen token-budget contract is untouched for clean corpora; only
     the string payload changes, never the response structure.

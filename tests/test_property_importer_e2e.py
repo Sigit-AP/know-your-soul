@@ -33,19 +33,19 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from soul_knowledge.contracts import QueryRequest
-from soul_knowledge.domain import EventKind, PrimaryDomain
-from soul_knowledge.fragment_generator import file_scoped_id
-from soul_knowledge.importer import (
+from know_your_soul.contracts import QueryRequest
+from know_your_soul.domain import EventKind, PrimaryDomain
+from know_your_soul.fragment_generator import file_scoped_id
+from know_your_soul.importer import (
     ImportManifestError,
     SeedImporter,
     _read_contained_file,
     injective_file_id,
 )
-from soul_knowledge.projection import GraphProjector
-from soul_knowledge.security import OversizedPayloadError, PathEscapeError
-from soul_knowledge.service import KnowledgeService
-from soul_knowledge.store import EventStore
+from know_your_soul.projection import GraphProjector
+from know_your_soul.security import OversizedPayloadError, PathEscapeError
+from know_your_soul.service import KnowledgeService
+from know_your_soul.store import EventStore
 
 _VALIDATOR_ID_RE = re.compile(r"^[\w.:-]+$", re.UNICODE)
 
@@ -532,7 +532,7 @@ def test_an_empty_file_still_imports_its_file_node(tmp_path: Path) -> None:
 )
 @settings(derandomize=True, max_examples=25, deadline=None)
 def test_remap_fragment_ids_covers_every_old_id(labels: list[str], scope: str) -> None:
-    from soul_knowledge.importer import _remap_fragment_ids
+    from know_your_soul.importer import _remap_fragment_ids
 
     nodes = [{"id": f"old{index}", "label": label} for index, label in enumerate(labels)]
     edges = [{"source": "old0", "target": f"old{index}", "relation": "contains"} for index in range(1, len(labels))]
@@ -552,7 +552,7 @@ def test_remap_fragment_ids_covers_every_old_id(labels: list[str], scope: str) -
 )
 @settings(derandomize=True, max_examples=15, deadline=None)
 def test_remap_fragment_ids_never_rewrites_reference_targets(target: str) -> None:
-    from soul_knowledge.importer import _remap_fragment_ids
+    from know_your_soul.importer import _remap_fragment_ids
 
     nodes = [{"id": "old0", "label": "doc"}]
     edges = [{"source": "old0", "target": target, "relation": "references"}]

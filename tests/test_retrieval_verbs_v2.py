@@ -22,17 +22,17 @@ from typing import Any
 
 import pytest
 
-from soul_knowledge.contracts import (
+from know_your_soul.contracts import (
     MINIMUM_TOKEN_BUDGET,
     BudgetTooSmall,
     MetadataExceedsBudget,
     NodeNotFound,
 )
-from soul_knowledge.domain import canonical_json
+from know_your_soul.domain import canonical_json
 
 # New contract-v2 symbols are imported lazily inside the tests so a missing
 # implementation fails as test failures (RED), not as a collection error.
-from soul_knowledge.retrieval import GraphLink
+from know_your_soul.retrieval import GraphLink
 from test_service import _child, _relate, _roots, _stack, _upsert
 
 # ------------------------------------------------------------------ fixtures
@@ -87,7 +87,7 @@ def _links() -> list[GraphLink]:
 
 
 def test_shortest_path_directed_with_sorted_tie_break() -> None:
-    from soul_knowledge.retrieval import RelationalGraph
+    from know_your_soul.retrieval import RelationalGraph
 
     graph = RelationalGraph(_links())
     outcome = graph.shortest_path("n-a", "n-c")
@@ -108,7 +108,7 @@ def test_shortest_path_directed_with_sorted_tie_break() -> None:
 
 
 def test_shortest_path_self_no_path_and_cycle_safety() -> None:
-    from soul_knowledge.retrieval import RelationalGraph
+    from know_your_soul.retrieval import RelationalGraph
 
     graph = RelationalGraph(_links())
     self_path = graph.shortest_path("n-a", "n-a")
@@ -132,7 +132,7 @@ def test_shortest_path_self_no_path_and_cycle_safety() -> None:
 
 
 def test_explain_neighborhood_sorted_with_counts() -> None:
-    from soul_knowledge.retrieval import RelationalGraph
+    from know_your_soul.retrieval import RelationalGraph
 
     graph = RelationalGraph(_links())
     explanation = graph.explain_neighborhood("n-c")
@@ -148,7 +148,7 @@ def test_explain_neighborhood_sorted_with_counts() -> None:
 
 
 def test_affected_reverse_bfs_depth_bound_cycle_safe() -> None:
-    from soul_knowledge.retrieval import RelationalGraph
+    from know_your_soul.retrieval import RelationalGraph
 
     graph = RelationalGraph(_links())
     report = graph.affected("n-c", depth=2, max_nodes=256)
@@ -174,7 +174,7 @@ def test_affected_reverse_bfs_depth_bound_cycle_safe() -> None:
 
 
 def test_god_nodes_degree_ranking_deterministic_bounded() -> None:
-    from soul_knowledge.retrieval import RelationalGraph
+    from know_your_soul.retrieval import RelationalGraph
 
     links = _links() + [GraphLink(source="P1", target=f"n-{item}", relation="parent_of") for item in "abcdxyz"]
     graph = RelationalGraph(links)
@@ -388,7 +388,7 @@ def test_every_verb_invocation_is_audited_exactly_once(tmp_path: Path) -> None:
 
 
 def test_http_dispatch_exposes_all_four_verbs(tmp_path: Path) -> None:
-    from soul_knowledge.http_api import KNOWLEDGE_OPERATIONS, build_stack, dispatch_text, to_jsonable
+    from know_your_soul.http_api import KNOWLEDGE_OPERATIONS, build_stack, dispatch_text, to_jsonable
 
     for operation in ("path", "explain", "affected", "god_nodes"):
         assert operation in KNOWLEDGE_OPERATIONS
@@ -413,7 +413,7 @@ def test_http_dispatch_exposes_all_four_verbs(tmp_path: Path) -> None:
 
 
 def test_cli_exposes_all_four_verbs(tmp_path: Path, capsys: Any) -> None:
-    from soul_knowledge.cli import main
+    from know_your_soul.cli import main
 
     _verb_seeded(tmp_path)
     base = ["--store", str(tmp_path / "soul.sqlite3"), "--output-root", str(tmp_path / "out")]
@@ -436,7 +436,7 @@ def test_cli_exposes_all_four_verbs(tmp_path: Path, capsys: Any) -> None:
 def test_mcp_exposes_all_four_verbs_with_strict_schemas(tmp_path: Path) -> None:
     import anyio
 
-    from soul_knowledge.mcp_server import EXPECTED_TOOLS, build_server
+    from know_your_soul.mcp_server import EXPECTED_TOOLS, build_server
     from test_mcp_server import _call_tool, _error_payload, _result_text, _session
 
     _, _, service = _verb_seeded(tmp_path)

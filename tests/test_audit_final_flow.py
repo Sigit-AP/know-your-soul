@@ -41,8 +41,8 @@ from pathlib import Path
 
 import pytest
 
-from soul_knowledge.audit import AuditLog
-from soul_knowledge.backup import (
+from know_your_soul.audit import AuditLog
+from know_your_soul.backup import (
     BackupError,
     backup_store,
     diagnose_projection,
@@ -50,19 +50,19 @@ from soul_knowledge.backup import (
     recover_projection,
     restore_store,
 )
-from soul_knowledge.contracts import ApplyImprovementRequest, LifecycleError, NodeNotFound, StaleProjectionUnavailable
-from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, ScoreVector, canonical_json
-from soul_knowledge.http_api import error_envelope, status_for_error
-from soul_knowledge.importer import SeedImporter
-from soul_knowledge.observability import check_readiness
-from soul_knowledge.projection import (
+from know_your_soul.contracts import ApplyImprovementRequest, LifecycleError, NodeNotFound, StaleProjectionUnavailable
+from know_your_soul.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, ScoreVector, canonical_json
+from know_your_soul.http_api import error_envelope, status_for_error
+from know_your_soul.importer import SeedImporter
+from know_your_soul.observability import check_readiness
+from know_your_soul.projection import (
     ARTIFACT_MAX_BYTES,
     GraphProjector,
     ProjectionValidationError,
     ProjectorBusy,
 )
-from soul_knowledge.service import InvalidPublishCapacity, KnowledgeService
-from soul_knowledge.store import EventStore, PublishCapacityExceeded
+from know_your_soul.service import InvalidPublishCapacity, KnowledgeService
+from know_your_soul.store import EventStore, PublishCapacityExceeded
 
 NOW = datetime(2026, 10, 26, 12, 0, tzinfo=UTC)
 

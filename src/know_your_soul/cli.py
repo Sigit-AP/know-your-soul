@@ -1,9 +1,9 @@
-"""The ``soul-knowledge`` command-line interface (Task 7).
+"""The ``know-your-soul`` command-line interface (Task 7).
 
 Task 7 of ``docs/superpowers/plans/2026-10-24-superpower-knowledge-soul.md``;
 spec sections 7, 8 and 13.1.
 
-A thin adapter over :mod:`soul_knowledge.http_api`'s shared dispatch: every
+A thin adapter over :mod:`know_your_soul.http_api`'s shared dispatch: every
 command validates its JSON payload, invokes the fourteen-operation
 ``KnowledgeService`` (the frozen ten v1 operations plus the contract-v2 G1
 retrieval verbs ``path`` / ``explain`` / ``affected`` / ``god_nodes`` —
@@ -36,8 +36,8 @@ import sys
 from collections.abc import Sequence
 from typing import Any
 
-from soul_knowledge.domain import canonical_json
-from soul_knowledge.http_api import (
+from know_your_soul.domain import canonical_json
+from know_your_soul.http_api import (
     DEFAULT_HOST_ALLOWLIST,
     KNOWLEDGE_OPERATIONS,
     OPS_OPERATIONS,
@@ -48,22 +48,44 @@ from soul_knowledge.http_api import (
     serve,
     to_jsonable,
 )
-from soul_knowledge.security import BindPolicyError
-from soul_knowledge.update_pipeline import UpdatePipelineError
+from know_your_soul.security import BindPolicyError
+from know_your_soul.update_pipeline import UpdatePipelineError
 
 __all__ = ["build_parser", "main"]
 
-DEFAULT_STORE_PATH = "soul-knowledge.sqlite3"
-DEFAULT_OUTPUT_ROOT = "soul-knowledge-projection"
-DEFAULT_SOCKET_PATH = "soul-knowledge.sock"
+DEFAULT_STORE_PATH = "know-your-soul.sqlite3"
+DEFAULT_OUTPUT_ROOT = "know-your-soul-projection"
+DEFAULT_SOCKET_PATH = "know-your-soul.sock"
+
+STORE_ENV_VAR = "KNOW_YOUR_SOUL_STORE"
+LEGACY_STORE_ENV_VAR = "SOUL_STORE"  # deprecated pre-rename name; still honored
+
+
+def _default_store_path() -> str:
+    """Store path default: KNOW_YOUR_SOUL_STORE, then deprecated SOUL_STORE, then the built-in default."""
+    new = os.environ.get(STORE_ENV_VAR)
+    if new:
+        return new
+    legacy = os.environ.get(LEGACY_STORE_ENV_VAR)
+    if legacy:
+        print(f"warning: {LEGACY_STORE_ENV_VAR} is deprecated; set {STORE_ENV_VAR} instead", file=sys.stderr)
+        return legacy
+    return DEFAULT_STORE_PATH
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="soul-knowledge",
+        prog="know-your-soul",
         description="Deterministic local knowledge service: fourteen audited operations plus ops commands.",
     )
-    parser.add_argument("--store", default=DEFAULT_STORE_PATH, help="path to the SQLite event store")
+    parser.add_argument(
+        "--store",
+        default=_default_store_path(),
+        help=(
+            f"path to the SQLite event store (default: ${STORE_ENV_VAR}, "
+            f"deprecated ${LEGACY_STORE_ENV_VAR}, or {DEFAULT_STORE_PATH})"
+        ),
+    )
     parser.add_argument("--output-root", default=DEFAULT_OUTPUT_ROOT, help="projection output directory")
     parser.add_argument("--actor", default="operator", help="actor recorded on the invocation audit")
     parser.add_argument("--idempotency-key", default=None, help="idempotency key for mutation commands")

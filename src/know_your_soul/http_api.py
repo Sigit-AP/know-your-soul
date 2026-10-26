@@ -4,7 +4,7 @@ Task 7 of ``docs/superpowers/plans/2026-10-24-superpower-knowledge-soul.md``;
 spec sections 7 (invocation/audit flow), 8 and 13.1.
 
 This module is a *thin adapter*: it validates transport payloads, forwards
-them to the fourteen-operation :class:`~soul_knowledge.service.KnowledgeService`
+them to the fourteen-operation :class:`~know_your_soul.service.KnowledgeService`
 (the frozen ten v1 operations plus the contract-v2 G1 retrieval verbs
 ``path`` / ``explain`` / ``affected`` / ``god_nodes`` — operator ruling
 2026-10-26, addendum ``docs/contracts/retrieval-verbs-v2.md``)
@@ -24,7 +24,7 @@ Audit discipline (spec 7.7):
   valid invocation therefore has exactly one final audit event.
 
 Boundaries: the Starlette app enforces the Host allowlist and the
-loopback/Unix-socket policy from :mod:`soul_knowledge.security`, caps request
+loopback/Unix-socket policy from :mod:`know_your_soul.security`, caps request
 bodies (streaming, under one total body deadline), requires ``application/json`` on
 POST routes (CSRF drive-by rejection), and exposes only versioned ``/v1``
 routes. ``serve`` binds a Unix socket by default — created owner-only
@@ -34,7 +34,7 @@ client, loopback and unix-socket peers included (fail-closed; the CLI never
 talks to the socket, it dispatches in-process, so local CLI flows are
 unaffected). ``ops/backup`` and ``ops/restore`` paths are confined to the
 stack's ``ops_root`` (default: the store's directory) via
-:func:`soul_knowledge.security.resolve_within_root`.
+:func:`know_your_soul.security.resolve_within_root`.
 """
 
 from __future__ import annotations
@@ -65,9 +65,9 @@ from starlette.requests import ClientDisconnect, Request
 from starlette.responses import Response
 from starlette.routing import Route
 
-from soul_knowledge.audit import AuditLog
-from soul_knowledge.backup import BackupError, backup_store, restore_store
-from soul_knowledge.contracts import (
+from know_your_soul.audit import AuditLog
+from know_your_soul.backup import BackupError, backup_store, restore_store
+from know_your_soul.contracts import (
     ApplyImprovementRequest,
     EvaluateRequest,
     KnowledgeError,
@@ -77,12 +77,12 @@ from soul_knowledge.contracts import (
     RollbackRequest,
     TraversalMode,
 )
-from soul_knowledge.domain import Evidence, Node, RelationKind, canonical_json, new_id
-from soul_knowledge.events import Invocation, InvocationOutcome
-from soul_knowledge.observability import HealthReport, check_readiness
-from soul_knowledge.projection import GraphProjector, ProjectionError
-from soul_knowledge.relearn import RelearnApproval, RelearnOffer
-from soul_knowledge.security import (
+from know_your_soul.domain import Evidence, Node, RelationKind, canonical_json, new_id
+from know_your_soul.events import Invocation, InvocationOutcome
+from know_your_soul.observability import HealthReport, check_readiness
+from know_your_soul.projection import GraphProjector, ProjectionError
+from know_your_soul.relearn import RelearnApproval, RelearnOffer
+from know_your_soul.security import (
     DEFAULT_MAX_PAYLOAD_BYTES,
     BindPolicyError,
     HostNotAllowedError,
@@ -95,11 +95,11 @@ from soul_knowledge.security import (
     resolve_within_root,
     sanitize_text,
 )
-from soul_knowledge.service import KnowledgeService
-from soul_knowledge.source_registry import SourceKind
-from soul_knowledge.source_watcher import SourceChange, SourceWatcher
-from soul_knowledge.store import EventStore, StoreError
-from soul_knowledge.update_pipeline import SourceWatchLoop, UpdatePipelineError
+from know_your_soul.service import KnowledgeService
+from know_your_soul.source_registry import SourceKind
+from know_your_soul.source_watcher import SourceChange, SourceWatcher
+from know_your_soul.store import EventStore, StoreError
+from know_your_soul.update_pipeline import SourceWatchLoop, UpdatePipelineError
 
 __all__ = [
     "API_VERSION",
@@ -214,7 +214,7 @@ class LocalStack:
 
     ``ops_root`` is the fixed containment root for ``ops/backup`` and
     ``ops/restore`` paths (wave-2 F1): every caller-supplied path is resolved
-    through :func:`soul_knowledge.security.resolve_within_root` against it,
+    through :func:`know_your_soul.security.resolve_within_root` against it,
     failing closed on escapes. ``None`` refuses backup/restore outright.
     """
 
@@ -1317,7 +1317,7 @@ def serve(
     """Serve the API: Unix socket by default, opt-in loopback HTTP.
 
     Anything beyond loopback fails closed through
-    :func:`soul_knowledge.security.assert_bind_allowed` unless an API key is
+    :func:`know_your_soul.security.assert_bind_allowed` unless an API key is
     configured. When a key is configured it gates every client, loopback and
     unix-socket peers included (wave-2 F1). The unix socket is created
     owner-only (``0o600``) via :func:`_bind_unix_socket` (wave-2 F2).

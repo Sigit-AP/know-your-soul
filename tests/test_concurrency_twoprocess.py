@@ -19,13 +19,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain
-from soul_knowledge.store import EventStore
+from know_your_soul.domain import Event, EventKind, Node, NodeKind, PrimaryDomain
+from know_your_soul.store import EventStore
 
 WRITER = r"""
 import sys
-from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, ScoreVector
-from soul_knowledge.store import EventStore, IdempotencyConflict
+from know_your_soul.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, ScoreVector
+from know_your_soul.store import EventStore, IdempotencyConflict
 
 db_path, prefix = sys.argv[1], sys.argv[2]
 n_unique, n_shared, conflict = int(sys.argv[3]), int(sys.argv[4]), sys.argv[5] == "1"

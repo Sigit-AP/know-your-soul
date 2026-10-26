@@ -36,11 +36,11 @@ from graphify.semantic_cleanup import sanitize_semantic_fragment, validate_seman
 from graphify.validate import validate_extraction
 from pydantic import BaseModel, ConfigDict, Field
 
-from soul_knowledge.domain import RelationKind, canonical_json
-from soul_knowledge.fragment_generator import FRAGMENT_GENERATOR_VERSION, FRAGMENT_PROMPT_FINGERPRINT, FragmentGenerator
+from know_your_soul.domain import RelationKind, canonical_json
+from know_your_soul.fragment_generator import FRAGMENT_GENERATOR_VERSION, FRAGMENT_PROMPT_FINGERPRINT, FragmentGenerator
 
 if TYPE_CHECKING:
-    from soul_knowledge.projection import FragmentCache
+    from know_your_soul.projection import FragmentCache
 
 __all__ = [
     "ACCEPTED_SCHEMA_VERSIONS",

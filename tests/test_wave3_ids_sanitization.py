@@ -31,17 +31,17 @@ import random
 import string
 from pathlib import Path
 
-from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain
-from soul_knowledge.fragment_generator import file_scoped_id
-from soul_knowledge.importer import SeedImporter, injective_file_id, injective_section_key
-from soul_knowledge.projection import (
+from know_your_soul.domain import Event, EventKind, Node, NodeKind, PrimaryDomain
+from know_your_soul.fragment_generator import file_scoped_id
+from know_your_soul.importer import SeedImporter, injective_file_id, injective_section_key
+from know_your_soul.projection import (
     ENRICHED_SUMMARY_MAX_LENGTH,
     GraphProjector,
     _clean_sentence,
     enriched_summary,
 )
-from soul_knowledge.security import SECRET_PATTERNS, redact_text
-from soul_knowledge.store import EventStore
+from know_your_soul.security import SECRET_PATTERNS, redact_text
+from know_your_soul.store import EventStore
 
 # --------------------------------------------------------------------- W3-2
 
@@ -151,7 +151,7 @@ def test_wikilinks_resolve_to_injective_target_ids(tmp_path: Path) -> None:
             "Beta Two.md": b"# Beta Two\n\nThe target body.\n",
         },
     )
-    from soul_knowledge.domain import RelationKind
+    from know_your_soul.domain import RelationKind
 
     source_id = injective_file_id("alpha-one.md")
     target_id = injective_file_id("Beta Two.md")

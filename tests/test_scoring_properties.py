@@ -17,7 +17,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from soul_knowledge.scoring import score_items
+from know_your_soul.scoring import score_items
 
 AT = datetime(2026, 10, 24, tzinfo=UTC)
 

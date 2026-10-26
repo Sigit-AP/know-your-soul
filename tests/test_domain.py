@@ -18,7 +18,7 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from soul_knowledge.domain import (
+from know_your_soul.domain import (
     DECIMAL_PRECISION,
     PRIMARY_DOMAINS,
     SCORE_QUANTUM,

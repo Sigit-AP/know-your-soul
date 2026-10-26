@@ -4,12 +4,12 @@ R1 — defense-in-depth on the Task 4 read surfaces: the publish gate
 (read_model_validator) already fails closed on secret shapes, but
 ``get_node``/``get_subtree``/``query`` must *also* pass content-derived text
 (summary, provenance, context tags) through
-:func:`soul_knowledge.security.redact_text` before leaving the service. A
+:func:`know_your_soul.security.redact_text` before leaving the service. A
 node carrying secret/PII-shaped text must never surface the raw string;
 clean text must pass through byte-identical (token estimator parity).
 
 R2 — every importer file read is contained and bounded: paths resolve through
-:func:`soul_knowledge.security.resolve_within_root` (symlink/path escapes
+:func:`know_your_soul.security.resolve_within_root` (symlink/path escapes
 fail closed with a typed ``PathEscapeError``) and files larger than
 ``importer.MAX_IMPORT_FILE_BYTES`` fail closed with a typed
 ``OversizedPayloadError``. Normal and in-root-symlinked imports still work.
@@ -21,14 +21,14 @@ from pathlib import Path
 
 import pytest
 
-from soul_knowledge.contracts import QueryRequest
-from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, Relation, RelationKind, ScoreVector
-from soul_knowledge.importer import SeedImporter
-from soul_knowledge.importer import __dict__ as _importer_dict
-from soul_knowledge.projection import GraphProjector
-from soul_knowledge.security import OversizedPayloadError, PathEscapeError
-from soul_knowledge.service import KnowledgeService
-from soul_knowledge.store import EventStore
+from know_your_soul.contracts import QueryRequest
+from know_your_soul.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, Relation, RelationKind, ScoreVector
+from know_your_soul.importer import SeedImporter
+from know_your_soul.importer import __dict__ as _importer_dict
+from know_your_soul.projection import GraphProjector
+from know_your_soul.security import OversizedPayloadError, PathEscapeError
+from know_your_soul.service import KnowledgeService
+from know_your_soul.store import EventStore
 
 # The R2 fix must define and document this constant; the fallback keeps the
 # probes collectible pre-fix so the R1 RED signal is visible too.

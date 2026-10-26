@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from soul_knowledge.domain import canonical_json
+from know_your_soul.domain import canonical_json
 
 __all__ = [
     "DEFAULT_MAX_PAYLOAD_BYTES",

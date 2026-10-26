@@ -33,10 +33,10 @@ from pathlib import Path
 
 import pytest
 
-from soul_knowledge.domain import PrimaryDomain
-from soul_knowledge.importer import ImportManifestError, SeedImporter
-from soul_knowledge.relearn import RelearnEngine
-from soul_knowledge.store import EventStore
+from know_your_soul.domain import PrimaryDomain
+from know_your_soul.importer import ImportManifestError, SeedImporter
+from know_your_soul.relearn import RelearnEngine
+from know_your_soul.store import EventStore
 
 _anchor_path = RelearnEngine._anchor_path  # noqa: SLF001 - pinned private helper
 

@@ -1,6 +1,6 @@
 """Fresh-process stdio end-to-end tests for the MCP adapter (Task 8).
 
-A real ``python -m soul_knowledge.mcp_server`` child is spawned under a
+A real ``python -m know_your_soul.mcp_server`` child is spawned under a
 scrubbed environment (provider credentials injected, then scrubbed away) and
 driven both by the official MCP client and by raw JSON-RPC frames. This is
 the wire-level proof of the binding contract in
@@ -22,10 +22,10 @@ import anyio
 from mcp import ClientSession, types
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
-from soul_knowledge import runtime_guard
-from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, Relation, RelationKind
-from soul_knowledge.projection import GraphProjector
-from soul_knowledge.store import EventStore
+from know_your_soul import runtime_guard
+from know_your_soul.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, Relation, RelationKind
+from know_your_soul.projection import GraphProjector
+from know_your_soul.store import EventStore
 
 # The MCP tool surface (contract v2 — operator ruling 2026-10-26, progress.md;
 # addendum docs/contracts/retrieval-verbs-v2.md): the frozen ten v1 tools plus
@@ -131,7 +131,7 @@ def _scrubbed_env() -> dict[str, str]:
 
 
 def _server_args(graph_root: Path, db: Path) -> list[str]:
-    return ["-m", "soul_knowledge.mcp_server", "--graph-root", str(graph_root), "--db", str(db)]
+    return ["-m", "know_your_soul.mcp_server", "--graph-root", str(graph_root), "--db", str(db)]
 
 
 def _result_text(result: types.CallToolResult) -> str:
@@ -273,8 +273,8 @@ def test_canonical_payload_parity(tmp_path: Path) -> None:
 
     # Direct in-process call against the same store: identical payload shape,
     # differing only in the per-invocation audit id.
-    from soul_knowledge.contracts import QueryRequest
-    from soul_knowledge.service import KnowledgeService
+    from know_your_soul.contracts import QueryRequest
+    from know_your_soul.service import KnowledgeService
 
     store = EventStore(db)
     service = KnowledgeService(store, GraphProjector(store, output_root=graph_root))
@@ -346,8 +346,8 @@ def test_guards_hold_inside_the_scrubbed_server_process(tmp_path: Path) -> None:
         "\n".join(
             [
                 "import json, socket, sys",
-                "from soul_knowledge import runtime_guard as guard",
-                "from soul_knowledge.mcp_server import build_server, build_service",
+                "from know_your_soul import runtime_guard as guard",
+                "from know_your_soul.mcp_server import build_server, build_service",
                 f"service = build_service(graph_root={str(graph_root)!r}, db={str(db)!r})",
                 f"server = build_server(service, graph_root={str(graph_root)!r})",
                 "report = {'credentials': sorted(guard.provider_credentials())}",

@@ -49,9 +49,9 @@ from mcp.server.lowlevel import Server
 from mcp.shared.exceptions import MCPError
 from pydantic import ValidationError
 
-from soul_knowledge import runtime_guard
-from soul_knowledge.audit import AuditLog
-from soul_knowledge.contracts import (
+from know_your_soul import runtime_guard
+from know_your_soul.audit import AuditLog
+from know_your_soul.contracts import (
     DEFAULT_MAX_TOKEN_BUDGET,
     MINIMUM_TOKEN_BUDGET,
     EvaluateRequest,
@@ -59,26 +59,26 @@ from soul_knowledge.contracts import (
     QueryRequest,
     TraversalMode,
 )
-from soul_knowledge.domain import (
+from know_your_soul.domain import (
     Evidence,
     Node,
     RelationKind,
     canonical_json,
     storage_payload,
 )
-from soul_knowledge.events import Invocation, InvocationOutcome
-from soul_knowledge.http_api import DEFAULT_HOST_ALLOWLIST, BoundaryDenialRecorder, BoundaryMiddleware
-from soul_knowledge.improvement import ApprovalRecord, DiffOperation
-from soul_knowledge.projection import GraphProjector, ProjectionError
-from soul_knowledge.security import (
+from know_your_soul.events import Invocation, InvocationOutcome
+from know_your_soul.http_api import DEFAULT_HOST_ALLOWLIST, BoundaryDenialRecorder, BoundaryMiddleware
+from know_your_soul.improvement import ApprovalRecord, DiffOperation
+from know_your_soul.projection import GraphProjector, ProjectionError
+from know_your_soul.security import (
     DEFAULT_MAX_PAYLOAD_BYTES,
     assert_bind_allowed,
     redact_value,
     resolve_within_root,
     sanitize_text,
 )
-from soul_knowledge.service import KnowledgeService
-from soul_knowledge.store import EventStore, StoreError
+from know_your_soul.service import KnowledgeService
+from know_your_soul.store import EventStore, StoreError
 
 __all__ = [
     "DEFAULT_RESOURCE_MAX_BYTES",
@@ -90,13 +90,13 @@ __all__ = [
 ]
 
 DEFAULT_RESOURCE_MAX_BYTES = 65_536
-SERVER_NAME = "soul-knowledge"
+SERVER_NAME = "know-your-soul"
 
 # The spec operations (contract v2: the frozen ten plus the four G1 retrieval
 # verbs — operator ruling 2026-10-26, addendum
 # ``docs/contracts/retrieval-verbs-v2.md``), with ``.`` rendered as ``_`` so
 # every tool name matches the MCP ``^[a-zA-Z0-9_-]{1,64}$`` constraint; Hermes
-# registers them as ``mcp__soul-knowledge__<name>``.
+# registers them as ``mcp__know-your-soul__<name>``.
 _TOOL_TO_OPERATION: dict[str, str] = {
     "knowledge_query": "knowledge.query",
     "knowledge_get_node": "knowledge.get_node",
@@ -923,7 +923,7 @@ def build_server(
     try:
         from importlib.metadata import version
 
-        server_version = version("soul-knowledge")
+        server_version = version("know-your-soul")
     except Exception:  # noqa: BLE001 - the version is informational only
         server_version = "0.0.0"
 
@@ -966,7 +966,7 @@ async def _serve_stdio(server: Server) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="soul-knowledge-mcp",
+        prog="know-your-soul-mcp",
         description="Deterministic knowledge MCP server (tools+resources only, no sampling).",
     )
     parser.add_argument("--graph-root", required=True, help="The single allowlisted projection root.")
@@ -997,7 +997,7 @@ def main(argv: list[str] | None = None) -> int:
         # and a direct launch with a dirty environment fails closed.
         runtime_guard.verify_runtime(mcp_server=server, strict_env=True)
     except Exception as error:  # noqa: BLE001 - any startup guard failure refuses to serve
-        print(f"soul-knowledge-mcp: startup refused: {type(error).__name__}: {error}", file=sys.stderr)
+        print(f"know-your-soul-mcp: startup refused: {type(error).__name__}: {error}", file=sys.stderr)
         return 2
 
     # The socket guard stays installed for the process lifetime: no code path
@@ -1015,14 +1015,14 @@ def main(argv: list[str] | None = None) -> int:
             api_key = os.environ.get(args.api_key_env) or None
             if api_key is None:
                 print(
-                    f"soul-knowledge-mcp: environment variable {args.api_key_env} is not set or is empty",
+                    f"know-your-soul-mcp: environment variable {args.api_key_env} is not set or is empty",
                     file=sys.stderr,
                 )
                 return 2
         try:
             assert_bind_allowed(f"{args.host}:{args.port}", api_key=api_key)
         except Exception as error:  # noqa: BLE001
-            print(f"soul-knowledge-mcp: bind refused: {error}", file=sys.stderr)
+            print(f"know-your-soul-mcp: bind refused: {error}", file=sys.stderr)
             return 2
         import uvicorn
 

@@ -34,9 +34,9 @@ from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from soul_knowledge.domain import storage_payload
-from soul_knowledge.events import AuditReceipt, Invocation, InvocationJournal, InvocationOutcome
-from soul_knowledge.store import EventStore, StoreError
+from know_your_soul.domain import storage_payload
+from know_your_soul.events import AuditReceipt, Invocation, InvocationJournal, InvocationOutcome
+from know_your_soul.store import EventStore, StoreError
 
 __all__ = ["AuditLog", "UnknownInvocation", "failure_outcome", "success_outcome"]
 

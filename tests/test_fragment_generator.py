@@ -17,13 +17,13 @@ import sys
 
 import pytest
 
-from soul_knowledge.fragment_generator import (
+from know_your_soul.fragment_generator import (
     FRAGMENT_GENERATOR_VERSION,
     PINNED_GRAMMARS,
     FragmentGenerator,
     file_scoped_id,
 )
-from soul_knowledge.graphify_adapter import ExtractionFragment, FragmentValidationError, GraphifyAdapter
+from know_your_soul.graphify_adapter import ExtractionFragment, FragmentValidationError, GraphifyAdapter
 
 MARKDOWN = (
     b"# Alpha Lessons\n"
@@ -47,7 +47,7 @@ def test_pinned_grammar_set_imports() -> None:
     assert module is not None
     # The generator itself pulls in no grammar extractor: it parses markdown
     # structure directly and borrows only Graphify's id recipe.
-    import soul_knowledge.fragment_generator as generator_module
+    import know_your_soul.fragment_generator as generator_module
 
     assert not any(name.startswith("graphify.extractors") for name in vars(generator_module))
 

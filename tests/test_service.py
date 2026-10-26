@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-from soul_knowledge.contracts import (
+from know_your_soul.contracts import (
     ACCESS_ONLY_TOKEN_CAP,
     MINIMUM_TOKEN_BUDGET,
     AccessDecision,
@@ -40,7 +40,7 @@ from soul_knowledge.contracts import (
     StaleProjectionUnavailable,
     attempt_promotion,
 )
-from soul_knowledge.domain import (
+from know_your_soul.domain import (
     Event,
     EventKind,
     Evidence,
@@ -52,11 +52,11 @@ from soul_knowledge.domain import (
     ScoreVector,
     canonical_json,
 )
-from soul_knowledge.importer import SeedImporter
-from soul_knowledge.projection import GraphProjector, ProjectorBusy
-from soul_knowledge.retrieval import estimated_tokens
-from soul_knowledge.service import KnowledgeService
-from soul_knowledge.store import EventStore
+from know_your_soul.importer import SeedImporter
+from know_your_soul.projection import GraphProjector, ProjectorBusy
+from know_your_soul.retrieval import estimated_tokens
+from know_your_soul.service import KnowledgeService
+from know_your_soul.store import EventStore
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -568,7 +568,7 @@ def test_access_policy_unknown_surface_defaults_to_access_only() -> None:
 
 
 def test_access_policy_artifact_is_hash_pinned() -> None:
-    from soul_knowledge.contracts import ACCESS_POLICY_PATH, ACCESS_POLICY_SHA256
+    from know_your_soul.contracts import ACCESS_POLICY_PATH, ACCESS_POLICY_SHA256
 
     digest = hashlib.sha256(ACCESS_POLICY_PATH.read_bytes()).hexdigest()
     assert digest == ACCESS_POLICY_SHA256

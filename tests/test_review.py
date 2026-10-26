@@ -4,7 +4,7 @@ Task 6 of ``docs/superpowers/plans/2026-10-24-superpower-knowledge-soul.md``;
 spec section 10 and the frozen ``docs/contracts/relearn-contract.md``.
 
 The transition policy is a pure deterministic function over a
-:class:`~soul_knowledge.review.ReviewSignal`; the engine persists transitions
+:class:`~know_your_soul.review.ReviewSignal`; the engine persists transitions
 as immutable node revisions and non-transition reviews as zero-weight admin
 records. The scheduler scans due metadata only — no model calls, no writes.
 """
@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from soul_knowledge.domain import (
+from know_your_soul.domain import (
     Event,
     EventKind,
     Evidence,
@@ -26,7 +26,7 @@ from soul_knowledge.domain import (
     PrimaryDomain,
     ScoreVector,
 )
-from soul_knowledge.review import (
+from know_your_soul.review import (
     DEFAULT_REVIEW_POLICY,
     ReviewDecision,
     ReviewEngine,
@@ -34,9 +34,9 @@ from soul_knowledge.review import (
     UnknownNode,
     decide,
 )
-from soul_knowledge.scheduler import DueReviewScheduler, SchedulePolicy
-from soul_knowledge.source_registry import RELEARN_PENDING, ParserVersions, SourceKind, SourceRegistry
-from soul_knowledge.store import EventStore
+from know_your_soul.scheduler import DueReviewScheduler, SchedulePolicy
+from know_your_soul.source_registry import RELEARN_PENDING, ParserVersions, SourceKind, SourceRegistry
+from know_your_soul.store import EventStore
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 LATER = NOW + timedelta(days=30)

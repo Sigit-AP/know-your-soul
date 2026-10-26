@@ -22,18 +22,18 @@ from typing import Any
 
 import pytest
 
-from soul_knowledge.audit import AuditLog
-from soul_knowledge.domain import Event, EventKind, Node, PrimaryDomain
-from soul_knowledge.events import Invocation, InvocationOutcome
-from soul_knowledge.fragment_generator import (
+from know_your_soul.audit import AuditLog
+from know_your_soul.domain import Event, EventKind, Node, PrimaryDomain
+from know_your_soul.events import Invocation, InvocationOutcome
+from know_your_soul.fragment_generator import (
     FRAGMENT_GENERATOR_VERSION,
     FRAGMENT_PROMPT_FINGERPRINT,
     FragmentGenerator,
     file_scoped_id,
 )
-from soul_knowledge.graphify_adapter import GraphifyAdapter
-from soul_knowledge.importer import SeedImporter, injective_section_key
-from soul_knowledge.projection import (
+from know_your_soul.graphify_adapter import GraphifyAdapter
+from know_your_soul.importer import SeedImporter, injective_section_key
+from know_your_soul.projection import (
     ARTIFACT_NAMES,
     FragmentCache,
     GraphProjector,
@@ -43,10 +43,10 @@ from soul_knowledge.projection import (
     ShrinkGuardError,
     StalePublicationError,
 )
-from soul_knowledge.retrieval import BudgetedTraversal, PrimaryRouter
-from soul_knowledge.source_registry import SourceRegistry
-from soul_knowledge.source_watcher import ChangeKind, SourceWatcher
-from soul_knowledge.store import EventStore
+from know_your_soul.retrieval import BudgetedTraversal, PrimaryRouter
+from know_your_soul.source_registry import SourceRegistry
+from know_your_soul.source_watcher import ChangeKind, SourceWatcher
+from know_your_soul.store import EventStore
 
 ALPHA = (
     b"# Alpha Lessons\n"
@@ -330,7 +330,7 @@ def test_shrink_guard_blocks_silent_loss(tmp_path: Path) -> None:
 
 
 def test_dedup_disabled_on_guarded_build(monkeypatch: pytest.MonkeyPatch) -> None:
-    import soul_knowledge.graphify_adapter as adapter_module
+    import know_your_soul.graphify_adapter as adapter_module
 
     calls: list[dict[str, Any]] = []
     original = adapter_module.build_from_json
@@ -443,7 +443,7 @@ def test_partition_input_canonical_across_hash_seeds(tmp_path: Path) -> None:
     script = (
         "import json, sys\n"
         f"sys.path.insert(0, {str(SRC)!r})\n"
-        "from soul_knowledge.graphify_adapter import GraphifyAdapter\n"
+        "from know_your_soul.graphify_adapter import GraphifyAdapter\n"
         "adapter = GraphifyAdapter()\n"
         "nodes = [{'id': f'n{i}', 'label': f'N{i}', 'file_type': 'document', 'source_file': 'a.md'}"
         " for i in range(8)]\n"

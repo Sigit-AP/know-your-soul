@@ -16,10 +16,10 @@ from pathlib import Path
 
 import pytest
 
-from soul_knowledge.domain import NodeKind, PrimaryDomain, RelationKind
-from soul_knowledge.importer import ImportManifestError, SeedImporter, injective_file_id, injective_section_key
-from soul_knowledge.source_registry import SourceKind, SourceRegistry
-from soul_knowledge.store import EventStore
+from know_your_soul.domain import NodeKind, PrimaryDomain, RelationKind
+from know_your_soul.importer import ImportManifestError, SeedImporter, injective_file_id, injective_section_key
+from know_your_soul.source_registry import SourceKind, SourceRegistry
+from know_your_soul.store import EventStore
 
 ALPHA = (
     b"# Alpha Lessons\n"

@@ -29,8 +29,8 @@ from dataclasses import dataclass
 from decimal import Decimal, localcontext
 from typing import Any, Literal
 
-from soul_knowledge.contracts import AmbiguousDomain, UnknownDomain
-from soul_knowledge.domain import PrimaryDomain
+from know_your_soul.contracts import AmbiguousDomain, UnknownDomain
+from know_your_soul.domain import PrimaryDomain
 
 __all__ = [
     "DOMAIN_ALIASES",
@@ -370,7 +370,7 @@ def sanitize_text(value: str, *, max_length: int = 512) -> str:
 
 def estimated_tokens(payload: Any) -> int:
     """estimated_tokens = ceil(utf8_byte_length / 4) of the canonical payload."""
-    from soul_knowledge.domain import canonical_json
+    from know_your_soul.domain import canonical_json
 
     return -(-len(canonical_json(payload).encode("utf-8")) // 4)
 

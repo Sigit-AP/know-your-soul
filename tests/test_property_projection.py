@@ -33,9 +33,9 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from pydantic import ValidationError as ValidationErrorOnFrozen
 
-from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain
-from soul_knowledge.importer import injective_file_id, injective_section_key
-from soul_knowledge.projection import (
+from know_your_soul.domain import Event, EventKind, Node, NodeKind, PrimaryDomain
+from know_your_soul.importer import injective_file_id, injective_section_key
+from know_your_soul.projection import (
     ARTIFACT_NAMES,
     ENRICHED_SUMMARY_MAX_LENGTH,
     FragmentCache,
@@ -49,7 +49,7 @@ from soul_knowledge.projection import (
     _truncate_at_word_boundary,
     enriched_summary,
 )
-from soul_knowledge.store import EventStore
+from know_your_soul.store import EventStore
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 
@@ -770,7 +770,7 @@ def test_knowledge_events_respect_the_watermark(affecting: list[bool]) -> None:
 )
 @settings(derandomize=True, max_examples=20, deadline=None)
 def test_source_section_fragments_replicate_the_importer_id_walk(headings: list[str]) -> None:
-    from soul_knowledge.projection import _source_section_fragments
+    from know_your_soul.projection import _HEADING_RE, _source_section_fragments
 
     lines = ["# Title", ""]
     for heading in headings:
@@ -780,8 +780,15 @@ def test_source_section_fragments_replicate_the_importer_id_walk(headings: list[
     file_id = injective_file_id("doc.md")
     expected_ids = {file_id}
     used: dict[str, int] = {}
-    for heading in headings:
-        key = injective_section_key(heading)
+    # The importer/projection walk keys sections by the regex-captured
+    # heading text (outer whitespace is stripped by ``_HEADING_RE``), so
+    # replicate the capture exactly instead of reusing the raw strategy
+    # value (a heading like "a " projects under the id of "a").
+    for line in lines:
+        match = _HEADING_RE.match(line)
+        if match is None or len(match.group(1)) != 2:
+            continue
+        key = injective_section_key(match.group(2))
         occurrence = used.get(key, 0) + 1
         used[key] = occurrence
         expected_ids.add(f"{file_id}.{key}" if occurrence == 1 else f"{file_id}.{key}-n{occurrence}")
@@ -843,7 +850,7 @@ def test_joined_secret_category_needs_at_least_two_fields() -> None:
 @given(specs=st.lists(st.tuples(st.just("n-a"), _PROSE), min_size=1, max_size=1))
 @settings(derandomize=True, max_examples=2, deadline=None)
 def test_manifest_records_the_pinned_build_identity(specs: list[tuple[str, str]]) -> None:
-    from soul_knowledge.graphify_adapter import ADAPTER_VERSION, GRAPHIFY_PARTITIONER, PINNED_HUB_POLICY
+    from know_your_soul.graphify_adapter import ADAPTER_VERSION, GRAPHIFY_PARTITIONER, PINNED_HUB_POLICY
 
     store = _populated_store(specs)
     receipt = _projector(store, _scratch("out")).rebuild()

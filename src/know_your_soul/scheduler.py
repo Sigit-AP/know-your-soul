@@ -18,9 +18,9 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from soul_knowledge.domain import LifecycleStatus, Node, PrimaryDomain, StrictDecimal
-from soul_knowledge.review import ReviewDecision, ReviewEngine
-from soul_knowledge.store import EventStore
+from know_your_soul.domain import LifecycleStatus, Node, PrimaryDomain, StrictDecimal
+from know_your_soul.review import ReviewDecision, ReviewEngine
+from know_your_soul.store import EventStore
 
 __all__ = ["DueReviewScheduler", "ReviewCandidate", "SchedulePolicy"]
 

@@ -22,8 +22,8 @@ from typing import Literal
 
 import pytest
 
-from soul_knowledge.backup import BackupError
-from soul_knowledge.domain import (
+from know_your_soul.backup import BackupError
+from know_your_soul.domain import (
     Event,
     EventKind,
     Evidence,
@@ -34,7 +34,7 @@ from soul_knowledge.domain import (
     RelationKind,
     ScoreVector,
 )
-from soul_knowledge.relearn import (
+from know_your_soul.relearn import (
     BackupUnavailable,
     MixedSourceVersions,
     NoPendingRelearn,
@@ -44,7 +44,7 @@ from soul_knowledge.relearn import (
     RelearnError,
     UnknownRelearn,
 )
-from soul_knowledge.source_registry import (
+from know_your_soul.source_registry import (
     RELEARN_PENDING,
     ParserVersions,
     RelearnOffer,
@@ -52,7 +52,7 @@ from soul_knowledge.source_registry import (
     SourceRegistry,
     SourceState,
 )
-from soul_knowledge.store import EventStore
+from know_your_soul.store import EventStore
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 
@@ -434,7 +434,7 @@ def test_backup_crash_leaves_no_activated_backup_without_manifest(
     """A crash after the protected-set copy but before activation must leave
     no activated backup directory lacking its manifest (fail-closed debris in
     a hidden staging dir is acceptable; a live partial backup is not)."""
-    from soul_knowledge import relearn as relearn_module
+    from know_your_soul import relearn as relearn_module
 
     real_helper = relearn_module.backup_protected_artifacts
 

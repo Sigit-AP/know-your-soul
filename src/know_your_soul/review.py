@@ -39,7 +39,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from soul_knowledge.domain import (
+from know_your_soul.domain import (
     Event,
     EventKind,
     LifecycleStatus,
@@ -48,9 +48,9 @@ from soul_knowledge.domain import (
     StrictDecimal,
     canonical_json,
 )
-from soul_knowledge.events import Invocation, WriteReceipt
-from soul_knowledge.source_registry import RELEARN_PENDING, SourceRegistry
-from soul_knowledge.store import EventStore, StoreError
+from know_your_soul.events import Invocation, WriteReceipt
+from know_your_soul.source_registry import RELEARN_PENDING, SourceRegistry
+from know_your_soul.store import EventStore, StoreError
 
 __all__ = [
     "DEFAULT_REVIEW_POLICY",

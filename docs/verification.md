@@ -1,4 +1,4 @@
-# Verification Evidence — Super Power Knowledge SOUL
+# Verification Evidence — Know Your Soul
 
 Status: **INTEGRATED (Task 10, SUB-10, 2026-10-25 UTC).** Every row carries
 fresh command output and exit codes from the final gate run. Base: HEAD
@@ -60,7 +60,7 @@ audit, `uv run python bench/run.py`, then the Graphify coverage calculation.
 |------|---------|-----------|----------------------------------|------------|
 | Full test suite | `.venv/bin/pytest tests/ -q` | **0** | `1369 passed, 1 warning in 244.02s` — **0 skipped** (SUB-52 wave incl. SUB48-1/F-SUB51-1/F-SUB51-2 regression probes); supersedes the dated historical rows `898 passed` (SUB-44), `632 passed, 1 skipped` (pre-wave-3) and `690 passed` (wave-3 fix round) | 2026-10-26 |
 | Acceptance e2e | `.venv/bin/pytest tests/test_acceptance_e2e.py -q` | **0** | `49 passed in 48.72s` — the install-tree check (`TestNoHermesSourceModification`) executes for real; skip-gates only when no git-managed Hermes install exists | 2026-10-26 |
-| Code coverage | `.venv/bin/pytest tests/ -q --cov=soul_knowledge --cov-report=term` | **0** | **99.47%** (7,227 statements, 38 miss; supersedes 99.46% / 7,220 / 39 from the wave-3 push) | 2026-10-26 |
+| Code coverage | `.venv/bin/pytest tests/ -q --cov=know_your_soul --cov-report=term` | **0** | **99.47%** (7,227 statements, 38 miss; supersedes 99.46% / 7,220 / 39 from the wave-3 push) | 2026-10-26 |
 | Type checking | `.venv/bin/pyright` | **0** | `0 errors, 0 warnings, 0 informations` | 2026-10-26 |
 | Lint | `.venv/bin/ruff check .` | **0** | `All checks passed!` | 2026-10-26 |
 | Format | `.venv/bin/ruff format --check .` | **1 (pre-existing)** | `1 file would be reformatted, 190 files already formatted`; the single offender is `docs/mathematics/scoring.md` (comment alignment inside a fenced code block) — drift committed in `724843c` and never touched since (verified `git log --follow docs/mathematics/scoring.md` → sole commit `724843c`), i.e. pre-existing every fix wave; the contracts directory is frozen, so the drift is documented, not reformatted | 2026-10-26 |

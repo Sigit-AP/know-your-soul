@@ -4,14 +4,14 @@ Task 6 of ``docs/superpowers/plans/2026-10-24-superpower-knowledge-soul.md``;
 frozen contract ``docs/contracts/relearn-contract.md``.
 
 * ``offer`` delegates to the source registry: a content change emits a
-  deterministic :class:`~soul_knowledge.source_registry.RelearnOffer` and sets
+  deterministic :class:`~know_your_soul.source_registry.RelearnOffer` and sets
   ``RELEARN_PENDING``. The engine never chooses a mode; without an explicit
   :class:`RelearnApproval` nothing changes.
 * ``apply`` first takes a **verified atomic backup** (SQLite through the
   online backup API, the ``CURRENT`` pointer, the generation directory
   hash-verified against the projection manifest, the scoring-contract
   version — staged in a temp directory and activated with one rename via
-  :func:`soul_knowledge.backup.backup_protected_artifacts`), then applies the
+  :func:`know_your_soul.backup.backup_protected_artifacts`), then applies the
   mode inside a single mutation transaction:
 
   - RESET quarantines every evidence item of the old versions; the receipt
@@ -44,18 +44,18 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from soul_knowledge.audit import AuditLog, failure_outcome, success_outcome
-from soul_knowledge.backup import backup_protected_artifacts
-from soul_knowledge.domain import Event, EventKind, PrimaryDomain, canonical_json, new_id
-from soul_knowledge.events import Invocation
-from soul_knowledge.source_registry import (
+from know_your_soul.audit import AuditLog, failure_outcome, success_outcome
+from know_your_soul.backup import backup_protected_artifacts
+from know_your_soul.domain import Event, EventKind, PrimaryDomain, canonical_json, new_id
+from know_your_soul.events import Invocation
+from know_your_soul.source_registry import (
     RELEARN_PENDING,
     ParserVersions,
     RelearnOffer,
     SourceKind,
     SourceRegistry,
 )
-from soul_knowledge.store import EventStore, IdempotencyConflict, StoreError
+from know_your_soul.store import EventStore, IdempotencyConflict, StoreError
 
 __all__ = [
     "BackupArtifact",
@@ -436,7 +436,7 @@ class RelearnEngine:
         """Verified atomic backup of the full protected set via the shared helper.
 
         Delegates the protected-set copy and its verification to
-        :func:`soul_knowledge.backup.backup_protected_artifacts` (wave-1
+        :func:`know_your_soul.backup.backup_protected_artifacts` (wave-1
         residual): the SQLite store through the online backup API, the
         ``CURRENT`` pointer, and the generation directory verified against the
         *manifest-declared* hashes. Activation is two-phase (wave-2 re-review

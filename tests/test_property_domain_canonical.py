@@ -27,7 +27,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from pydantic import ValidationError
 
-from soul_knowledge.domain import (
+from know_your_soul.domain import (
     Evidence,
     Node,
     NodeKind,
@@ -39,7 +39,7 @@ from soul_knowledge.domain import (
     quantize_score,
     storage_payload,
 )
-from soul_knowledge.scoring import serialize_score
+from know_your_soul.scoring import serialize_score
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 

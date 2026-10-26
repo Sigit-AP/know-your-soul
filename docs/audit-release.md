@@ -1,4 +1,4 @@
-# Audit and Release Record — Super Power Knowledge SOUL
+# Audit and Release Record — Know Your Soul
 
 Status: **INTEGRATED (Task 10, SUB-10, 2026-10-25 UTC). Release decision:
 ALL LAUNCH BLOCKERS CLOSED (T10-1 closed 2026-10-25 ~20:30 UTC by SUB-25 +

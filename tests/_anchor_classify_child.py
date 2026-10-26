@@ -36,7 +36,7 @@ def main() -> int:
     workdir = Path(sys.argv[1])
     phase = sys.argv[2]
 
-    from soul_knowledge.domain import (
+    from know_your_soul.domain import (
         Event,
         EventKind,
         Evidence,
@@ -45,9 +45,9 @@ def main() -> int:
         PrimaryDomain,
         ScoreVector,
     )
-    from soul_knowledge.relearn import RelearnApproval, RelearnEngine
-    from soul_knowledge.source_registry import ParserVersions, SourceKind, SourceRegistry
-    from soul_knowledge.store import EventStore
+    from know_your_soul.relearn import RelearnApproval, RelearnEngine
+    from know_your_soul.source_registry import ParserVersions, SourceKind, SourceRegistry
+    from know_your_soul.store import EventStore
 
     parser_versions = ParserVersions(
         parser_version="1.0.0",

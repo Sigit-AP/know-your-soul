@@ -36,7 +36,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from soul_knowledge.domain import (
+from know_your_soul.domain import (
     Event,
     EventKind,
     Evidence,
@@ -47,10 +47,10 @@ from soul_knowledge.domain import (
     canonical_json,
     storage_payload,
 )
-from soul_knowledge.events import ChainReport, DomainReceipt, Invocation, WriteReceipt
+from know_your_soul.events import ChainReport, DomainReceipt, Invocation, WriteReceipt
 
 if TYPE_CHECKING:
-    from soul_knowledge.audit import AuditLog
+    from know_your_soul.audit import AuditLog
 
 __all__ = [
     "AuditOutcomeMismatch",
@@ -939,7 +939,7 @@ class EventStore:
         mismatch a typed :class:`AuditOutcomeMismatch` is raised carrying both
         outcomes, chained to the original error (ruling C1).
         """
-        from soul_knowledge.audit import AuditLog, failure_outcome, success_outcome
+        from know_your_soul.audit import AuditLog, failure_outcome, success_outcome
 
         started = time.monotonic()
         audit = audit_log if audit_log is not None else AuditLog(self)

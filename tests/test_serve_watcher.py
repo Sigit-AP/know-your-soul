@@ -28,12 +28,12 @@ from pathlib import Path
 import pytest
 import uvicorn
 
-from soul_knowledge.domain import PrimaryDomain
-from soul_knowledge.http_api import build_stack, create_app
-from soul_knowledge.importer import SeedImporter
-from soul_knowledge.source_registry import RELEARN_PENDING
-from soul_knowledge.source_watcher import SourceWatcher
-from soul_knowledge.update_pipeline import SourceWatchLoop, UpdatePipelineError, WatchPollReceipt
+from know_your_soul.domain import PrimaryDomain
+from know_your_soul.http_api import build_stack, create_app
+from know_your_soul.importer import SeedImporter
+from know_your_soul.source_registry import RELEARN_PENDING
+from know_your_soul.source_watcher import SourceWatcher
+from know_your_soul.update_pipeline import SourceWatchLoop, UpdatePipelineError, WatchPollReceipt
 
 ALPHA = (
     b"# Alpha Lessons\n"
@@ -198,7 +198,7 @@ def test_running_loop_cools_down_after_an_offer(tmp_path: Path) -> None:
 
 def test_watch_loop_logs_detection_and_errors(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     loop, corpus = _loop(tmp_path, lambda changes: object())
-    logger = logging.getLogger("soul_knowledge.update_pipeline")
+    logger = logging.getLogger("know_your_soul.update_pipeline")
     with caplog.at_level(logging.INFO, logger=logger.name):
         (corpus / "alpha.md").write_bytes(ALPHA + b"\nlogged change\n")
         receipt = loop.poll_once()
@@ -431,7 +431,7 @@ def test_serve_watcher_requires_state_path_for_in_memory_stores(tmp_path: Path) 
 def test_cli_serve_forwards_the_watch_flags(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from soul_knowledge.cli import main
+    from know_your_soul.cli import main
 
     corpus = _corpus(tmp_path)
     captured: dict[str, object] = {}
@@ -439,7 +439,7 @@ def test_cli_serve_forwards_the_watch_flags(
     def fake_serve(stack: object, **kwargs: object) -> None:
         captured.update(kwargs)
 
-    monkeypatch.setattr("soul_knowledge.cli.serve", fake_serve)
+    monkeypatch.setattr("know_your_soul.cli.serve", fake_serve)
     code = main(
         [
             "--store",
@@ -469,14 +469,14 @@ def test_cli_serve_forwards_the_watch_flags(
 def test_cli_serve_without_watch_flag_serves_without_a_watcher(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from soul_knowledge.cli import main
+    from know_your_soul.cli import main
 
     captured: dict[str, object] = {}
 
     def fake_serve(stack: object, **kwargs: object) -> None:
         captured.update(kwargs)
 
-    monkeypatch.setattr("soul_knowledge.cli.serve", fake_serve)
+    monkeypatch.setattr("know_your_soul.cli.serve", fake_serve)
     code = main(
         [
             "--store",

@@ -25,10 +25,10 @@ from pathlib import Path
 
 import pytest
 
-from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain
-from soul_knowledge.projection import GraphProjector, enriched_summary
-from soul_knowledge.security import redact_text
-from soul_knowledge.store import EventStore
+from know_your_soul.domain import Event, EventKind, Node, NodeKind, PrimaryDomain
+from know_your_soul.projection import GraphProjector, enriched_summary
+from know_your_soul.security import redact_text
+from know_your_soul.store import EventStore
 
 AWS_KEY_TAIL = "IOSFODNN7EXAMPLE"  # the canonical AWS docs example key tail
 

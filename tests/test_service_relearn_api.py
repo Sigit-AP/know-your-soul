@@ -22,14 +22,14 @@ from pathlib import Path
 
 import pytest
 
-from soul_knowledge.contracts import LifecycleError, OperatorDecisionRequiredError
-from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, ScoreVector
-from soul_knowledge.importer import DEFAULT_PARSER_VERSIONS
-from soul_knowledge.projection import GraphProjector
-from soul_knowledge.relearn import RelearnApproval, RelearnReceipt
-from soul_knowledge.service import KnowledgeService
-from soul_knowledge.source_registry import RELEARN_PENDING, RelearnOffer, SourceKind
-from soul_knowledge.store import EventStore
+from know_your_soul.contracts import LifecycleError, OperatorDecisionRequiredError
+from know_your_soul.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, ScoreVector
+from know_your_soul.importer import DEFAULT_PARSER_VERSIONS
+from know_your_soul.projection import GraphProjector
+from know_your_soul.relearn import RelearnApproval, RelearnReceipt
+from know_your_soul.service import KnowledgeService
+from know_your_soul.source_registry import RELEARN_PENDING, RelearnOffer, SourceKind
+from know_your_soul.store import EventStore
 
 NOW = datetime(2026, 10, 26, 12, 0, tzinfo=UTC)
 

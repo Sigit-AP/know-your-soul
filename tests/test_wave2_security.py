@@ -21,8 +21,8 @@ from typing import Any
 import pytest
 import uvicorn
 
-from soul_knowledge import http_api
-from soul_knowledge.domain import (
+from know_your_soul import http_api
+from know_your_soul.domain import (
     Event,
     EventKind,
     Node,
@@ -31,8 +31,8 @@ from soul_knowledge.domain import (
     Relation,
     RelationKind,
 )
-from soul_knowledge.http_api import build_stack, create_app
-from soul_knowledge.store import EventStore
+from know_your_soul.http_api import build_stack, create_app
+from know_your_soul.store import EventStore
 
 # --------------------------------------------------------------------- setup
 
@@ -497,9 +497,9 @@ def test_f5_internal_error_never_leaks_exception_text(
     def boom(*args: Any, **kwargs: Any) -> Any:
         raise RuntimeError(secret_detail)
 
-    monkeypatch.setattr("soul_knowledge.http_api.dispatch_text", boom)
+    monkeypatch.setattr("know_your_soul.http_api.dispatch_text", boom)
     app = create_app(stack)
-    with caplog.at_level(logging.ERROR, logger="soul_knowledge.http_api"):
+    with caplog.at_level(logging.ERROR, logger="know_your_soul.http_api"):
         status, _, raw = asgi_call(
             app, "POST", "/v1/knowledge/query", body=json.dumps({"purpose": "x", "token_budget": 512}).encode()
         )

@@ -13,7 +13,7 @@ operator. Supersession and deletion are recorded states on retained rows, never
 physical deletion.
 
 Every node and evidence item carries the ``source_version_id`` produced here
-(see :mod:`soul_knowledge.domain`).
+(see :mod:`know_your_soul.domain`).
 """
 
 from __future__ import annotations
@@ -29,9 +29,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from soul_knowledge.domain import canonical_json, new_id
-from soul_knowledge.security import PathEscapeError, resolve_within_root
-from soul_knowledge.store import EventStore
+from know_your_soul.domain import canonical_json, new_id
+from know_your_soul.security import PathEscapeError, resolve_within_root
+from know_your_soul.store import EventStore
 
 __all__ = [
     "RELEARN_PENDING",
@@ -175,7 +175,7 @@ class SourceRegistry:
         """Return per-file entries (sorted by path), concatenated bytes and char length.
 
         Containment (audit wave-1 finding F5): every candidate is resolved
-        through :func:`soul_knowledge.security.resolve_within_root` against the
+        through :func:`know_your_soul.security.resolve_within_root` against the
         scanned root. A symlink that resolves outside the root fails closed —
         its bytes are never read, the file is skipped, and the scan raises a
         typed :class:`PathEscapeError` recording every escaped path. Symlinks

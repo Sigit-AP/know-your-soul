@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 import uvicorn
 
-from soul_knowledge.domain import (
+from know_your_soul.domain import (
     Event,
     EventKind,
     Node,
@@ -28,8 +28,8 @@ from soul_knowledge.domain import (
     Relation,
     RelationKind,
 )
-from soul_knowledge.http_api import build_stack, create_app  # noqa: E402  (RED until http_api.py lands)
-from soul_knowledge.store import EventStore
+from know_your_soul.http_api import build_stack, create_app  # noqa: E402  (RED until http_api.py lands)
+from know_your_soul.store import EventStore
 
 # --------------------------------------------------------------------- setup
 

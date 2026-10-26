@@ -19,12 +19,12 @@ from __future__ import annotations
 
 import pytest
 
-from soul_knowledge.contracts import (
+from know_your_soul.contracts import (
     AmbiguousDomain,
     UnknownDomain,
 )
-from soul_knowledge.domain import PrimaryDomain
-from soul_knowledge.retrieval import (
+from know_your_soul.domain import PrimaryDomain
+from know_your_soul.retrieval import (
     DOMAIN_ALIASES,
     STOPWORDS,
     BudgetedTraversal,

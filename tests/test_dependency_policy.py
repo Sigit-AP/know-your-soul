@@ -28,14 +28,14 @@ from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 from packaging.version import Version
 
-from soul_knowledge import runtime_guard
+from know_your_soul import runtime_guard
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 UV_LOCK = REPO_ROOT / "uv.lock"
 SRC = REPO_ROOT / "src"
 
-PROJECT_NAME = "soul-knowledge"
+PROJECT_NAME = "know-your-soul"
 GRAPHIFY_REQUIREMENT = "graphifyy[mcp]==0.9.95"
 GRAPHIFY_VERSION = "0.9.95"
 REQUIRES_PYTHON = ">=3.14,<3.15"
@@ -51,7 +51,7 @@ ENABLED_EXTRAS = (("graphifyy", "mcp"),)
 # breaks the no-model boundary in spec section 4.2 / plan Global Constraints.
 #
 # There is exactly one source of truth for this list:
-# ``soul_knowledge.runtime_guard.FORBIDDEN_DISTRIBUTIONS`` plus its
+# ``know_your_soul.runtime_guard.FORBIDDEN_DISTRIBUTIONS`` plus its
 # ``is_forbidden_distribution`` matcher (exact name or prefix variant). This test
 # imports that shared rule instead of restating it, so the packaging policy and
 # the runtime guard cannot drift apart.
@@ -476,7 +476,7 @@ def test_matrix_task8_coownership_is_annotated_on_row_36_not_only_in_prose() -> 
 
 def test_project_entry_points_are_declared_and_deterministic(pyproject: dict) -> None:
     scripts = pyproject["project"].get("scripts", {})
-    assert scripts == {"soul-knowledge": "soul_knowledge.cli:main"}, scripts
+    assert scripts == {"know-your-soul": "know_your_soul.cli:main"}, scripts
     assert pyproject["project"]["name"] == PROJECT_NAME
 
 

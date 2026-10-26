@@ -28,14 +28,14 @@ from pathlib import Path
 
 import pytest
 
-from soul_knowledge.backup import backup_protected_artifacts
-from soul_knowledge.contracts import (
+from know_your_soul.backup import backup_protected_artifacts
+from know_your_soul.contracts import (
     EvaluateRequest,
     ImprovementResponse,
     ProposalResponse,
     RollbackResponse,
 )
-from soul_knowledge.domain import (
+from know_your_soul.domain import (
     Event,
     EventKind,
     Evidence,
@@ -44,7 +44,7 @@ from soul_knowledge.domain import (
     PrimaryDomain,
     ScoreVector,
 )
-from soul_knowledge.improvement import (
+from know_your_soul.improvement import (
     ApprovalRecord,
     ApprovalRequired,
     DiffOp,
@@ -53,16 +53,16 @@ from soul_knowledge.improvement import (
     apply_improvement,
     propose,
 )
-from soul_knowledge.projection import GraphProjector
-from soul_knowledge.relearn import RelearnApproval, RelearnEngine
-from soul_knowledge.service import KnowledgeService
-from soul_knowledge.source_registry import (
+from know_your_soul.projection import GraphProjector
+from know_your_soul.relearn import RelearnApproval, RelearnEngine
+from know_your_soul.service import KnowledgeService
+from know_your_soul.source_registry import (
     RELEARN_PENDING,
     ParserVersions,
     SourceKind,
     SourceRegistry,
 )
-from soul_knowledge.store import EventStore, VersionConflict
+from know_your_soul.store import EventStore, VersionConflict
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 PARSER_VERSIONS = ParserVersions(

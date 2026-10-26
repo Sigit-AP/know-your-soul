@@ -29,7 +29,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from soul_knowledge.store import EventStore, StoreError
+from know_your_soul.store import EventStore, StoreError
 
 try:
     import fcntl
@@ -37,9 +37,9 @@ except ImportError:  # pragma: no cover - Windows fallback
     fcntl = None  # type: ignore[assignment]
 
 if TYPE_CHECKING:
-    from soul_knowledge.audit import AuditLog
-    from soul_knowledge.events import AuditReceipt
-    from soul_knowledge.projection import GraphProjector, ProjectionReceipt
+    from know_your_soul.audit import AuditLog
+    from know_your_soul.events import AuditReceipt
+    from know_your_soul.projection import GraphProjector, ProjectionReceipt
 
 __all__ = [
     "BackupError",

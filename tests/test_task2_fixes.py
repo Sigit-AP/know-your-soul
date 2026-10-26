@@ -18,11 +18,11 @@ from typing import Any
 
 import pytest
 
-from soul_knowledge.audit import AuditLog, InvocationOutcome
-from soul_knowledge.domain import Event, EventKind, Evidence, Node, NodeKind, PrimaryDomain
-from soul_knowledge.events import Invocation
-from soul_knowledge.source_registry import ParserVersions, SourceKind, SourceRegistry
-from soul_knowledge.store import AuditOutcomeMismatch, EventStore, StoreError, VersionConflict
+from know_your_soul.audit import AuditLog, InvocationOutcome
+from know_your_soul.domain import Event, EventKind, Evidence, Node, NodeKind, PrimaryDomain
+from know_your_soul.events import Invocation
+from know_your_soul.source_registry import ParserVersions, SourceKind, SourceRegistry
+from know_your_soul.store import AuditOutcomeMismatch, EventStore, StoreError, VersionConflict
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 ONE_HOUR_AGO = datetime.now(UTC) - timedelta(hours=1)

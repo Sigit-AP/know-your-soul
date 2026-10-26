@@ -4,7 +4,7 @@ Task 9 core of ``docs/superpowers/plans/2026-10-24-superpower-knowledge-soul.md`
 
 Everything is in-process and deterministic: no sockets, no clock-dependent
 metric state beyond the timestamp on log records, no provider anything. The
-logger redacts every field through :func:`soul_knowledge.security.redact_value`
+logger redacts every field through :func:`know_your_soul.security.redact_value`
 so a secret can never ride out on a log line, and every record can carry a
 ``correlation_id`` that ties it to an invocation's final audit event.
 
@@ -25,12 +25,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from soul_knowledge.domain import canonical_json
-from soul_knowledge.security import redact_value
-from soul_knowledge.store import DEFAULT_MIGRATIONS_DIR, EventStore
+from know_your_soul.domain import canonical_json
+from know_your_soul.security import redact_value
+from know_your_soul.store import DEFAULT_MIGRATIONS_DIR, EventStore
 
 if TYPE_CHECKING:
-    from soul_knowledge.projection import GraphProjector
+    from know_your_soul.projection import GraphProjector
 
 __all__ = [
     "QUERY_AUDIT_OPERATIONS",
@@ -140,7 +140,7 @@ def export_query_audit(store: EventStore, *, operations: Sequence[str] = QUERY_A
     (``audit_event_id``/``audit_event_seq``/``invocation_id``), the operation,
     actor, request hash, idempotency key, timestamps, outcome status and
     duration — never request payloads — and every field passes through
-    :func:`soul_knowledge.security.redact_value` so a secret-shaped fragment
+    :func:`know_your_soul.security.redact_value` so a secret-shaped fragment
     (for example inside an error message) cannot ride out on the export.
     In-progress journals are excluded: they are a readiness concern, not yet
     audit history.
@@ -204,7 +204,7 @@ class StructuredLogger:
         self,
         sink: Callable[[Mapping[str, Any]], None] | None = None,
         *,
-        component: str = "soul-knowledge",
+        component: str = "know-your-soul",
     ) -> None:
         self._sink = sink
         self._component = component
@@ -312,8 +312,8 @@ def check_readiness(
     threshold, so monitoring sees the ceiling approaching *before* writes are
     refused.
     """
-    from soul_knowledge.projection import ARTIFACT_MAX_BYTES
-    from soul_knowledge.store import PUBLISH_CAPACITY_RATIO
+    from know_your_soul.projection import ARTIFACT_MAX_BYTES
+    from know_your_soul.store import PUBLISH_CAPACITY_RATIO
 
     health = check_health(store, migrations_dir=migrations_dir)
     checks: dict[str, bool] = dict(health.checks)

@@ -38,12 +38,12 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from soul_knowledge.domain import PrimaryDomain
-from soul_knowledge.importer import SeedImporter
-from soul_knowledge.projection import GraphProjector, ProjectionReceipt, ProjectorBusy
-from soul_knowledge.source_registry import RELEARN_PENDING, RelearnOffer, SourceKind
-from soul_knowledge.source_watcher import SourceChange, SourceWatcher
-from soul_knowledge.store import StoreError
+from know_your_soul.domain import PrimaryDomain
+from know_your_soul.importer import SeedImporter
+from know_your_soul.projection import GraphProjector, ProjectionReceipt, ProjectorBusy
+from know_your_soul.source_registry import RELEARN_PENDING, RelearnOffer, SourceKind
+from know_your_soul.source_watcher import SourceChange, SourceWatcher
+from know_your_soul.store import StoreError
 
 __all__ = [
     "ApprovedUpdateReceipt",

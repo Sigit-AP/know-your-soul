@@ -27,8 +27,8 @@ from typing import Any
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from soul_knowledge.domain import SCORE_QUANTUM, canonical_json, quantize_score
-from soul_knowledge.scoring import ScoreAssessment, score_items, serialize_score
+from know_your_soul.domain import SCORE_QUANTUM, canonical_json, quantize_score
+from know_your_soul.scoring import ScoreAssessment, score_items, serialize_score
 
 AT = datetime(2026, 10, 24, tzinfo=UTC)
 

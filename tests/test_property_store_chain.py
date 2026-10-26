@@ -28,8 +28,8 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain
-from soul_knowledge.store import EventStore, IdempotencyConflict, VersionConflict
+from know_your_soul.domain import Event, EventKind, Node, NodeKind, PrimaryDomain
+from know_your_soul.store import EventStore, IdempotencyConflict, VersionConflict
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 

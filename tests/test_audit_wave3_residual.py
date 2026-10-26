@@ -23,10 +23,10 @@ from pathlib import Path
 
 import pytest
 
-from soul_knowledge.contracts import KnowledgeError, QueryRequest
-from soul_knowledge.domain import Event, EventKind, PrimaryDomain
-from soul_knowledge.relearn import RelearnError
-from soul_knowledge.source_registry import RELEARN_PENDING, SourceKind, SourceRegistry
+from know_your_soul.contracts import KnowledgeError, QueryRequest
+from know_your_soul.domain import Event, EventKind, PrimaryDomain
+from know_your_soul.relearn import RelearnError
+from know_your_soul.source_registry import RELEARN_PENDING, SourceKind, SourceRegistry
 from test_relearn import NOW, PARSER_VERSIONS, RelearnFixture, approve, build_evidence
 from test_service import _child, _relate, _roots, _stack, _upsert
 
@@ -112,7 +112,7 @@ def test_fragment_cache_never_wired_without_prune() -> None:
     The forbidden middle state (instantiated, never pruned) grows unboundedly
     across corpus edits. Fails the moment anyone wires the cache without
     bounding it."""
-    src_root = Path(__file__).resolve().parent.parent / "src" / "soul_knowledge"
+    src_root = Path(__file__).resolve().parent.parent / "src" / "know_your_soul"
     sources = {path: path.read_text(encoding="utf-8") for path in sorted(src_root.rglob("*.py"))}
     assert sources, "guard must see real sources"
     instantiated = [path.name for path, text in sources.items() if "FragmentCache(" in text]

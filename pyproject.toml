@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "soul-knowledge"
+name = "know-your-soul"
 version = "0.1.0"
 description = "Standalone deterministic knowledge and learning graph for Hermes Agent; no model, provider, or vector calls."
 requires-python = ">=3.14,<3.15"
@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
-soul-knowledge = "soul_knowledge.cli:main"
+know-your-soul = "know_your_soul.cli:main"
 
 [dependency-groups]
 dev = [
@@ -32,7 +32,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/soul_knowledge"]
+packages = ["src/know_your_soul"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

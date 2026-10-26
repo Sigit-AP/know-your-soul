@@ -86,10 +86,10 @@ tail-first under budget pressure.
 
 | Verb | CLI subcommand | HTTP route | MCP tool |
 |------|----------------|------------|----------|
-| `path` | `soul-knowledge path` | `POST /v1/knowledge/path` | `knowledge_path` |
-| `explain` | `soul-knowledge explain` | `POST /v1/knowledge/explain` | `knowledge_explain` |
-| `affected` | `soul-knowledge affected` | `POST /v1/knowledge/affected` | `knowledge_affected` |
-| `god_nodes` | `soul-knowledge god-nodes` | `POST /v1/knowledge/god_nodes` | `knowledge_god_nodes` |
+| `path` | `know-your-soul path` | `POST /v1/knowledge/path` | `knowledge_path` |
+| `explain` | `know-your-soul explain` | `POST /v1/knowledge/explain` | `knowledge_explain` |
+| `affected` | `know-your-soul affected` | `POST /v1/knowledge/affected` | `knowledge_affected` |
+| `god_nodes` | `know-your-soul god-nodes` | `POST /v1/knowledge/god_nodes` | `knowledge_god_nodes` |
 
 MCP schemas are closed (`additionalProperties: false`) with the same ranges as
 the service: `depth` `[1,6]`, `max_nodes` `[1,1024]`, `limit` `[1,64]`,

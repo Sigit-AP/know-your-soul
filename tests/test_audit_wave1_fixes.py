@@ -24,8 +24,8 @@ from typing import Literal
 
 import pytest
 
-from soul_knowledge.contracts import EvaluateRequest, ReviewRequest
-from soul_knowledge.domain import (
+from know_your_soul.contracts import EvaluateRequest, ReviewRequest
+from know_your_soul.domain import (
     Event,
     EventKind,
     Evidence,
@@ -34,11 +34,11 @@ from soul_knowledge.domain import (
     PrimaryDomain,
     ScoreVector,
 )
-from soul_knowledge.projection import GraphProjector
-from soul_knowledge.relearn import RelearnApproval, RelearnEngine
-from soul_knowledge.service import KnowledgeService
-from soul_knowledge.source_registry import ParserVersions, SourceKind, SourceRegistry
-from soul_knowledge.store import EventStore, IdempotencyConflict
+from know_your_soul.projection import GraphProjector
+from know_your_soul.relearn import RelearnApproval, RelearnEngine
+from know_your_soul.service import KnowledgeService
+from know_your_soul.source_registry import ParserVersions, SourceKind, SourceRegistry
+from know_your_soul.store import EventStore, IdempotencyConflict
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 

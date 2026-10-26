@@ -6,7 +6,7 @@ against the committed fix:
 
 * F4 — the read-model validator (and therefore the publish gate) fails closed
   on JWT, ``bearer`` and ``github_pat_`` shapes, unified with
-  :mod:`soul_knowledge.security`'s pattern set.
+  :mod:`know_your_soul.security`'s pattern set.
 * F5 — ``SourceRegistry._scan`` wires ``security.resolve_within_root``: a
   symlink inside a corpus root that points outside fails closed (typed
   ``PathEscapeError``, the file is skipped and named in the error); in-root
@@ -26,13 +26,13 @@ from typing import Any
 
 import pytest
 
-from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, canonical_json
-from soul_knowledge.events import Invocation
-from soul_knowledge.projection import GraphProjector
-from soul_knowledge.read_model_validator import ReadModelValidator
-from soul_knowledge.security import PathEscapeError
-from soul_knowledge.source_registry import ParserVersions, SourceKind, SourceRegistry
-from soul_knowledge.store import EventStore
+from know_your_soul.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, canonical_json
+from know_your_soul.events import Invocation
+from know_your_soul.projection import GraphProjector
+from know_your_soul.read_model_validator import ReadModelValidator
+from know_your_soul.security import PathEscapeError
+from know_your_soul.source_registry import ParserVersions, SourceKind, SourceRegistry
+from know_your_soul.store import EventStore
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 PARSER_VERSIONS = ParserVersions(

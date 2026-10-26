@@ -22,8 +22,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from soul_knowledge.domain import RelationKind, canonical_json, quantize_score
-from soul_knowledge.improvement import ApprovalRecord, DiffOperation, ImprovementProposal
+from know_your_soul.domain import RelationKind, canonical_json, quantize_score
+from know_your_soul.improvement import ApprovalRecord, DiffOperation, ImprovementProposal
 
 __all__ = [
     "ACCESS_ONLY_TOKEN_CAP",

@@ -22,20 +22,20 @@ from typing import Any
 
 import pytest
 
-from soul_knowledge.audit import AuditLog, InvocationOutcome, UnknownInvocation
-from soul_knowledge.domain import Event, EventKind, Evidence, Node, NodeKind, PrimaryDomain, Relation, RelationKind
-from soul_knowledge.events import Invocation
-from soul_knowledge.source_registry import (
+from know_your_soul.audit import AuditLog, InvocationOutcome, UnknownInvocation
+from know_your_soul.domain import Event, EventKind, Evidence, Node, NodeKind, PrimaryDomain, Relation, RelationKind
+from know_your_soul.events import Invocation
+from know_your_soul.source_registry import (
     ParserVersions,
     RelearnOffer,
     SourceKind,
     SourceRegistry,
     SourceState,
 )
-from soul_knowledge.store import EventStore, InvalidRelation, VersionConflict
+from know_your_soul.store import EventStore, InvalidRelation, VersionConflict
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
-MIGRATIONS = Path(__file__).resolve().parents[1] / "src" / "soul_knowledge" / "migrations"
+MIGRATIONS = Path(__file__).resolve().parents[1] / "src" / "know_your_soul" / "migrations"
 
 PARSER_VERSIONS = ParserVersions(
     parser_version="1.0.0",

@@ -21,9 +21,9 @@ from typing import Any
 
 import pytest
 
-from soul_knowledge import backup as backup_module
-from soul_knowledge import service as service_module
-from soul_knowledge.backup import (
+from know_your_soul import backup as backup_module
+from know_your_soul import service as service_module
+from know_your_soul.backup import (
     BackupError,
     ProjectionDiagnosis,
     ProjectionState,
@@ -43,7 +43,7 @@ from soul_knowledge.backup import (
     restore_store,
     sweep_orphaned_write_temps,
 )
-from soul_knowledge.contracts import (
+from know_your_soul.contracts import (
     MINIMUM_TOKEN_BUDGET,
     BudgetTooSmall,
     ImprovementNotFound,
@@ -54,7 +54,7 @@ from soul_knowledge.contracts import (
     QueryRequest,
     ReviewRequest,
 )
-from soul_knowledge.domain import (
+from know_your_soul.domain import (
     Event,
     EventKind,
     Evidence,
@@ -63,8 +63,8 @@ from soul_knowledge.domain import (
     PrimaryDomain,
     canonical_json,
 )
-from soul_knowledge.importer import ImportManifestError, SeedImporter, _read_contained_file, _remap_fragment_ids
-from soul_knowledge.projection import (
+from know_your_soul.importer import ImportManifestError, SeedImporter, _read_contained_file, _remap_fragment_ids
+from know_your_soul.projection import (
     GraphProjector,
     ProjectionValidationError,
     ShrinkGuardError,
@@ -72,17 +72,17 @@ from soul_knowledge.projection import (
     _source_section_fragments,
     enriched_summary,
 )
-from soul_knowledge.read_model_validator import ReadModelValidator, ValidationReport
-from soul_knowledge.relearn import (
+from know_your_soul.read_model_validator import ReadModelValidator, ValidationReport
+from know_your_soul.relearn import (
     BackupUnavailable,
     RelearnApproval,
     RelearnEngine,
     RollbackVerificationError,
     UnknownRelearn,
 )
-from soul_knowledge.service import KnowledgeService
-from soul_knowledge.source_registry import ParserVersions, SourceKind, SourceRegistry
-from soul_knowledge.store import EventStore, IdempotencyConflict, StoreError
+from know_your_soul.service import KnowledgeService
+from know_your_soul.source_registry import ParserVersions, SourceKind, SourceRegistry
+from know_your_soul.store import EventStore, IdempotencyConflict, StoreError
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 
@@ -401,7 +401,7 @@ def test_write_meta_marks_stale_when_the_repair_cannot_cover(tmp_path: Path, mon
 
 
 def test_evaluate_unknown_node_raises_typed(tmp_path: Path) -> None:
-    from soul_knowledge.contracts import EvaluateRequest
+    from know_your_soul.contracts import EvaluateRequest
 
     _store, _projector, service = _seeded(tmp_path)
     with pytest.raises(NodeNotFound, match="unknown node"):
@@ -420,10 +420,10 @@ def test_review_store_failure_is_mapped_and_audited(tmp_path: Path, monkeypatch:
 
 
 def test_map_lifecycle_error_covers_the_typed_table() -> None:
-    from soul_knowledge.contracts import InvalidProposal as IP
-    from soul_knowledge.contracts import MixedSourceVersionsError, RegressionGateError
-    from soul_knowledge.improvement import ProposalValidationError, RegressionGateFailure
-    from soul_knowledge.relearn import MixedSourceVersions
+    from know_your_soul.contracts import InvalidProposal as IP
+    from know_your_soul.contracts import MixedSourceVersionsError, RegressionGateError
+    from know_your_soul.improvement import ProposalValidationError, RegressionGateFailure
+    from know_your_soul.relearn import MixedSourceVersions
 
     mapped = KnowledgeService._map_lifecycle_error(ProposalValidationError("stale"))  # noqa: SLF001
     assert isinstance(mapped, IP)
@@ -886,7 +886,7 @@ def test_classify_skips_new_version_evidence_and_quarantines_foreign_versions(tm
 
 
 def test_apply_cleans_a_preexisting_staging_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from soul_knowledge import relearn as relearn_module
+    from know_your_soul import relearn as relearn_module
 
     scenario = _RelearnScenario(tmp_path, backup_root=tmp_path / "backups")
     monkeypatch.setattr(relearn_module, "new_id", lambda: "rel-fixed")
@@ -900,7 +900,7 @@ def test_apply_cleans_a_preexisting_staging_dir(tmp_path: Path, monkeypatch: pyt
 
 
 def test_apply_replaces_a_preexisting_final_backup_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from soul_knowledge import relearn as relearn_module
+    from know_your_soul import relearn as relearn_module
 
     scenario = _RelearnScenario(tmp_path, backup_root=tmp_path / "backups")
     monkeypatch.setattr(relearn_module, "new_id", lambda: "rel-fixed")
@@ -914,7 +914,7 @@ def test_apply_replaces_a_preexisting_final_backup_dir(tmp_path: Path, monkeypat
 
 
 def test_apply_replaces_a_preexisting_final_backup_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from soul_knowledge import relearn as relearn_module
+    from know_your_soul import relearn as relearn_module
 
     scenario = _RelearnScenario(tmp_path, backup_root=tmp_path / "backups")
     monkeypatch.setattr(relearn_module, "new_id", lambda: "rel-fixed")
@@ -1035,7 +1035,7 @@ def test_remap_fragment_ids_with_no_nodes_is_an_empty_passthrough() -> None:
 def test_read_contained_file_refuses_a_file_that_grew_past_the_cap(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from soul_knowledge.importer import OversizedPayloadError
+    from know_your_soul.importer import OversizedPayloadError
 
     target = tmp_path / "a.md"
     target.write_bytes(b"small")
@@ -1101,7 +1101,7 @@ def test_ambiguous_legacy_wikilink_target_is_unresolved(tmp_path: Path) -> None:
 
 
 def test_check_readiness_heals_a_lying_projection_watermark(tmp_path: Path) -> None:
-    from soul_knowledge.observability import check_readiness
+    from know_your_soul.observability import check_readiness
 
     store, projector, _service = _seeded(tmp_path)
     manifest_path = _active_manifest_path(tmp_path)

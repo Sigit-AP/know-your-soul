@@ -1,6 +1,6 @@
 """Matrix row 23 residual: whole-set durability and power-loss recovery (SUB-29).
 
-Two RED-first fix tests pin the new guarantees in ``soul_knowledge.backup``:
+Two RED-first fix tests pin the new guarantees in ``know_your_soul.backup``:
 
 1. Every staged file of a protected-set backup is fsynced *before* the single
    ``os.replace`` that activates the backup directory (a directory fsync
@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 
-from soul_knowledge.backup import (
+from know_your_soul.backup import (
     ProjectionState,
     backup_protected_artifacts,
     diagnose_projection,
@@ -35,10 +35,10 @@ from soul_knowledge.backup import (
     recover_projection,
     sweep_orphaned_write_temps,
 )
-from soul_knowledge.domain import PrimaryDomain
-from soul_knowledge.importer import SeedImporter
-from soul_knowledge.projection import ARTIFACT_NAMES, GraphProjector
-from soul_knowledge.store import EventStore
+from know_your_soul.domain import PrimaryDomain
+from know_your_soul.importer import SeedImporter
+from know_your_soul.projection import ARTIFACT_NAMES, GraphProjector
+from know_your_soul.store import EventStore
 
 ALPHA = b"# Alpha Lessons\n\n## First Lesson\n\nAlways roll the database back before retrying.\n"
 BETA = b"# Beta\n\n## Counterexample\n\nA rollback that was itself rolled back.\n"

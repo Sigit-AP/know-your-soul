@@ -131,7 +131,7 @@ FILE_DOMAIN_MAP: dict[str, str] = {
 # three access paths (Task 7 CLI/API, Task 8 MCP) exist on top of the service.
 # The gate opens automatically when these modules land; the coordinator does
 # not need to edit this file. Until then `run` exits 3 with a skipped ledger.
-INTEGRATION_MODULES = ("soul_knowledge.cli", "soul_knowledge.http_api", "soul_knowledge.mcp_server")
+INTEGRATION_MODULES = ("know_your_soul.cli", "know_your_soul.http_api", "know_your_soul.mcp_server")
 
 
 class SystemUnavailable(RuntimeError):
@@ -338,7 +338,7 @@ def _ceiling_payload(nodes: list[dict[str, Any]], source_files: list[str]) -> di
     """A synthetic ``QueryResponse.canonical_payload`` for *nodes*.
 
     Keys and value shapes mirror the frozen response contract exactly
-    (``soul_knowledge.contracts.QueryResponse.canonical_payload``), with
+    (``know_your_soul.contracts.QueryResponse.canonical_payload``), with
     fixed dummy metadata. The rubric is scored over the JSON of this object
     minus ``provenance`` (``rubric_scoring_text``) — the same way the harness
     scores a real response — so payload keys (e.g. ``estimated_tokens``)
@@ -559,12 +559,12 @@ def build_service(workdir: Path) -> Any:
     caller turns that into a ``skipped`` ledger, never a fake result.
     """
     try:
-        from soul_knowledge.domain import PrimaryDomain
-        from soul_knowledge.importer import DEFAULT_PARSER_VERSIONS, SeedImporter
-        from soul_knowledge.projection import GraphProjector
-        from soul_knowledge.service import KnowledgeService
-        from soul_knowledge.source_registry import SourceKind, SourceRegistry
-        from soul_knowledge.store import EventStore
+        from know_your_soul.domain import PrimaryDomain
+        from know_your_soul.importer import DEFAULT_PARSER_VERSIONS, SeedImporter
+        from know_your_soul.projection import GraphProjector
+        from know_your_soul.service import KnowledgeService
+        from know_your_soul.source_registry import SourceKind, SourceRegistry
+        from know_your_soul.store import EventStore
     except Exception as exc:  # noqa: BLE001 — any failure means "not integrated yet"
         raise SystemUnavailable(f"system import failed: {exc}") from exc
     try:
@@ -587,7 +587,7 @@ def build_service(workdir: Path) -> Any:
 
 def query_once(service: Any, case: dict[str, Any]) -> tuple[Any, float]:
     """Run one timed query; returns (response, latency_ms)."""
-    from soul_knowledge.contracts import QueryRequest
+    from know_your_soul.contracts import QueryRequest
 
     request = QueryRequest(
         purpose=case["question"],
@@ -804,7 +804,7 @@ def check_estimator_parity() -> list[str]:
         if got != expected:
             problems.append(f"{case['id']}: estimator {got} != frozen expected {expected}")
     try:
-        from soul_knowledge.contracts import estimated_tokens_of_payload as reference
+        from know_your_soul.contracts import estimated_tokens_of_payload as reference
     except Exception:  # noqa: BLE001 — library parity is best-effort pre-integration
         return problems
     for case in fixtures["cases"]:
@@ -812,7 +812,7 @@ def check_estimator_parity() -> list[str]:
         if payload is None:
             continue
         if estimate_tokens_of_payload(payload) != reference(payload):
-            problems.append(f"{case['id']}: local estimator diverges from soul_knowledge.contracts")
+            problems.append(f"{case['id']}: local estimator diverges from know_your_soul.contracts")
     return problems
 
 

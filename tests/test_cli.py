@@ -1,4 +1,4 @@
-"""Contract tests for the ``soul-knowledge`` CLI (Task 7).
+"""Contract tests for the ``know-your-soul`` CLI (Task 7).
 
 The CLI is a thin adapter over the ten-operation ``KnowledgeService`` plus the
 operational commands (rebuild, backup, restore, health). Every valid
@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from soul_knowledge.cli import main  # noqa: E402  (RED until cli.py lands)
-from soul_knowledge.domain import (
+from know_your_soul.cli import build_parser, main  # noqa: E402  (RED until cli.py lands)
+from know_your_soul.domain import (
     Event,
     EventKind,
     Node,
@@ -26,8 +26,8 @@ from soul_knowledge.domain import (
     Relation,
     RelationKind,
 )
-from soul_knowledge.projection import GraphProjector
-from soul_knowledge.store import EventStore
+from know_your_soul.projection import GraphProjector
+from know_your_soul.store import EventStore
 
 # --------------------------------------------------------------------- setup
 
@@ -418,7 +418,7 @@ def test_cli_serve_api_key_env_avoids_argv(
     def fake_serve(stack: object, **kwargs: object) -> None:
         captured_kwargs.update(kwargs)
 
-    monkeypatch.setattr("soul_knowledge.cli.serve", fake_serve)
+    monkeypatch.setattr("know_your_soul.cli.serve", fake_serve)
     code = main(
         _base(db_path, out_path) + ["serve", "--socket", str(tmp_path / "s.sock"), "--api-key-env", "SOUL_TEST_API_KEY"]
     )
@@ -474,3 +474,33 @@ def test_cli_ops_root_option_allows_a_configured_root(tmp_path: Path, capsys: py
     assert out is not None
     assert dest.exists()
     assert out["sha256"]
+
+
+# ------------------------------ rename: store env resolution (KNOW_YOUR_SOUL_STORE)
+
+
+def test_cli_store_default_prefers_know_your_soul_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("KNOW_YOUR_SOUL_STORE", "/tmp/kys.sqlite3")
+    monkeypatch.setenv("SOUL_STORE", "/tmp/legacy.sqlite3")
+    parser = build_parser()
+    args = parser.parse_args(["health", "{}"])
+    assert args.store == "/tmp/kys.sqlite3"
+
+
+def test_cli_store_default_honors_deprecated_soul_store(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("KNOW_YOUR_SOUL_STORE", raising=False)
+    monkeypatch.setenv("SOUL_STORE", "/tmp/legacy.sqlite3")
+    parser = build_parser()
+    args = parser.parse_args(["health", "{}"])
+    assert args.store == "/tmp/legacy.sqlite3"
+    assert "SOUL_STORE is deprecated" in capsys.readouterr().err
+
+
+def test_cli_store_default_without_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("KNOW_YOUR_SOUL_STORE", raising=False)
+    monkeypatch.delenv("SOUL_STORE", raising=False)
+    parser = build_parser()
+    args = parser.parse_args(["health", "{}"])
+    assert args.store == "know-your-soul.sqlite3"

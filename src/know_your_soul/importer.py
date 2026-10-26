@@ -5,7 +5,7 @@ spec sections 7 (event flow) and 13.5 (deterministic generation), matrix
 row 10 (manifest-anchored incremental import).
 
 Imports are *structured*: the caller supplies an explicit
-:class:`~soul_knowledge.domain.PrimaryDomain` mapping and a logical
+:class:`~know_your_soul.domain.PrimaryDomain` mapping and a logical
 ``source_uri``; no semantic AI extraction is involved. The importer
 
 * registers the hash-identified source version through ``SourceRegistry``,
@@ -24,7 +24,7 @@ manifest written for another root fails closed.
 Residual audit wave-1 (R2): every file read is contained and bounded.
 
 * Contained — each candidate resolves through
-  :func:`soul_knowledge.security.resolve_within_root` against the import root
+  :func:`know_your_soul.security.resolve_within_root` against the import root
   (the corpus root for directory imports, the file's own directory for
   standalone file imports): a symlink or path that resolves outside the root
   fails closed with a typed ``PathEscapeError`` and its bytes are never read.
@@ -43,13 +43,13 @@ from pathlib import Path, PurePosixPath
 
 from pydantic import BaseModel, ConfigDict
 
-from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, Relation, RelationKind
-from soul_knowledge.events import Invocation
-from soul_knowledge.fragment_generator import FRAGMENT_GENERATOR_VERSION, file_scoped_id
-from soul_knowledge.graphify_adapter import GraphifyAdapter
-from soul_knowledge.security import OversizedPayloadError, resolve_within_root
-from soul_knowledge.source_registry import ParserVersions, SourceKind, SourceRegistry
-from soul_knowledge.store import EventStore
+from know_your_soul.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, Relation, RelationKind
+from know_your_soul.events import Invocation
+from know_your_soul.fragment_generator import FRAGMENT_GENERATOR_VERSION, file_scoped_id
+from know_your_soul.graphify_adapter import GraphifyAdapter
+from know_your_soul.security import OversizedPayloadError, resolve_within_root
+from know_your_soul.source_registry import ParserVersions, SourceKind, SourceRegistry
+from know_your_soul.store import EventStore
 
 __all__ = [
     "DEFAULT_PARSER_VERSIONS",

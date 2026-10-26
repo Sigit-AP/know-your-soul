@@ -25,9 +25,9 @@ from typing import Any
 from graphify.validate import VALID_CONFIDENCES, VALID_FILE_TYPES, validate_extraction
 from pydantic import BaseModel, ConfigDict, Field
 
-from soul_knowledge.domain import canonical_json
-from soul_knowledge.graphify_adapter import ACCEPTED_SCHEMA_VERSIONS, GraphifyAdapter
-from soul_knowledge.security import SECRET_PATTERNS
+from know_your_soul.domain import canonical_json
+from know_your_soul.graphify_adapter import ACCEPTED_SCHEMA_VERSIONS, GraphifyAdapter
+from know_your_soul.security import SECRET_PATTERNS
 
 __all__ = [
     "HASHED_ARTIFACTS",
@@ -63,7 +63,7 @@ _ID_RE = re.compile(r"^[\w.:-]+$", re.UNICODE)
 # before the leading slash must not be a scheme/authority character).
 _ABS_PATH_RE = re.compile(r"(?<![\w@:+/.-])/(?:[\w@.+-]+/){2,}[\w@.+-]+")
 _DRIVE_RE = re.compile(r"(?<![\w@:+/.-])[A-Za-z]:[\\/]")
-# Secret shapes come from ``soul_knowledge.security.SECRET_PATTERNS`` (audit
+# Secret shapes come from ``know_your_soul.security.SECRET_PATTERNS`` (audit
 # wave-1 finding F4): one shared list covers JWT, bearer, github_pat, Slack
 # xox[r/s], private-key blocks and credential assignments — the validator can
 # never drift narrower than the redaction surface.

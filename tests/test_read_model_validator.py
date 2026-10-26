@@ -15,13 +15,13 @@ from typing import Any
 
 import pytest
 
-from soul_knowledge.domain import Event, EventKind, PrimaryDomain, Relation, RelationKind
-from soul_knowledge.fragment_generator import file_scoped_id
-from soul_knowledge.graphify_adapter import GraphifyAdapter
-from soul_knowledge.importer import SeedImporter
-from soul_knowledge.projection import GraphProjector
-from soul_knowledge.read_model_validator import ReadModelValidator, ValidationReport
-from soul_knowledge.store import EventStore
+from know_your_soul.domain import Event, EventKind, PrimaryDomain, Relation, RelationKind
+from know_your_soul.fragment_generator import file_scoped_id
+from know_your_soul.graphify_adapter import GraphifyAdapter
+from know_your_soul.importer import SeedImporter
+from know_your_soul.projection import GraphProjector
+from know_your_soul.read_model_validator import ReadModelValidator, ValidationReport
+from know_your_soul.store import EventStore
 
 ALPHA = b"# Alpha Lessons\n\n## First Lesson\n\nAlways roll the database back before retrying.\n"
 BETA = b"# Beta\n\n## Counterexample\n\nA rollback that was itself rolled back.\n"
@@ -44,7 +44,7 @@ def _generation(tmp_path: Path) -> tuple[EventStore, Path, dict[str, Any]]:
 
 def _retamper(generation: Path, manifest: dict[str, Any], mutate) -> dict[str, Any]:
     """Apply *mutate* to graph.json, then honestly re-hash and re-write the manifest."""
-    from soul_knowledge.domain import canonical_json
+    from know_your_soul.domain import canonical_json
 
     graph_path = generation / "graph.json"
     graph = json.loads(graph_path.read_text(encoding="utf-8"))
@@ -156,7 +156,7 @@ def test_hash_mismatch_fails_closed(tmp_path: Path) -> None:
     graph_path = generation / "graph.json"
     graph = json.loads(graph_path.read_text(encoding="utf-8"))
     graph["nodes"][0]["label"] = "Tampered Label"
-    from soul_knowledge.domain import canonical_json
+    from know_your_soul.domain import canonical_json
 
     graph_path.write_text(canonical_json(graph), encoding="utf-8")
     report = ReadModelValidator().validate(generation, manifest)

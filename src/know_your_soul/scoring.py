@@ -34,14 +34,14 @@ from decimal import Decimal, localcontext
 from pathlib import Path
 from typing import Any
 
-from soul_knowledge.domain import (
+from know_your_soul.domain import (
     DECIMAL_PRECISION,
     Evidence,
     RelationKind,
     canonical_json,
     quantize_score,
 )
-from soul_knowledge.store import EventStore
+from know_your_soul.store import EventStore
 
 __all__ = [
     "MICROSECONDS_PER_DAY",

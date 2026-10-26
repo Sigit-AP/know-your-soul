@@ -31,7 +31,7 @@ from typing import Any
 
 from graphify.ids import make_id
 
-from soul_knowledge.domain import canonical_json
+from know_your_soul.domain import canonical_json
 
 __all__ = [
     "FRAGMENT_GENERATOR_VERSION",
@@ -57,7 +57,7 @@ MAX_SOURCE_BYTES = 1_048_576
 FRAGMENT_PROMPT_FINGERPRINT: str = hashlib.sha256(
     canonical_json(
         {
-            "generator": "soul-knowledge-deterministic-fragment-generator",
+            "generator": "know-your-soul-deterministic-fragment-generator",
             "generator_version": FRAGMENT_GENERATOR_VERSION,
             "grammars": list(PINNED_GRAMMARS),
             "semantics": "markdown-structure-v1",

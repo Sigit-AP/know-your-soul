@@ -24,9 +24,9 @@ from mcp.server.lowlevel import Server
 from mcp.shared.exceptions import MCPError
 from mcp.shared.memory import create_client_server_memory_streams
 
-from soul_knowledge import runtime_guard
-from soul_knowledge.contracts import DEFAULT_MAX_TOKEN_BUDGET, QueryRequest
-from soul_knowledge.domain import (
+from know_your_soul import runtime_guard
+from know_your_soul.contracts import DEFAULT_MAX_TOKEN_BUDGET, QueryRequest
+from know_your_soul.domain import (
     Event,
     EventKind,
     Node,
@@ -36,9 +36,9 @@ from soul_knowledge.domain import (
     RelationKind,
     canonical_json,
 )
-from soul_knowledge.projection import GraphProjector
-from soul_knowledge.service import KnowledgeService
-from soul_knowledge.store import EventStore
+from know_your_soul.projection import GraphProjector
+from know_your_soul.service import KnowledgeService
+from know_your_soul.store import EventStore
 
 # The MCP tool surface (contract v2 — operator ruling 2026-10-26, progress.md;
 # addendum docs/contracts/retrieval-verbs-v2.md): the frozen ten v1 tools plus
@@ -141,7 +141,7 @@ def _seeded(tmp_path: Path) -> tuple[EventStore, GraphProjector, KnowledgeServic
 
 
 def _server(tmp_path: Path) -> tuple[EventStore, KnowledgeService, Server]:
-    from soul_knowledge.mcp_server import build_server
+    from know_your_soul.mcp_server import build_server
 
     store, _, service = _seeded(tmp_path)
     server = build_server(service, graph_root=tmp_path / "graph")
@@ -375,7 +375,7 @@ def test_unknown_tool_is_a_typed_error_not_a_success(tmp_path: Path) -> None:
 
 
 def test_server_requires_an_existing_graph_root(tmp_path: Path) -> None:
-    from soul_knowledge.mcp_server import build_server
+    from know_your_soul.mcp_server import build_server
 
     _, _, service = _seeded(tmp_path)
     with pytest.raises(Exception) as caught:
@@ -585,7 +585,7 @@ def test_review_and_improvement_flow(tmp_path: Path) -> None:
 
 
 def test_resources_are_sanitized_and_size_capped(tmp_path: Path) -> None:
-    from soul_knowledge.mcp_server import build_server
+    from know_your_soul.mcp_server import build_server
 
     store, projector, service = _seeded(tmp_path)
     # A hostile label with ANSI escapes and zero-width markup must never reach
@@ -695,8 +695,8 @@ def test_f3_http_transport_wraps_streamable_app_with_boundary_auth(
     keyless remote *and* keyless loopback callers, and pass keyed callers to
     the real MCP streamable-http app.
     """
-    from soul_knowledge import mcp_server
-    from soul_knowledge.http_api import BoundaryMiddleware
+    from know_your_soul import mcp_server
+    from know_your_soul.http_api import BoundaryMiddleware
 
     _seeded(tmp_path)  # graph root + store exist for main()'s startup path
 
@@ -752,7 +752,7 @@ def test_f3_http_transport_wraps_streamable_app_with_boundary_auth(
 
 def test_f3_http_transport_without_key_serves_loopback_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """No key configured: loopback is served, remote clients are denied."""
-    from soul_knowledge import mcp_server
+    from know_your_soul import mcp_server
 
     _seeded(tmp_path)
 

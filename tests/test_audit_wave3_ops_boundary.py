@@ -29,8 +29,8 @@ from typing import Any
 
 import pytest
 
-from soul_knowledge import http_api
-from soul_knowledge.domain import (
+from know_your_soul import http_api
+from know_your_soul.domain import (
     Event,
     EventKind,
     Node,
@@ -39,8 +39,8 @@ from soul_knowledge.domain import (
     Relation,
     RelationKind,
 )
-from soul_knowledge.http_api import BoundaryMiddleware, build_stack, create_app, serve
-from soul_knowledge.store import EventStore
+from know_your_soul.http_api import BoundaryMiddleware, build_stack, create_app, serve
+from know_your_soul.store import EventStore
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 

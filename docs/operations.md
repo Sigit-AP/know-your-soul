@@ -1,4 +1,4 @@
-# Operations — soul-knowledge
+# Operations — know-your-soul
 
 This document covers day-2 operation of the store, projection and
 API surfaces: observability, health/readiness, backup/restore, projection
@@ -7,7 +7,7 @@ recovery, and the security posture. The HTTP/Unix-socket server
 
 ## Security posture
 
-Least privilege by default (`src/soul_knowledge/security.py`):
+Least privilege by default (`src/know_your_soul/security.py`):
 
 - **Bind policy** — `assert_bind_allowed(bind, api_key=...)`: Unix sockets
   (`unix:/path.sock`) and loopback binds (`127.0.0.1`, `::1`, `localhost`)
@@ -39,7 +39,7 @@ Least privilege by default (`src/soul_knowledge/security.py`):
 
 ## Observability
 
-`src/soul_knowledge/observability.py`:
+`src/know_your_soul/observability.py`:
 
 - `MetricsRegistry` — thread-safe counters/gauges, deterministic
   `snapshot()` and Prometheus-style `render_text()`.
@@ -68,7 +68,7 @@ invocations exactly once.
 
 ## Backup and restore
 
-`src/soul_knowledge/backup.py`:
+`src/know_your_soul/backup.py`:
 
 - `backup_store(store, dest)` — SQLite online backup into a same-directory
   temp file, verified (`PRAGMA quick_check`, event count, chain-head anchor),
@@ -100,7 +100,7 @@ schedule; keep receipts with the backup so rollback can assert the chain head.
 
 ## Source watch (spec 13.5)
 
-`soul-knowledge serve --watch PATH` runs the doc-change watcher for the
+`know-your-soul serve --watch PATH` runs the doc-change watcher for the
 server's lifespan (arch review F-1; `update_pipeline.SourceWatchLoop` +
 `source_watcher.SourceWatcher`):
 
@@ -126,7 +126,7 @@ server's lifespan (arch review F-1; `update_pipeline.SourceWatchLoop` +
   for another root fails closed (`WatcherStateError`).
 - **Failure isolation.** Watcher errors (corrupt/foreign state file,
   unreadable corpus) and gate-callback failures are logged
-  (`soul_knowledge.update_pipeline`) and backed off exponentially — they
+  (`know_your_soul.update_pipeline`) and backed off exponentially — they
   never take the API down. Operator repair: remove or fix the state file;
   detection resumes on the next polls. The watch thread
   (`soul-source-watch`) starts and stops with the server.
@@ -148,5 +148,18 @@ requirement. Dependency installs differ by surface, deliberately:
   constraints file from the lock (`uv export`) or install with uv; the
   current image accepts the pyproject ranges by design.
 
-The `soul-knowledge` entrypoint (console script, `cli.py`) is installed by
+The `know-your-soul` entrypoint (console script, `cli.py`) is installed by
 the build stage.
+
+## Store path resolution
+
+The CLI resolves the default `--store` path in this order:
+
+1. `KNOW_YOUR_SOUL_STORE` (current product variable; set by the container
+   image to `/data/know-your-soul.sqlite3`),
+2. `SOUL_STORE` (pre-rename name; still honored with a deprecation warning on
+   stderr),
+3. the built-in default `./know-your-soul.sqlite3`.
+
+`SOUL_CORPUS` is unrelated to the product store: it names the external SOUL
+corpus input (`SourceKind.SOUL_CORPUS`) and is intentionally unchanged.

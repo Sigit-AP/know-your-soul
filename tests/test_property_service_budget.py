@@ -15,7 +15,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from soul_knowledge.contracts import (
+from know_your_soul.contracts import (
     DEFAULT_MAX_TOKEN_BUDGET,
     MINIMUM_TOKEN_BUDGET,
     BudgetExceedsMax,
@@ -23,10 +23,10 @@ from soul_knowledge.contracts import (
     KnowledgeError,
     QueryRequest,
 )
-from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, Relation, RelationKind
-from soul_knowledge.projection import GraphProjector
-from soul_knowledge.service import KnowledgeService
-from soul_knowledge.store import EventStore
+from know_your_soul.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, Relation, RelationKind
+from know_your_soul.projection import GraphProjector
+from know_your_soul.service import KnowledgeService
+from know_your_soul.store import EventStore
 
 
 def _upsert(store: EventStore, node: Node) -> None:

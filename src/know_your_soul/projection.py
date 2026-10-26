@@ -51,8 +51,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from soul_knowledge.domain import Event, EventKind, Node, RelationKind, canonical_json, new_id, quantize_score
-from soul_knowledge.graphify_adapter import (
+from know_your_soul.domain import Event, EventKind, Node, RelationKind, canonical_json, new_id, quantize_score
+from know_your_soul.graphify_adapter import (
     ADAPTER_VERSION,
     CONFIDENCE_BY_RELATION,
     CONFIDENCE_SCORE,
@@ -60,16 +60,16 @@ from soul_knowledge.graphify_adapter import (
     PINNED_HUB_POLICY,
     GraphifyAdapter,
 )
-from soul_knowledge.importer import injective_file_id, injective_section_key
-from soul_knowledge.read_model_validator import ReadModelValidator
-from soul_knowledge.security import (
+from know_your_soul.importer import injective_file_id, injective_section_key
+from know_your_soul.read_model_validator import ReadModelValidator
+from know_your_soul.security import (
     DEFAULT_MAX_TEXT_LENGTH,
     SECRET_PATTERNS,
     _redaction_match_view,
     redact_text,
     sanitize_text,
 )
-from soul_knowledge.store import EventStore
+from know_your_soul.store import EventStore
 
 try:
     import fcntl
@@ -389,7 +389,7 @@ class FragmentCache:
     """
 
     def __init__(self, cache_root: str | Path, *, namespace: str | None = None) -> None:
-        from soul_knowledge.fragment_generator import FRAGMENT_GENERATOR_VERSION
+        from know_your_soul.fragment_generator import FRAGMENT_GENERATOR_VERSION
 
         self._namespace = namespace or f"fragment-generator-{FRAGMENT_GENERATOR_VERSION}"
         self._dir = Path(cache_root) / self._namespace
@@ -923,7 +923,7 @@ class GraphProjector:
             "multigraph": False,
             "graph": {
                 "schema_version": 1,
-                "generator": "soul-knowledge",
+                "generator": "know-your-soul",
                 "partitioner": GRAPHIFY_PARTITIONER["name"],
             },
             "nodes": sorted(node_list, key=canonical_json),

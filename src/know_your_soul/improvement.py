@@ -33,8 +33,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from soul_knowledge.audit import AuditLog, failure_outcome, success_outcome
-from soul_knowledge.domain import (
+from know_your_soul.audit import AuditLog, failure_outcome, success_outcome
+from know_your_soul.domain import (
     Event,
     EventKind,
     LifecycleStatus,
@@ -45,8 +45,8 @@ from soul_knowledge.domain import (
     new_id,
     storage_payload,
 )
-from soul_knowledge.events import DomainReceipt, Invocation
-from soul_knowledge.store import EventStore, StoreError
+from know_your_soul.events import DomainReceipt, Invocation
+from know_your_soul.store import EventStore, StoreError
 
 __all__ = [
     "ApprovalRecord",
@@ -272,7 +272,7 @@ def validate_proposal(store: EventStore, proposal: ImprovementProposal, *, check
 
     ``check_version`` is used at proposal time; at apply time the store's
     ``expected_version`` optimistic-concurrency check owns staleness and
-    raises :class:`~soul_knowledge.store.VersionConflict`.
+    raises :class:`~know_your_soul.store.VersionConflict`.
     """
     node = store.current_node(proposal.node_id)
     if node is None:

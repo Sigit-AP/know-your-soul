@@ -17,7 +17,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from soul_knowledge.domain import new_id
+from know_your_soul.domain import new_id
 
 __all__ = [
     "AuditReceipt",

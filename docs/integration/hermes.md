@@ -1,4 +1,4 @@
-# Connecting Hermes Agent to the SOUL knowledge MCP server
+# Connecting Hermes Agent to the Know Your Soul MCP server
 
 This product is a **pure external MCP consumer target**: Hermes supplies its
 own model and calls the fourteen knowledge operations as first-class tools
@@ -29,7 +29,7 @@ projection under the graph root (see `docs/operations.md`). Example layout:
 
 ```
 /root/superpower-knowledge-soul/.local/graph       # projection root (allowlisted)
-/root/superpower-knowledge-soul/.local/soul.sqlite3 # event store
+/root/superpower-knowledge-soul/.local/know-your-soul.sqlite3 # event store
 ```
 
 ## 2. Connect Hermes (stdio, recommended)
@@ -37,22 +37,22 @@ projection under the graph root (see `docs/operations.md`). Example layout:
 Use Hermes' own MCP command — no config files are edited by hand:
 
 ```bash
-hermes mcp add soul-knowledge \
+hermes mcp add know-your-soul \
   --command /root/superpower-knowledge-soul/.venv/bin/python \
-  --args -m soul_knowledge.mcp_server \
+  --args -m know_your_soul.mcp_server \
          --graph-root /root/superpower-knowledge-soul/.local/graph \
-         --db /root/superpower-knowledge-soul/.local/soul.sqlite3
+         --db /root/superpower-knowledge-soul/.local/know-your-soul.sqlite3
 ```
 
 Then verify discovery:
 
 ```bash
-hermes mcp test soul-knowledge
+hermes mcp test know-your-soul
 hermes mcp list
 ```
 
 Hermes registers the fourteen operations as
-`mcp__soul-knowledge__knowledge_query`, `…__knowledge_get_node`,
+`mcp__know-your-soul__knowledge_query`, `…__knowledge_get_node`,
 `…__knowledge_get_subtree`, `…__knowledge_log_event`,
 `…__knowledge_record_outcome`, `…__knowledge_evaluate`,
 `…__knowledge_review`, `…__knowledge_propose_improvement`,
@@ -70,11 +70,11 @@ needs nothing else:
 
 ```yaml
 mcp_servers:
-  soul-knowledge:
+  know-your-soul:
     command: /root/superpower-knowledge-soul/.venv/bin/python
-    args: ["-m", "soul_knowledge.mcp_server",
+    args: ["-m", "know_your_soul.mcp_server",
            "--graph-root", "/root/superpower-knowledge-soul/.local/graph",
-           "--db", "/root/superpower-knowledge-soul/.local/soul.sqlite3"]
+           "--db", "/root/superpower-knowledge-soul/.local/know-your-soul.sqlite3"]
     enabled: true
     # no env, no provider keys, no project_path, no url required
 ```
@@ -88,9 +88,9 @@ method-not-found; the entry above must not configure them.
 For a long-lived local server instead of a per-session stdio child:
 
 ```bash
-/root/superpower-knowledge-soul/.venv/bin/python -m soul_knowledge.mcp_server \
+/root/superpower-knowledge-soul/.venv/bin/python -m know_your_soul.mcp_server \
   --graph-root /root/superpower-knowledge-soul/.local/graph \
-  --db /root/superpower-knowledge-soul/.local/soul.sqlite3 \
+  --db /root/superpower-knowledge-soul/.local/know-your-soul.sqlite3 \
   --transport http --host 127.0.0.1 --port 8080
 ```
 
@@ -98,7 +98,7 @@ The bind policy fails closed: only loopback binds need no API key; anything
 wider is refused without `--api-key` (see `docs/operations.md`). Then:
 
 ```bash
-hermes mcp add soul-knowledge --url http://127.0.0.1:8080/mcp
+hermes mcp add know-your-soul --url http://127.0.0.1:8080/mcp
 ```
 
 Keep the loopback/Unix-socket boundary; do not expose the port externally.
@@ -158,10 +158,10 @@ knowledge operations and the fourteen MCP tools are unchanged by it, and no
 relearn tool exists on the knowledge surface:
 
 ```bash
-soul-knowledge relearn-scan '{"path": "/path/to/corpus", "kind": "SOUL_CORPUS"}'
-soul-knowledge relearn-status            # pending offer + offer_id, or null
-soul-knowledge relearn-preview '{"mode": "RESET"}'       # or "ACCUMULATE"
-soul-knowledge relearn-apply '{"mode": "RESET", "approval": {"offer_id": "...", "approved_by": "you"}}'
+know-your-soul relearn-scan '{"path": "/path/to/corpus", "kind": "SOUL_CORPUS"}'
+know-your-soul relearn-status            # pending offer + offer_id, or null
+know-your-soul relearn-preview '{"mode": "RESET"}'       # or "ACCUMULATE"
+know-your-soul relearn-apply '{"mode": "RESET", "approval": {"offer_id": "...", "approved_by": "you"}}'
 ```
 
 `relearn-scan` registers the baseline on first run (offer `null`) and emits

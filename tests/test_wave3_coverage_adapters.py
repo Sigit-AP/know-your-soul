@@ -23,13 +23,13 @@ from typing import Any
 
 import pytest
 
-from soul_knowledge import http_api as http_api_module
-from soul_knowledge.audit import AuditLog
-from soul_knowledge.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, canonical_json
-from soul_knowledge.events import Invocation
-from soul_knowledge.fragment_generator import FragmentError, FragmentGenerator, file_scoped_id
-from soul_knowledge.graphify_adapter import FragmentValidationError, GraphifyAdapter
-from soul_knowledge.http_api import (
+from know_your_soul import http_api as http_api_module
+from know_your_soul.audit import AuditLog
+from know_your_soul.domain import Event, EventKind, Node, NodeKind, PrimaryDomain, canonical_json
+from know_your_soul.events import Invocation
+from know_your_soul.fragment_generator import FragmentError, FragmentGenerator, file_scoped_id
+from know_your_soul.graphify_adapter import FragmentValidationError, GraphifyAdapter
+from know_your_soul.http_api import (
     BoundaryMiddleware,
     PayloadTooLarge,
     UnknownOperation,
@@ -42,10 +42,10 @@ from soul_knowledge.http_api import (
     error_envelope,
     serve,
 )
-from soul_knowledge.projection import GraphProjector
-from soul_knowledge.security import BindPolicyError
-from soul_knowledge.service import KnowledgeService
-from soul_knowledge.store import EventStore
+from know_your_soul.projection import GraphProjector
+from know_your_soul.security import BindPolicyError
+from know_your_soul.service import KnowledgeService
+from know_your_soul.store import EventStore
 
 NOW = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 
@@ -516,7 +516,7 @@ def test_serve_cleanup_tolerates_a_socket_that_is_no_longer_ours(
 
 
 def test_cli_serve_passes_an_explicit_body_cap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from soul_knowledge import cli
+    from know_your_soul import cli
 
     captured: dict[str, Any] = {}
     monkeypatch.setattr(cli, "serve", lambda stack, **kwargs: captured.update(kwargs))
@@ -538,7 +538,7 @@ def test_cli_serve_passes_an_explicit_body_cap(tmp_path: Path, monkeypatch: pyte
 
 
 def test_cli_serve_keyboard_interrupt_is_a_clean_exit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from soul_knowledge import cli
+    from know_your_soul import cli
 
     def _interrupt(stack: Any, **kwargs: Any) -> None:
         raise KeyboardInterrupt
@@ -559,7 +559,7 @@ def test_cli_serve_keyboard_interrupt_is_a_clean_exit(tmp_path: Path, monkeypatc
 
 
 def test_cli_health_exits_1_when_the_store_is_degraded(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    from soul_knowledge import cli
+    from know_your_soul import cli
 
     store = EventStore(tmp_path / "soul.sqlite3")
     store.append_domain(
@@ -586,29 +586,29 @@ def test_cli_health_exits_1_when_the_store_is_degraded(tmp_path: Path, capsys: p
 
 
 def test_python_module_entry_point_runs_the_cli(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "argv", ["soul-knowledge"])
+    monkeypatch.setattr(sys, "argv", ["know-your-soul"])
     with pytest.raises(SystemExit):
-        runpy.run_module("soul_knowledge", run_name="__main__")
+        runpy.run_module("know_your_soul", run_name="__main__")
 
 
 # --------------------------------------------------------------- mcp internals
 
 
 def test_type_matches_null() -> None:
-    from soul_knowledge.mcp_server import _type_matches  # noqa: SLF001
+    from know_your_soul.mcp_server import _type_matches  # noqa: SLF001
 
     assert _type_matches(None, "null") is True
     assert _type_matches(0, "null") is False
 
 
 def test_check_property_allows_none_for_nullable_types() -> None:
-    from soul_knowledge.mcp_server import _check_property  # noqa: SLF001
+    from know_your_soul.mcp_server import _check_property  # noqa: SLF001
 
     _check_property("approval", None, {"type": ["object", "null"]})  # no raise
 
 
 def test_check_property_enforces_max_length_and_pattern() -> None:
-    from soul_knowledge.mcp_server import ToolError, _check_property  # noqa: SLF001
+    from know_your_soul.mcp_server import ToolError, _check_property  # noqa: SLF001
 
     with pytest.raises(ToolError, match="at most 3 characters"):
         _check_property("tag", "toolong", {"type": "string", "maxLength": 3})
@@ -617,7 +617,7 @@ def test_check_property_enforces_max_length_and_pattern() -> None:
 
 
 def _mcp_adapter(tmp_path: Path, **overrides: Any) -> Any:
-    from soul_knowledge.mcp_server import _Adapter  # noqa: SLF001
+    from know_your_soul.mcp_server import _Adapter  # noqa: SLF001
 
     store = EventStore(tmp_path / "soul.sqlite3")
     projector = GraphProjector(store, output_root=tmp_path / "graph")
@@ -757,7 +757,7 @@ def test_mcp_projection_resource_refuses_a_tampered_graph(tmp_path: Path) -> Non
         idempotency_key="test:seed:n-1",
     )
     projector.rebuild()
-    from soul_knowledge.mcp_server import _Adapter  # noqa: SLF001
+    from know_your_soul.mcp_server import _Adapter  # noqa: SLF001
 
     adapter = _Adapter(
         KnowledgeService(store, projector),
@@ -786,7 +786,7 @@ def test_mcp_resource_byte_cap_is_enforced(tmp_path: Path) -> None:
 def test_build_server_tolerates_a_missing_distribution_version(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import importlib.metadata
 
-    from soul_knowledge.mcp_server import build_server
+    from know_your_soul.mcp_server import build_server
 
     def _raise(name: str) -> str:
         raise importlib.metadata.PackageNotFoundError(name)
@@ -799,7 +799,7 @@ def test_build_server_tolerates_a_missing_distribution_version(tmp_path: Path, m
 
 
 def test_mcp_main_refuses_a_dirty_provider_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from soul_knowledge.mcp_server import main
+    from know_your_soul.mcp_server import main
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-dirty-environment")
     exit_code = main(["--graph-root", str(tmp_path), "--db", str(tmp_path / "soul.sqlite3")])
@@ -807,8 +807,8 @@ def test_mcp_main_refuses_a_dirty_provider_environment(tmp_path: Path, monkeypat
 
 
 def test_mcp_main_refuses_an_unset_api_key_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from soul_knowledge import runtime_guard
-    from soul_knowledge.mcp_server import main
+    from know_your_soul import runtime_guard
+    from know_your_soul.mcp_server import main
 
     monkeypatch.setattr(os, "environ", dict(runtime_guard.scrubbed_env()))
     monkeypatch.delenv("SOUL_TEST_UNSET_KEY", raising=False)
@@ -828,8 +828,8 @@ def test_mcp_main_refuses_an_unset_api_key_env(tmp_path: Path, monkeypatch: pyte
 
 
 def test_mcp_main_refuses_a_disallowed_http_bind(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from soul_knowledge import runtime_guard
-    from soul_knowledge.mcp_server import main
+    from know_your_soul import runtime_guard
+    from know_your_soul.mcp_server import main
 
     # A non-loopback bind without a configured key is refused before serving.
     monkeypatch.setattr(os, "environ", dict(runtime_guard.scrubbed_env()))
@@ -851,8 +851,8 @@ def test_mcp_main_refuses_a_disallowed_http_bind(tmp_path: Path, monkeypatch: py
 def test_mcp_main_stdio_delegates_to_anyio(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import anyio
 
-    from soul_knowledge import runtime_guard
-    from soul_knowledge.mcp_server import main
+    from know_your_soul import runtime_guard
+    from know_your_soul.mcp_server import main
 
     monkeypatch.setattr(os, "environ", dict(runtime_guard.scrubbed_env()))
     ran: list[Any] = []
@@ -868,7 +868,7 @@ def test_mcp_main_stdio_delegates_to_anyio(tmp_path: Path, monkeypatch: pytest.M
 def _generation(
     tmp_path: Path, graph: Any, *, manifest_extra: dict[str, Any] | None = None
 ) -> tuple[Path, dict[str, Any]]:
-    from soul_knowledge.read_model_validator import HASHED_ARTIFACTS
+    from know_your_soul.read_model_validator import HASHED_ARTIFACTS
 
     generation = tmp_path / "generation"
     generation.mkdir()
@@ -898,7 +898,7 @@ def _generation(
 
 
 def test_validator_flags_a_manifest_missing_required_keys(tmp_path: Path) -> None:
-    from soul_knowledge.read_model_validator import ReadModelValidator
+    from know_your_soul.read_model_validator import ReadModelValidator
 
     generation, _manifest = _generation(tmp_path, {"directed": True, "multigraph": False, "nodes": [], "links": []})
     report = ReadModelValidator().validate(generation, {})
@@ -907,7 +907,7 @@ def test_validator_flags_a_manifest_missing_required_keys(tmp_path: Path) -> Non
 
 
 def test_validator_flags_a_missing_manifest_file(tmp_path: Path) -> None:
-    from soul_knowledge.read_model_validator import ReadModelValidator
+    from know_your_soul.read_model_validator import ReadModelValidator
 
     generation, manifest = _generation(tmp_path, {"directed": True, "multigraph": False, "nodes": [], "links": []})
     (generation / "manifest.json").unlink()
@@ -917,7 +917,7 @@ def test_validator_flags_a_missing_manifest_file(tmp_path: Path) -> None:
 
 
 def test_validator_flags_a_manifest_that_disagrees_with_disk(tmp_path: Path) -> None:
-    from soul_knowledge.read_model_validator import ReadModelValidator
+    from know_your_soul.read_model_validator import ReadModelValidator
 
     generation, manifest = _generation(tmp_path, {"directed": True, "multigraph": False, "nodes": [], "links": []})
     supplied = dict(manifest, node_count=99)
@@ -927,7 +927,7 @@ def test_validator_flags_a_manifest_that_disagrees_with_disk(tmp_path: Path) -> 
 
 
 def test_validator_flags_a_wrong_artifact_set(tmp_path: Path) -> None:
-    from soul_knowledge.read_model_validator import ReadModelValidator
+    from know_your_soul.read_model_validator import ReadModelValidator
 
     generation, manifest = _generation(
         tmp_path, {"directed": True, "multigraph": False, "nodes": [], "links": []}, manifest_extra={"artifacts": {}}
@@ -938,7 +938,7 @@ def test_validator_flags_a_wrong_artifact_set(tmp_path: Path) -> None:
 
 
 def test_validator_flags_invalid_graph_json(tmp_path: Path) -> None:
-    from soul_knowledge.read_model_validator import ReadModelValidator
+    from know_your_soul.read_model_validator import ReadModelValidator
 
     generation, manifest = _generation(tmp_path, b"{not json")
     report = ReadModelValidator().validate(generation, manifest)
@@ -947,7 +947,7 @@ def test_validator_flags_invalid_graph_json(tmp_path: Path) -> None:
 
 
 def test_validator_flags_a_non_object_graph(tmp_path: Path) -> None:
-    from soul_knowledge.read_model_validator import ReadModelValidator
+    from know_your_soul.read_model_validator import ReadModelValidator
 
     generation, manifest = _generation(tmp_path, [1, 2, 3])
     report = ReadModelValidator().validate(generation, manifest)
@@ -956,7 +956,7 @@ def test_validator_flags_a_non_object_graph(tmp_path: Path) -> None:
 
 
 def test_validator_flags_malformed_links_and_junk_nodes(tmp_path: Path) -> None:
-    from soul_knowledge.read_model_validator import ReadModelValidator
+    from know_your_soul.read_model_validator import ReadModelValidator
 
     graph = {
         "directed": True,
@@ -981,7 +981,7 @@ def test_validator_flags_malformed_links_and_junk_nodes(tmp_path: Path) -> None:
 
 
 def test_validator_flags_a_forbidden_root_leak(tmp_path: Path) -> None:
-    from soul_knowledge.read_model_validator import ReadModelValidator
+    from know_your_soul.read_model_validator import ReadModelValidator
 
     generation, manifest = _generation(tmp_path, {"directed": True, "multigraph": False, "nodes": [], "links": []})
     target = generation / "labels.json"
@@ -995,7 +995,7 @@ def test_validator_flags_a_forbidden_root_leak(tmp_path: Path) -> None:
 
 
 def test_validator_secret_suffix_is_empty_outside_graph_nodes(tmp_path: Path) -> None:
-    from soul_knowledge.read_model_validator import ReadModelValidator
+    from know_your_soul.read_model_validator import ReadModelValidator
 
     # A secret-shaped string in a non-graph artifact: the node-location suffix
     # is empty (graph-only), and the leak is still flagged.
@@ -1010,7 +1010,7 @@ def test_validator_secret_suffix_is_empty_outside_graph_nodes(tmp_path: Path) ->
 
 
 def test_validator_secret_suffix_is_empty_when_no_node_carries_the_secret(tmp_path: Path) -> None:
-    from soul_knowledge.read_model_validator import ReadModelValidator
+    from know_your_soul.read_model_validator import ReadModelValidator
 
     graph = {
         "directed": True,
@@ -1026,7 +1026,7 @@ def test_validator_secret_suffix_is_empty_when_no_node_carries_the_secret(tmp_pa
 
 
 def test_validator_secret_suffix_is_empty_when_nodes_are_not_a_list(tmp_path: Path) -> None:
-    from soul_knowledge.read_model_validator import ReadModelValidator
+    from know_your_soul.read_model_validator import ReadModelValidator
 
     graph = {
         "directed": True,
@@ -1070,7 +1070,7 @@ def test_generate_fragment_rejects_schema_invalid_nodes() -> None:
 
 
 def test_fragment_cache_round_trip_serves_the_second_extraction(tmp_path: Path) -> None:
-    from soul_knowledge.projection import FragmentCache
+    from know_your_soul.projection import FragmentCache
 
     cache = FragmentCache(tmp_path / "cache")
     adapter = GraphifyAdapter(cache=cache)
@@ -1105,7 +1105,7 @@ def test_partition_restores_a_preset_ambiguous_scale_env() -> None:
 
 
 def test_resolve_domain_input_returns_the_unique_prefix_match() -> None:
-    from soul_knowledge.retrieval import _DOMAIN_KEYS, _MIN_PREFIX_LENGTH, resolve_domain_input  # noqa: SLF001
+    from know_your_soul.retrieval import _DOMAIN_KEYS, _MIN_PREFIX_LENGTH, resolve_domain_input  # noqa: SLF001
 
     unique: str | None = None
     for key in sorted(_DOMAIN_KEYS):
@@ -1122,7 +1122,7 @@ def test_resolve_domain_input_returns_the_unique_prefix_match() -> None:
 
 
 def test_primary_root_is_none_when_the_parent_chain_dangles() -> None:
-    from soul_knowledge.retrieval import GraphLink, PrimaryRouter
+    from know_your_soul.retrieval import GraphLink, PrimaryRouter
 
     router = PrimaryRouter(
         [{"id": "a", "kind": "leaf", "domain": "P1"}],
@@ -1132,7 +1132,7 @@ def test_primary_root_is_none_when_the_parent_chain_dangles() -> None:
 
 
 def test_primary_root_is_none_when_the_parent_chain_cycles() -> None:
-    from soul_knowledge.retrieval import GraphLink, PrimaryRouter
+    from know_your_soul.retrieval import GraphLink, PrimaryRouter
 
     router = PrimaryRouter(
         [{"id": "a", "kind": "leaf", "domain": "P9"}, {"id": "b", "kind": "leaf", "domain": "P9"}],
@@ -1148,8 +1148,8 @@ def test_primary_root_is_none_when_the_parent_chain_cycles() -> None:
 
 
 def test_update_from_changes_with_no_changes_is_an_empty_receipt(tmp_path: Path) -> None:
-    from soul_knowledge.importer import SeedImporter
-    from soul_knowledge.update_pipeline import update_from_changes
+    from know_your_soul.importer import SeedImporter
+    from know_your_soul.update_pipeline import update_from_changes
 
     store = EventStore(tmp_path / "soul.sqlite3")
     try:
@@ -1163,8 +1163,8 @@ def test_update_from_changes_with_no_changes_is_an_empty_receipt(tmp_path: Path)
 
 
 def test_rebuild_when_free_reraises_projector_busy_after_the_last_attempt(tmp_path: Path) -> None:
-    from soul_knowledge.projection import ProjectorBusy
-    from soul_knowledge.update_pipeline import _rebuild_when_free  # noqa: SLF001
+    from know_your_soul.projection import ProjectorBusy
+    from know_your_soul.update_pipeline import _rebuild_when_free  # noqa: SLF001
 
     store = EventStore(tmp_path / "soul.sqlite3")
     try:
@@ -1184,8 +1184,8 @@ def test_rebuild_when_free_reraises_projector_busy_after_the_last_attempt(tmp_pa
 
 
 def test_review_signal_marks_a_node_just_rolled_back(tmp_path: Path) -> None:
-    from soul_knowledge.improvement import DiffOp, DiffOperation, apply_improvement, propose, rollback_improvement
-    from soul_knowledge.review import ReviewEngine
+    from know_your_soul.improvement import DiffOp, DiffOperation, apply_improvement, propose, rollback_improvement
+    from know_your_soul.review import ReviewEngine
 
     store = EventStore(tmp_path / "soul.sqlite3")
     try:
@@ -1215,9 +1215,9 @@ def test_review_signal_marks_a_node_just_rolled_back(tmp_path: Path) -> None:
 
 
 def test_query_above_the_configured_max_budget_is_refused(tmp_path: Path) -> None:
-    from soul_knowledge.contracts import BudgetExceedsMax, QueryRequest
-    from soul_knowledge.projection import GraphProjector
-    from soul_knowledge.service import KnowledgeService
+    from know_your_soul.contracts import BudgetExceedsMax, QueryRequest
+    from know_your_soul.projection import GraphProjector
+    from know_your_soul.service import KnowledgeService
 
     store = EventStore(tmp_path / "soul.sqlite3")
     try:
@@ -1241,9 +1241,9 @@ def test_query_above_the_configured_max_budget_is_refused(tmp_path: Path) -> Non
 
 
 def test_write_meta_marks_stale_when_the_repair_cannot_cover(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from soul_knowledge.contracts import EvaluateRequest
-    from soul_knowledge.projection import GraphProjector
-    from soul_knowledge.service import KnowledgeService
+    from know_your_soul.contracts import EvaluateRequest
+    from know_your_soul.projection import GraphProjector
+    from know_your_soul.service import KnowledgeService
 
     store = EventStore(tmp_path / "soul.sqlite3")
     try:
@@ -1282,7 +1282,7 @@ def test_write_meta_marks_stale_when_the_repair_cannot_cover(tmp_path: Path, mon
             "compute_ms": 100,
             "output_chars": 500,
         }
-        from soul_knowledge.domain import Evidence
+        from know_your_soul.domain import Evidence
 
         service.record_outcome(Evidence.model_validate(evidence), idempotency_key="test:outcome:e-1")
         projector.rebuild()

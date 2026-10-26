@@ -1,6 +1,6 @@
 """Feature-code tests for the calibrated P/M/E scoring engine (Task 5).
 
-These tests exercise ``soul_knowledge.scoring`` against the frozen fixtures in
+These tests exercise ``know_your_soul.scoring`` against the frozen fixtures in
 ``tests/fixtures/scoring_cases.json`` (read-only; owned and validated by the
 Task 3A contract tests) and against an in-memory event store. The frozen
 reference implementation in ``tests/test_measurement_contracts.py`` is never
@@ -17,15 +17,15 @@ from typing import Any
 
 import pytest
 
-from soul_knowledge.domain import Event, EventKind, Evidence, Node, PrimaryDomain
-from soul_knowledge.scoring import (
+from know_your_soul.domain import Event, EventKind, Evidence, Node, PrimaryDomain
+from know_your_soul.scoring import (
     SCORING_CONFIG_PATH,
     ScoreAssessment,
     ScoreEngine,
     ScoringConfig,
     score_items,
 )
-from soul_knowledge.store import EventStore
+from know_your_soul.store import EventStore
 
 ROOT = Path(__file__).resolve().parent.parent
 SCORING_FIXTURES = ROOT / "tests" / "fixtures" / "scoring_cases.json"
@@ -211,7 +211,7 @@ def test_aggregate_primary_unions_descendant_evidence_with_depth(scoring_cases: 
     child_item = dict(item, evidence_id="e0002", node_id="n-child")
     store = EventStore()
     try:
-        from soul_knowledge.domain import Relation, RelationKind
+        from know_your_soul.domain import Relation, RelationKind
 
         for node_id in ("n1", "n-child"):
             node = Node(node_id=node_id, domain=PrimaryDomain.P1, source_version_id="sv-test")

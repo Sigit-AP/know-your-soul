@@ -39,9 +39,9 @@ from hypothesis import strategies as st
 from mcp import types
 from mcp.shared.exceptions import MCPError
 
-from soul_knowledge.audit import AuditLog
-from soul_knowledge.domain import canonical_json
-from soul_knowledge.mcp_server import (
+from know_your_soul.audit import AuditLog
+from know_your_soul.domain import canonical_json
+from know_your_soul.mcp_server import (
     _RESOURCE_URIS,
     _TOOL_TO_OPERATION,
     EXPECTED_TOOLS,
@@ -51,9 +51,9 @@ from soul_knowledge.mcp_server import (
     _tool_schemas,
     _validate_arguments,
 )
-from soul_knowledge.projection import GraphProjector
-from soul_knowledge.service import KnowledgeService
-from soul_knowledge.store import EventStore
+from know_your_soul.projection import GraphProjector
+from know_your_soul.service import KnowledgeService
+from know_your_soul.store import EventStore
 
 _TOOL_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 _MAX = 1024  # the max_token_budget the test adapter is built with
@@ -553,7 +553,7 @@ def test_the_rollback_tool_without_a_target_fails_at_dispatch() -> None:
 )
 @settings(derandomize=True, max_examples=25, deadline=None)
 def test_the_diff_op_enum_is_closed(op: str) -> None:
-    from soul_knowledge.mcp_server import _DIFF_OPS
+    from know_your_soul.mcp_server import _DIFF_OPS
 
     schema = _tool_schemas(_MAX)["knowledge_propose_improvement"]
     arguments = {"node_id": "n-1", "diff": [{"op": op}], "rationale": "r"}
