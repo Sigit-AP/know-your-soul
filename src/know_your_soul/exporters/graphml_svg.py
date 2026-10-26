@@ -291,11 +291,9 @@ def validate_graphml_bytes(data: bytes) -> None:
         if code < 0x20 and char not in "\t\n\r":
             raise GraphExportRoundTripError(f"GraphML artifact carries C0 control char U+{code:04X}")
     try:
-        # nosec B314 — input is our own generated artifact: size-capped, C0-stripped,
-        # no DTD/doctype is ever emitted by the producer, and ElementTree does not
-        # resolve external entities. Round-trip validation only parses known-good
-        # self-produced text.
-        root = ET.fromstring(text)
+        # Input is our own generated artifact: size-capped, C0-stripped, no DTD
+        # ever emitted by the producer; ElementTree does not resolve external entities.
+        root = ET.fromstring(text)  # nosec B314 - round-trip of self-produced capped artifact
     except ET.ParseError as error:
         raise GraphExportRoundTripError(f"GraphML artifact does not parse as XML: {error}") from error
     if root.tag != f"{{{GRAPHML_NAMESPACE}}}graphml":
@@ -451,9 +449,9 @@ def validate_svg_bytes(data: bytes) -> None:
         if code < 0x20 and char not in "\t\n\r":
             raise GraphExportRoundTripError(f"SVG artifact carries C0 control char U+{code:04X}")
     try:
-        # nosec B314 — see the GraphML validator above: self-produced, size-capped,
-        # C0-stripped artifact text only; ElementTree never resolves external entities.
-        root = ET.fromstring(text)
+        # Same contract as the GraphML validator above: self-produced, size-capped,
+        # C0-stripped artifact text only.
+        root = ET.fromstring(text)  # nosec B314 - round-trip of self-produced capped artifact
     except ET.ParseError as error:
         raise GraphExportRoundTripError(f"SVG artifact does not parse as XML: {error}") from error
     if root.tag != f"{{{SVG_NAMESPACE}}}svg":
