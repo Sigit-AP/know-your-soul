@@ -241,7 +241,13 @@ class TestFrozenCorpus:
         assert manifest["total_estimated_tokens"] == 13151
 
     def test_live_soul_corpus_unmodified_since_freeze(self) -> None:
-        """No Hermes SOUL-corpus modification: live source still matches the pin."""
+        """No Hermes SOUL-corpus modification: live source still matches the pin.
+
+        Genuinely host-dependent: only verifiable where the live SOUL corpus
+        exists (the operator host); CI runners skip.
+        """
+        if not LIVE_SOUL_CORPUS.is_dir():
+            pytest.skip("live SOUL corpus not present on this host")
         manifest = json.loads(CORPUS_MANIFEST.read_text(encoding="utf-8"))
         drift: list[str] = []
         live = {p.name: p for p in LIVE_SOUL_CORPUS.glob("*.md")}
