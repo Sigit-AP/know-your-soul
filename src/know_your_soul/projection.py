@@ -52,6 +52,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from know_your_soul.domain import Event, EventKind, Node, RelationKind, canonical_json, new_id, quantize_score
+from know_your_soul.exporters.orchestrator import ExportError, ExportRegistry, manifest_entries, produce_exports
 from know_your_soul.graphify_adapter import (
     ADAPTER_VERSION,
     CONFIDENCE_BY_RELATION,
@@ -450,21 +451,32 @@ class GraphProjector:
         corpus_label: str = "soul-corpus",
         allow_shrink: bool = False,
         max_artifact_bytes: int = ARTIFACT_MAX_BYTES,
+        export_registry: ExportRegistry | None = None,
     ) -> None:
         if max_artifact_bytes < 1:
             raise ValueError("max_artifact_bytes must be positive")
         self._store = store
         self._output_root = Path(output_root)
         self._adapter = adapter if adapter is not None else GraphifyAdapter()
-        self._validator = (
-            validator
-            if validator is not None
-            else ReadModelValidator(extra_forbidden_roots=(str(self._output_root.resolve()),))
-        )
+        if export_registry is not None and len(export_registry) == 0:
+            export_registry = None
+        if validator is None:
+            validator = ReadModelValidator(
+                extra_forbidden_roots=(str(self._output_root.resolve()),),
+                export_schemas=export_registry.schema_view() if export_registry is not None else None,
+            )
+        elif export_registry is not None:
+            # The validator must know every schema the registry can produce;
+            # a gap would fail closed at publish time as an unknown schema.
+            missing = sorted(set(export_registry.names()) - set(validator.export_schemas))
+            if missing:
+                raise ValueError(f"validator is missing export schemas for: {', '.join(missing)}")
+        self._validator = validator
         self._cache = cache
         self._corpus_label = corpus_label
         self._allow_shrink = allow_shrink
         self._max_artifact_bytes = max_artifact_bytes
+        self._export_registry = export_registry
 
     # ------------------------------------------------------------------ lock
 
@@ -978,22 +990,39 @@ class GraphProjector:
         artifacts["signatures.json"] = (canonical_json(dict(sorted(signatures.items()))) + "\n").encode("utf-8")
         self._check_artifact_size("signatures.json", artifacts["signatures.json"])
 
+        # ATM F-B8: registered export/analytics artifacts ride the same
+        # generation cycle — produced from the same read model, cap-checked
+        # (per-format cap first, publish cap as backstop), round-trip
+        # validated, hashed into the content identity, written into the
+        # generation directory and validated again from disk before
+        # activation. A defective export fails the whole build typed, before
+        # any byte is written. Without a registry nothing below changes.
+        export_artifacts: dict[str, bytes] = {}
+        if self._export_registry is not None:
+            try:
+                export_artifacts = produce_exports(self._export_registry, graph_data)
+            except ExportError as error:
+                raise ProjectionValidationError(f"export artifact production failed: {error}") from error
+            for name in sorted(export_artifacts):
+                self._check_artifact_size(name, export_artifacts[name])
+        export_hashes = {name: _sha256(data) for name, data in sorted(export_artifacts.items())}
+
         artifact_hashes = {name: _sha256(data) for name, data in artifacts.items()}
         graph_content_hash = artifact_hashes["graph.json"]
-        content_hash = _sha256(
-            canonical_json(
-                {
-                    "adapter_version": ADAPTER_VERSION,
-                    "artifacts": artifact_hashes,
-                    "fragment_fingerprint": self._adapter.fragment_fingerprint,
-                    "generator_version": self._adapter.generator_version,
-                    "hub_policy": PINNED_HUB_POLICY,
-                    "partitioner": GRAPHIFY_PARTITIONER,
-                    "schema_version": 1,
-                    "source_knowledge_high_watermark": watermark,
-                }
-            ).encode("utf-8")
-        )
+        identity: dict[str, Any] = {
+            "adapter_version": ADAPTER_VERSION,
+            "artifacts": artifact_hashes,
+            "fragment_fingerprint": self._adapter.fragment_fingerprint,
+            "generator_version": self._adapter.generator_version,
+            "hub_policy": PINNED_HUB_POLICY,
+            "partitioner": GRAPHIFY_PARTITIONER,
+            "schema_version": 1,
+            "source_knowledge_high_watermark": watermark,
+        }
+        if self._export_registry is not None:
+            identity["export_artifacts"] = export_hashes
+            identity["export_registry_fingerprint"] = self._export_registry.fingerprint()
+        content_hash = _sha256(canonical_json(identity).encode("utf-8"))
         projection_version = f"gen-{content_hash[:24]}"
 
         # graph.html is a derived, generation-keyed view; it embeds the
@@ -1030,6 +1059,9 @@ class GraphProjector:
             "edge_count": len(link_list),
             "multigraph": False,
         }
+        if self._export_registry is not None:
+            manifest["export_artifacts"] = manifest_entries(self._export_registry, export_artifacts)
+            manifest["export_registry_fingerprint"] = self._export_registry.fingerprint()
         artifacts["manifest.json"] = (canonical_json(manifest) + "\n").encode("utf-8")
         self._check_artifact_size("manifest.json", artifacts["manifest.json"])
 
@@ -1037,6 +1069,19 @@ class GraphProjector:
         generation_dir.mkdir(parents=True, exist_ok=True)
         for name in ARTIFACT_NAMES:
             self._write_if_changed(generation_dir / name, artifacts[name])
+        export_parents: set[Path] = set()
+        for name in sorted(export_artifacts):
+            target = generation_dir / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            export_parents.add(target.parent)
+            self._write_if_changed(target, export_artifacts[name])
+        for parent in sorted(export_parents):
+            if parent != generation_dir:
+                parent_fd = os.open(parent, os.O_RDONLY)
+                try:
+                    os.fsync(parent_fd)
+                finally:
+                    os.close(parent_fd)
         dir_fd = os.open(generation_dir, os.O_RDONLY)
         try:
             os.fsync(dir_fd)

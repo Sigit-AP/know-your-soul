@@ -154,6 +154,39 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="watcher snapshot path (default: alongside the store; must live outside the watched root)",
     )
+
+    # ATM F-D1: operational export commands. These are OPS surface only —
+    # they are NOT knowledge operations, never join KNOWLEDGE_OPERATIONS /
+    # OPS_OPERATIONS, and are never dispatched over MCP or HTTP.
+    export_parser = subparsers.add_parser(
+        "export",
+        help="ops: write export artifacts from the active generation (not a knowledge op)",
+    )
+    export_parser.add_argument(
+        "--formats",
+        default=None,
+        help="comma-separated artifact names (default: all registered 'format' exports)",
+    )
+    export_parser.add_argument(
+        "--out",
+        default=None,
+        help="output directory (default: <output-root>/exports; resolved inside the containment root)",
+    )
+    analytics_parser = subparsers.add_parser(
+        "analytics",
+        help="ops: write analytics artifacts from the active generation (not a knowledge op)",
+    )
+    analytics_parser.add_argument(
+        "--modules",
+        dest="formats",
+        default=None,
+        help="comma-separated artifact names (default: all registered 'analytics' modules)",
+    )
+    analytics_parser.add_argument(
+        "--out",
+        default=None,
+        help="output directory (default: <output-root>/exports; resolved inside the containment root)",
+    )
     return parser
 
 
@@ -215,6 +248,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     command = str(args.command).replace("-", "_")
     if command == "serve":
         return _serve_command(args)
+    if command in ("export", "analytics"):
+        from know_your_soul.ops.export_cli import run_export_command
+
+        return run_export_command(args, command=command)
 
     payload_text: str = args.payload if args.payload is not None else "{}"
     if payload_text == "-":

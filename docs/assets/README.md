@@ -11,7 +11,30 @@ generation time. Dark theme, system font stacks, commitable plain SVG.
 | `bench-impact.svg` | Per-case token saving vs the raw-corpus baseline (mean ≈ 94 %), quality-gate verdicts, system tokens and p50 latency | real bench ledger `bench/results/ledger-*.json` (newest with ≥ 20 measured cases) |
 | `architecture.svg` | Layered architecture: adapters → service → domain/scoring → projection → event store, cross-cutting concerns | real module map of `src/know_your_soul` |
 
-## Regenerate
+## PNG showcase renders
+
+The same four visuals also exist as high-DPI, showcase-grade PNGs
+(`graph-formation.png`, `learning-timeline.png`, `bench-impact.png`,
+`architecture.png`), rendered by `tools/generate_visual_pngs.py` from the
+SAME real data (live corpus projection, real ScoreEngine run, real bench
+ledger — no mockups). Dark theme, 200 DPI, ≥ 3000 px wide.
+
+```bash
+uv run --with matplotlib --with pillow python tools/generate_visual_pngs.py
+```
+
+**Policy note:** `matplotlib` and `pillow` are on the repo's
+`FORBIDDEN_DISTRIBUTIONS` list (`src/know_your_soul/runtime_guard.py`) — they
+must never be added to `pyproject.toml` / `uv.lock` / the project venv. The
+`uv run --with` overlay keeps them ephemeral (uv cache only), so
+`tests/test_dependency_policy.py` stays green. The committed PNGs are the
+deliverable; regeneration is only needed when the underlying data changes.
+
+The generator also runs a geometric label-QA pass on the graph (true rotated
+text-box intersection, not bounding boxes) and prints the overlapping-pair
+count — expected: 0.
+
+## Regenerate (SVG)
 
 From the repository root, with the locked environment:
 

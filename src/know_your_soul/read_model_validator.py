@@ -26,6 +26,7 @@ from graphify.validate import VALID_CONFIDENCES, VALID_FILE_TYPES, validate_extr
 from pydantic import BaseModel, ConfigDict, Field
 
 from know_your_soul.domain import canonical_json
+from know_your_soul.exporters.orchestrator import ArtifactSchema
 from know_your_soul.graphify_adapter import ACCEPTED_SCHEMA_VERSIONS, GraphifyAdapter
 from know_your_soul.security import SECRET_PATTERNS
 
@@ -107,14 +108,23 @@ class ReadModelValidator:
         accepted_schema_versions: frozenset[int] = ACCEPTED_SCHEMA_VERSIONS,
         extra_forbidden_roots: tuple[str, ...] = (),
         adapter: GraphifyAdapter | None = None,
+        export_schemas: Mapping[str, ArtifactSchema] | None = None,
     ) -> None:
         self._accepted_schema_versions = frozenset(accepted_schema_versions)
         self._forbidden_roots = tuple(root for root in extra_forbidden_roots if root)
         self._adapter = adapter if adapter is not None else GraphifyAdapter()
+        # ATM F-B8: the export-artifact schema registry. A manifest naming an
+        # export artifact outside this set fails closed — an unknown schema is
+        # never trusted.
+        self._export_schemas = dict(export_schemas) if export_schemas is not None else {}
 
     @property
     def accepted_schema_versions(self) -> frozenset[int]:
         return self._accepted_schema_versions
+
+    @property
+    def export_schemas(self) -> Mapping[str, ArtifactSchema]:
+        return dict(self._export_schemas)
 
     def validate(self, generation_dir: Path, manifest: Mapping[str, Any]) -> ValidationReport:
         """Fail closed on any contract violation in *generation_dir*.
@@ -248,8 +258,52 @@ class ReadModelValidator:
                 if loaded.number_of_edges() > len(links):
                     errors.append("the pinned loader produced more edges than graph.json declares")
 
+        # ----------------------------------------- export artifacts (F-B8)
+        # A generation carrying an ``export_artifacts`` manifest key binds
+        # every entry: the name must be a registered schema (unknown schemas
+        # fail closed), the file must exist inside the generation, hash and
+        # size must match, the per-format cap holds, and the artifact must
+        # survive its own round-trip validation.
+        export_names: list[str] = []
+        raw_exports: Any = manifest.get("export_artifacts")
+        if raw_exports is not None:
+            if not isinstance(raw_exports, Mapping):
+                errors.append("manifest export_artifacts must be an object")
+            else:
+                for name in sorted(raw_exports):
+                    entry = raw_exports[name]
+                    schema = self._export_schemas.get(name)
+                    if schema is None:
+                        errors.append(f"unknown export artifact schema {name!r}; refusing to trust it")
+                        continue
+                    if _ABS_PATH_RE.search(name) or ".." in name or name.startswith("/"):
+                        errors.append(f"export artifact name {name!r} is not a safe relative path")
+                        continue
+                    export_names.append(name)
+                    if not isinstance(entry, Mapping):
+                        errors.append(f"export artifact {name} manifest entry must be an object")
+                        continue
+                    path = generation_dir / name
+                    if not path.is_file():
+                        errors.append(f"missing export artifact {name}")
+                        continue
+                    data = path.read_bytes()
+                    if len(data) > schema.max_bytes:
+                        errors.append(f"export artifact {name} exceeds its {schema.max_bytes}-byte cap")
+                    if entry.get("size") != len(data):
+                        errors.append(f"size mismatch for export artifact {name}")
+                    import hashlib
+
+                    if entry.get("sha256") != hashlib.sha256(data).hexdigest():
+                        errors.append(f"hash mismatch for export artifact {name}")
+                    else:
+                        try:
+                            schema.roundtrip(data)
+                        except Exception as error:  # noqa: BLE001 - defects fail closed
+                            errors.append(f"export artifact {name} failed round-trip validation: {error}")
+
         # ------------------------------------- portable headers and secrets
-        for name in HASHED_ARTIFACTS:
+        for name in (*HASHED_ARTIFACTS, *export_names):
             path = generation_dir / name
             if not path.is_file():
                 continue
