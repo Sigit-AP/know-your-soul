@@ -217,17 +217,21 @@ _HOMOGLYPH_FOLD = str.maketrans(
 def _redaction_match_view(text: str) -> str:
     """NFKC + separator-strip + homoglyph fold view used for secret matching only.
 
-    Every non-ASCII space separator (Zs: NBSP, hair/thin/narrow/ideographic
-    space, …) is dropped *before* NFKC, because NFKC would fold them into
-    plain ASCII spaces that keep a split secret split (SUB-35-F2). Every
-    Unicode format (Cf: zero-width, bidi, BOM) and control (Cc:
-    tab/newline/…) character is likewise dropped, re-joining secrets split
-    by invisible or whitespace separators (``AKIA\\u200bIOSF…``,
-    ``AKIA\\u200aIOSF…``, ``AKIA\\tIOSF…``). Plain ASCII spaces survive:
-    several pinned patterns require a ``\\s+`` separator, and the raw-text
-    pass has already matched anything the strip would hide behind one.
+    Every non-ASCII separator character — Zs (NBSP, hair/thin/narrow/
+    ideographic space, …), Zl (U+2028 LINE SEPARATOR) and Zp (U+2029
+    PARAGRAPH SEPARATOR) — is dropped *before* NFKC, because NFKC would fold
+    Zs into plain ASCII spaces that keep a split secret split (SUB-35-F2)
+    and leaves Zl/Zp untouched (SUB-43 S-1: publish ``\\s+`` collapsing would
+    later reshape them into the very ASCII-space form this view deliberately
+    keeps, so the key would publish whole, one space wide). Every Unicode
+    format (Cf: zero-width, bidi, BOM) and control (Cc: tab/newline/…)
+    character is likewise dropped, re-joining secrets split by invisible or
+    whitespace separators (``AKIA\\u200bIOSF…``, ``AKIA\\u200aIOSF…``,
+    ``AKIA\\tIOSF…``). Plain ASCII spaces survive: several pinned patterns
+    require a ``\\s+`` separator, and the raw-text pass has already matched
+    anything the strip would hide behind one.
     """
-    joined = "".join(char for char in text if unicodedata.category(char) != "Zs" or char == " ")
+    joined = "".join(char for char in text if char == " " or unicodedata.category(char) not in ("Zs", "Zl", "Zp"))
     view = unicodedata.normalize("NFKC", joined)
     view = "".join(char for char in view if unicodedata.category(char) not in ("Cf", "Cc"))
     return view.translate(_HOMOGLYPH_FOLD)

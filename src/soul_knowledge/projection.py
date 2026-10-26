@@ -43,7 +43,7 @@ import logging
 import os
 import re
 import unicodedata
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -134,6 +134,16 @@ _LIST_ITEM_RE = re.compile(r"^(?:[-*+]|\d+[.)])\s+")
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 _EMPHASIS_RE = re.compile(r"\*\*|__|`")
 _WHITESPACE_RE = re.compile(r"\s+")
+# SUB-43 S-2: the quarantine scan joins a node's publish-bound fields with a
+# zero-width space — dropped by the redaction match view (so halves of a
+# secret split ACROSS fields re-join), not matched by ``\s`` or any pinned
+# pattern alphabet (so the join itself can never bridge a raw-pattern match).
+_CROSS_FIELD_JOINER = "\u200b"
+# The alphabet of the compact token view (``_secret_category`` third pass):
+# every character outside it is dropped, so a secret fused with arbitrary
+# join punctuation (``" — "``, ``"; "``, …) re-forms. ``_-.`` are kept
+# because the github/slack/jwt pinned shapes carry them.
+_COMPACT_TOKEN_ALPHABET = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.")
 # Mirrors the read-model validator's portable-header rule: absolute POSIX /
 # drive paths may never appear in a published artifact, so they are masked
 # out of enriched summaries instead of failing the whole generation.
@@ -565,6 +575,16 @@ class GraphProjector:
         fold), so a zero-width-split, fullwidth or homoglyph-obfuscated
         secret shape in a node field is quarantined exactly like its
         plaintext form.
+
+        SUB-43 S-2: a third pass runs over the *compact token view* — the
+        match view reduced to the pinned-pattern alphabet (letters, digits,
+        ``_-.``) with every separator and punctuation character dropped.
+        A secret split across field boundaries or fused into the enriched
+        label by the ``" — "`` join re-forms there, so both halves of one
+        key can never publish side by side in a single node. Patterns that
+        require whitespace or ``[:=]`` (bearer, credential assignment,
+        private-key blocks) simply cannot match this view; the split-N-way
+        family beyond one join point is a documented design boundary.
         """
         for name, pattern in SECRET_PATTERNS:
             if pattern.search(text) is not None:
@@ -574,6 +594,34 @@ class GraphProjector:
             for name, pattern in SECRET_PATTERNS:
                 if pattern.search(view) is not None:
                     return name
+        compact = "".join(char for char in view if char in _COMPACT_TOKEN_ALPHABET)
+        if compact != view:
+            for name, pattern in SECRET_PATTERNS:
+                if pattern.search(compact) is not None:
+                    return name
+        return None
+
+    def _joined_secret_category(self, values: Sequence[str]) -> str | None:
+        """Secret category of the cross-field joined views, or ``None``.
+
+        SUB-43 S-2: a secret split ACROSS fields matches no single field.
+        The full join (field order) catches halves that land adjacently; the
+        pairwise both-orders joins catch a two-way split with unrelated
+        fields in between, whichever field holds the head. Splits wider
+        than two fields are the documented split-N-way design boundary.
+        """
+        if len(values) < 2:
+            return None
+        hit = self._secret_category(_CROSS_FIELD_JOINER.join(values))
+        if hit is not None:
+            return hit
+        for head in range(len(values)):
+            for tail in range(len(values)):
+                if head == tail:
+                    continue
+                hit = self._secret_category(values[head] + _CROSS_FIELD_JOINER + values[tail])
+                if hit is not None:
+                    return hit
         return None
 
     def _quarantine_secret_nodes(
@@ -595,18 +643,35 @@ class GraphProjector:
         too, because publish sanitization collapses Zs-class separators to
         plain ASCII spaces (W3-6) — a split secret would otherwise reach the
         scan already re-shaped into a form the match view keeps split.
+
+        SUB-43 S-2: alongside the per-field scans, each node is scanned over
+        two deterministic joined views (raw fields; publish-bound fields) so
+        a secret split ACROSS fields — half in ``summary``, half in
+        ``context_tags``, or fused into the enriched label by the ``" — "``
+        join — quarantines the node even though every field alone is clean.
+        The joiner is a zero-width space: the match view drops it (halves
+        re-join) while no raw pattern can bridge it (no false cross-field
+        matches from the join itself).
         """
         quarantined: list[tuple[str, str, str]] = []
         for node_id in sorted(node_dicts):
             offending_field: str | None = None
             offending_category: str | None = None
             if raw_fields is not None:
-                for field, raw_value in raw_fields.get(node_id, ()):
+                fields = raw_fields.get(node_id, ())
+                for field, raw_value in fields:
                     hit = self._secret_category(raw_value)
                     if hit is not None:
                         offending_field = field
                         offending_category = hit
                         break
+                # SUB-43 S-2: scan the deterministic joined views too — a
+                # secret split ACROSS fields matches no single field.
+                if offending_field is None and len(fields) > 1:
+                    hit = self._joined_secret_category([value for _, value in fields])
+                    if hit is not None:
+                        offending_field = "+".join(sorted({field for field, _ in fields}))
+                        offending_category = hit
 
             def _scan(value: Any) -> str | None:
                 if isinstance(value, str):
@@ -630,6 +695,23 @@ class GraphProjector:
                         offending_field = field
                         offending_category = hit
                         break
+            if offending_field is None:
+                # SUB-43 S-2: same joined views over the publish-bound
+                # (sanitized) fields — covers splits introduced or kept by
+                # enrichment/sanitization itself (e.g. the ``" — "`` label
+                # join), in deterministic field order.
+                publish_strings: list[str] = []
+                for field in sorted(node_dicts[node_id]):
+                    value = node_dicts[node_id][field]
+                    if isinstance(value, str):
+                        publish_strings.append(value)
+                    elif isinstance(value, (list, tuple)):
+                        publish_strings.extend(item for item in value if isinstance(item, str))
+                if len(publish_strings) > 1:
+                    hit = self._joined_secret_category(publish_strings)
+                    if hit is not None:
+                        offending_field = "<joined-publish-fields>"
+                        offending_category = hit
             if offending_field is not None and offending_category is not None:
                 del node_dicts[node_id]
                 quarantined.append((node_id, offending_field, offending_category))
