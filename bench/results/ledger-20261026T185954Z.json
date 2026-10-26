@@ -1,0 +1,807 @@
+{
+  "baseline": {
+    "bytes": 52604,
+    "description": "Reading the whole raw frozen corpus answers every question (quality 1.0 by construction) at full corpus token cost. Reported as a comparison metric only; the acceptance gate compares against the per-case compliant ceiling (gate 2.0.0), and each case reports gap_vs_raw_read explicitly.",
+    "estimated_tokens": 13151,
+    "kind": "raw-soul-corpus",
+    "quality": 1.0
+  },
+  "cases": [
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": false,
+      "ceiling_estimated_tokens": 244,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "07-2d-calibration-2d-bayes"
+      ],
+      "ceiling_routed_domains": [
+        "P1"
+      ],
+      "expected_primary_domain": "P1",
+      "gap_vs_raw_read": 0.0,
+      "id": "q01-evidence-labels",
+      "latency_ms": {
+        "p50": 7.771077,
+        "p95": 31.587456,
+        "samples": [
+          7.771077,
+          31.587456
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 1.0,
+      "quality_floor_applied": 0.6,
+      "quality_regression": false,
+      "quality_system": 1.0,
+      "status": "measured",
+      "system_estimated_tokens": 611,
+      "token_saving_ratio": 0.95354,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": true,
+      "ceiling_estimated_tokens": 356,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "02-2d-state-2d-ledger",
+        "07-2d-calibration-2d-bayes"
+      ],
+      "ceiling_routed_domains": [
+        "P1"
+      ],
+      "expected_primary_domain": "P1",
+      "gap_vs_raw_read": 0.666667,
+      "id": "q02-base-rate-rule",
+      "latency_ms": {
+        "p50": 5.716625,
+        "p95": 6.36952,
+        "samples": [
+          5.716625,
+          6.36952
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.333333,
+      "quality_floor_applied": 0.333333,
+      "quality_regression": false,
+      "quality_system": 0.333333,
+      "status": "measured",
+      "system_estimated_tokens": 611,
+      "token_saving_ratio": 0.95354,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": true,
+      "ceiling_estimated_tokens": 252,
+      "ceiling_method": "exact-full+single-root",
+      "ceiling_node_ids": [
+        "07-2d-calibration-2d-bayes"
+      ],
+      "ceiling_routed_domains": [
+        "P1"
+      ],
+      "ceiling_routing_note": "vacuous: rubric unreachable under expected routing (case-design debt)",
+      "ceiling_unrestricted_2.0.0": 0.333333,
+      "expected_primary_domain": "P1",
+      "gap_vs_raw_read": 1.0,
+      "id": "q03-overconfidence-countermeasure",
+      "latency_ms": {
+        "p50": 5.483204,
+        "p95": 5.85957,
+        "samples": [
+          5.483204,
+          5.85957
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.0,
+      "quality_floor_applied": 0.0,
+      "quality_regression": false,
+      "quality_system": 0.0,
+      "status": "measured",
+      "system_estimated_tokens": 611,
+      "token_saving_ratio": 0.95354,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": true,
+      "ceiling_estimated_tokens": 249,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "25-2d-measured-2d-facts"
+      ],
+      "ceiling_routed_domains": [
+        "P1"
+      ],
+      "expected_primary_domain": "P1",
+      "gap_vs_raw_read": 1.0,
+      "id": "q04-blind-verification",
+      "latency_ms": {
+        "p50": 9.259027,
+        "p95": 10.496455,
+        "samples": [
+          9.259027,
+          10.496455
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.0,
+      "quality_floor_applied": 0.0,
+      "quality_regression": false,
+      "quality_system": 0.0,
+      "status": "measured",
+      "system_estimated_tokens": 611,
+      "token_saving_ratio": 0.95354,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": true,
+      "ceiling_estimated_tokens": 250,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "06-2d-heuristics-2d-catalog"
+      ],
+      "ceiling_routed_domains": [
+        "P2"
+      ],
+      "expected_primary_domain": "P2",
+      "gap_vs_raw_read": 0.5,
+      "id": "q05-chestertons-fence",
+      "latency_ms": {
+        "p50": 4.344461,
+        "p95": 4.809568,
+        "samples": [
+          4.344461,
+          4.809568
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.5,
+      "quality_floor_applied": 0.5,
+      "quality_regression": false,
+      "quality_system": 0.5,
+      "status": "measured",
+      "system_estimated_tokens": 420,
+      "token_saving_ratio": 0.968063,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": true,
+      "ceiling_estimated_tokens": 250,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "06-2d-heuristics-2d-catalog"
+      ],
+      "ceiling_routed_domains": [
+        "P2"
+      ],
+      "expected_primary_domain": "P2",
+      "gap_vs_raw_read": 0.5,
+      "id": "q06-heuristic-count",
+      "latency_ms": {
+        "p50": 9.065202,
+        "p95": 11.71362,
+        "samples": [
+          9.065202,
+          11.71362
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.5,
+      "quality_floor_applied": 0.5,
+      "quality_regression": false,
+      "quality_system": 0.5,
+      "status": "measured",
+      "system_estimated_tokens": 420,
+      "token_saving_ratio": 0.968063,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": true,
+      "ceiling_estimated_tokens": 362,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "06-2d-heuristics-2d-catalog",
+        "24-2d-metrics-2d-and-2d-levels"
+      ],
+      "ceiling_routed_domains": [
+        "P7"
+      ],
+      "ceiling_routing_note": "ceiling feasible only via the router's actual domain choice outside the expected primary domain (case-design debt: routing-expectation mismatch)",
+      "expected_primary_domain": "P2",
+      "gap_vs_raw_read": 0.666667,
+      "id": "q07-goodhart",
+      "latency_ms": {
+        "p50": 15.264702,
+        "p95": 15.717278,
+        "samples": [
+          15.264702,
+          15.717278
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.333333,
+      "quality_floor_applied": 0.333333,
+      "quality_regression": false,
+      "quality_system": 0.333333,
+      "status": "measured",
+      "system_estimated_tokens": 926,
+      "token_saving_ratio": 0.929587,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": true,
+      "ceiling_estimated_tokens": 356,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "10-2d-kill-2d-criteria",
+        "19-2d-mitigations"
+      ],
+      "ceiling_routed_domains": [
+        "P3"
+      ],
+      "expected_primary_domain": "P3",
+      "gap_vs_raw_read": 1.0,
+      "id": "q08-kill-criteria-format",
+      "latency_ms": {
+        "p50": 8.571457,
+        "p95": 10.937806,
+        "samples": [
+          8.571457,
+          10.937806
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.0,
+      "quality_floor_applied": 0.0,
+      "quality_regression": false,
+      "quality_system": 0.0,
+      "status": "measured",
+      "system_estimated_tokens": 845,
+      "token_saving_ratio": 0.935746,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": true,
+      "ceiling_estimated_tokens": 356,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "10-2d-kill-2d-criteria",
+        "19-2d-mitigations"
+      ],
+      "ceiling_routed_domains": [
+        "P3"
+      ],
+      "expected_primary_domain": "P3",
+      "gap_vs_raw_read": 0.666667,
+      "id": "q09-token-budget-kill",
+      "latency_ms": {
+        "p50": 6.853779,
+        "p95": 7.591865,
+        "samples": [
+          6.853779,
+          7.591865
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.333333,
+      "quality_floor_applied": 0.333333,
+      "quality_regression": false,
+      "quality_system": 0.333333,
+      "status": "measured",
+      "system_estimated_tokens": 845,
+      "token_saving_ratio": 0.935746,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": false,
+      "ceiling_estimated_tokens": 363,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "11-2d-effort-2d-router",
+        "20-2d-execution-2d-cycle"
+      ],
+      "ceiling_routed_domains": [
+        "P3"
+      ],
+      "expected_primary_domain": "P3",
+      "gap_vs_raw_read": 0.0,
+      "id": "q10-execution-phases",
+      "latency_ms": {
+        "p50": 8.058253,
+        "p95": 9.437222,
+        "samples": [
+          8.058253,
+          9.437222
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 1.0,
+      "quality_floor_applied": 0.6,
+      "quality_regression": false,
+      "quality_system": 1.0,
+      "status": "measured",
+      "system_estimated_tokens": 847,
+      "token_saving_ratio": 0.935594,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": true,
+      "ceiling_estimated_tokens": 362,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "11-2d-effort-2d-router",
+        "22-2d-query-2d-playbook"
+      ],
+      "ceiling_routed_domains": [
+        "P3"
+      ],
+      "expected_primary_domain": "P3",
+      "gap_vs_raw_read": 0.666667,
+      "id": "q11-l1-no-query",
+      "latency_ms": {
+        "p50": 6.622833,
+        "p95": 13.021456,
+        "samples": [
+          6.622833,
+          13.021456
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.333333,
+      "quality_floor_applied": 0.333333,
+      "quality_regression": false,
+      "quality_system": 0.333333,
+      "status": "measured",
+      "system_estimated_tokens": 847,
+      "token_saving_ratio": 0.935594,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": true,
+      "ceiling_estimated_tokens": 247,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "11-2d-effort-2d-router"
+      ],
+      "ceiling_routed_domains": [
+        "P3"
+      ],
+      "expected_primary_domain": "P3",
+      "gap_vs_raw_read": 0.666667,
+      "id": "q12-effort-classification",
+      "latency_ms": {
+        "p50": 10.091994,
+        "p95": 12.946972,
+        "samples": [
+          10.091994,
+          12.946972
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.0,
+      "quality_floor_applied": 0.0,
+      "quality_regression": false,
+      "quality_system": 0.333333,
+      "status": "measured",
+      "system_estimated_tokens": 847,
+      "token_saving_ratio": 0.935594,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": true,
+      "ceiling_estimated_tokens": 244,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "04-2d-decision-2d-taxonomy"
+      ],
+      "ceiling_routed_domains": [
+        "P4"
+      ],
+      "expected_primary_domain": "P4",
+      "gap_vs_raw_read": 0.5,
+      "id": "q13-decision-matrix",
+      "latency_ms": {
+        "p50": 9.372669,
+        "p95": 9.603867,
+        "samples": [
+          9.372669,
+          9.603867
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.5,
+      "quality_floor_applied": 0.5,
+      "quality_regression": false,
+      "quality_system": 0.5,
+      "status": "measured",
+      "system_estimated_tokens": 733,
+      "token_saving_ratio": 0.944263,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": true,
+      "ceiling_estimated_tokens": 253,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "05-2d-assumptions-2d-tradeoffs"
+      ],
+      "ceiling_routed_domains": [
+        "P4"
+      ],
+      "expected_primary_domain": "P4",
+      "gap_vs_raw_read": 0.75,
+      "id": "q14-assumption-format",
+      "latency_ms": {
+        "p50": 7.762388,
+        "p95": 9.03689,
+        "samples": [
+          7.762388,
+          9.03689
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.0,
+      "quality_floor_applied": 0.0,
+      "quality_regression": false,
+      "quality_system": 0.25,
+      "status": "measured",
+      "system_estimated_tokens": 752,
+      "token_saving_ratio": 0.942818,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": false,
+      "ceiling_estimated_tokens": 253,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "05-2d-assumptions-2d-tradeoffs"
+      ],
+      "ceiling_routed_domains": [
+        "P4"
+      ],
+      "expected_primary_domain": "P4",
+      "gap_vs_raw_read": 0.25,
+      "id": "q15-tradeoff-fields",
+      "latency_ms": {
+        "p50": 8.80352,
+        "p95": 9.606698,
+        "samples": [
+          8.80352,
+          9.606698
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.75,
+      "quality_floor_applied": 0.6,
+      "quality_regression": false,
+      "quality_system": 0.75,
+      "status": "measured",
+      "system_estimated_tokens": 752,
+      "token_saving_ratio": 0.942818,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": false,
+      "ceiling_estimated_tokens": 247,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "09-2d-premortem-2d-steelman"
+      ],
+      "ceiling_routed_domains": [
+        "P4"
+      ],
+      "expected_primary_domain": "P4",
+      "gap_vs_raw_read": 0.25,
+      "id": "q16-premortem-steelman",
+      "latency_ms": {
+        "p50": 7.26449,
+        "p95": 9.995529,
+        "samples": [
+          7.26449,
+          9.995529
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.75,
+      "quality_floor_applied": 0.6,
+      "quality_regression": false,
+      "quality_system": 0.75,
+      "status": "measured",
+      "system_estimated_tokens": 752,
+      "token_saving_ratio": 0.942818,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": false,
+      "ceiling_estimated_tokens": 248,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "03-2d-reasoning-2d-modes"
+      ],
+      "ceiling_routed_domains": [
+        "P5"
+      ],
+      "expected_primary_domain": "P5",
+      "gap_vs_raw_read": 0.0,
+      "id": "q17-reasoning-modes",
+      "latency_ms": {
+        "p50": 8.027315,
+        "p95": 9.404811,
+        "samples": [
+          8.027315,
+          9.404811
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 1.0,
+      "quality_floor_applied": 0.6,
+      "quality_regression": false,
+      "quality_system": 1.0,
+      "status": "measured",
+      "system_estimated_tokens": 722,
+      "token_saving_ratio": 0.945099,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": true,
+      "ceiling_estimated_tokens": 233,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "08-2d-anti-2d-bias"
+      ],
+      "ceiling_routed_domains": [
+        "P5"
+      ],
+      "expected_primary_domain": "P5",
+      "gap_vs_raw_read": 1.0,
+      "id": "q18-confirmation-bias",
+      "latency_ms": {
+        "p50": 5.807656,
+        "p95": 6.145656,
+        "samples": [
+          5.807656,
+          6.145656
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.0,
+      "quality_floor_applied": 0.0,
+      "quality_regression": false,
+      "quality_system": 0.0,
+      "status": "measured",
+      "system_estimated_tokens": 734,
+      "token_saving_ratio": 0.944187,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": true,
+      "ceiling_estimated_tokens": 252,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "26-2d-reasoning-2d-synthesis"
+      ],
+      "ceiling_routed_domains": [
+        "P5"
+      ],
+      "expected_primary_domain": "P5",
+      "gap_vs_raw_read": 0.666667,
+      "id": "q19-synthesis-questions",
+      "latency_ms": {
+        "p50": 6.253114,
+        "p95": 6.887418,
+        "samples": [
+          6.253114,
+          6.887418
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.333333,
+      "quality_floor_applied": 0.333333,
+      "quality_regression": false,
+      "quality_system": 0.333333,
+      "status": "measured",
+      "system_estimated_tokens": 734,
+      "token_saving_ratio": 0.944187,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": true,
+      "ceiling_estimated_tokens": 246,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "02-2d-state-2d-ledger"
+      ],
+      "ceiling_routed_domains": [
+        "P6"
+      ],
+      "expected_primary_domain": "P6",
+      "gap_vs_raw_read": 0.5,
+      "id": "q20-ledger-fields",
+      "latency_ms": {
+        "p50": 10.03612,
+        "p95": 10.665879,
+        "samples": [
+          10.03612,
+          10.665879
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.5,
+      "quality_floor_applied": 0.5,
+      "quality_regression": false,
+      "quality_system": 0.5,
+      "status": "measured",
+      "system_estimated_tokens": 968,
+      "token_saving_ratio": 0.926393,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": false,
+      "ceiling_estimated_tokens": 244,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "12-2d-communication"
+      ],
+      "ceiling_routed_domains": [
+        "P6"
+      ],
+      "expected_primary_domain": "P6",
+      "gap_vs_raw_read": 0.0,
+      "id": "q21-communication-format",
+      "latency_ms": {
+        "p50": 10.170333,
+        "p95": 10.847744,
+        "samples": [
+          10.170333,
+          10.847744
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 1.0,
+      "quality_floor_applied": 0.6,
+      "quality_regression": false,
+      "quality_system": 1.0,
+      "status": "measured",
+      "system_estimated_tokens": 965,
+      "token_saving_ratio": 0.926622,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": true,
+      "ceiling_estimated_tokens": 362,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "01-2d-identity-2d-compliance",
+        "25-2d-measured-2d-facts"
+      ],
+      "ceiling_routed_domains": [
+        "P6"
+      ],
+      "expected_primary_domain": "P6",
+      "gap_vs_raw_read": 0.666667,
+      "id": "q22-subagent-soul",
+      "latency_ms": {
+        "p50": 13.507433,
+        "p95": 14.72746,
+        "samples": [
+          13.507433,
+          14.72746
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.333333,
+      "quality_floor_applied": 0.333333,
+      "quality_regression": false,
+      "quality_system": 0.333333,
+      "status": "measured",
+      "system_estimated_tokens": 965,
+      "token_saving_ratio": 0.926622,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": true,
+      "ceiling_estimated_tokens": 361,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "13-2d-p1-2d-coding-2d-engineer",
+        "24-2d-metrics-2d-and-2d-levels"
+      ],
+      "ceiling_routed_domains": [
+        "P7"
+      ],
+      "expected_primary_domain": "P7",
+      "gap_vs_raw_read": 1.0,
+      "id": "q23-p1-metrics",
+      "latency_ms": {
+        "p50": 13.669117,
+        "p95": 13.807457,
+        "samples": [
+          13.669117,
+          13.807457
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.0,
+      "quality_floor_applied": 0.0,
+      "quality_regression": false,
+      "quality_system": 0.0,
+      "status": "measured",
+      "system_estimated_tokens": 928,
+      "token_saving_ratio": 0.929435,
+      "verdict": "accepted"
+    },
+    {
+      "baseline_estimated_tokens": 13151,
+      "ceiling_below_floor": true,
+      "ceiling_estimated_tokens": 365,
+      "ceiling_method": "exact-full",
+      "ceiling_node_ids": [
+        "24-2d-metrics-2d-and-2d-levels",
+        "27-2d-part4-2d-usage-2d-and-2d-schema"
+      ],
+      "ceiling_routed_domains": [
+        "P7"
+      ],
+      "expected_primary_domain": "P7",
+      "gap_vs_raw_read": 0.4,
+      "id": "q24-card-schema",
+      "latency_ms": {
+        "p50": 14.053984,
+        "p95": 14.374521,
+        "samples": [
+          14.053984,
+          14.374521
+        ]
+      },
+      "quality_baseline": 1.0,
+      "quality_ceiling": 0.2,
+      "quality_floor_applied": 0.2,
+      "quality_regression": false,
+      "quality_system": 0.6,
+      "status": "measured",
+      "system_estimated_tokens": 939,
+      "token_saving_ratio": 0.928599,
+      "verdict": "accepted"
+    }
+  ],
+  "corpus_manifest_sha256": "a03ec841244b0505fe7d63b8e13ee6636033f699e29d915c083fffc56e738b05",
+  "estimator": "estimated_tokens = ceil(utf8_byte_length / 4)",
+  "gate": {
+    "ceiling_definition": "max rubric_score over subsets of projected-graph nodes whose source_file is in the case's source_files, packed into a contract-shaped response payload within the case token_budget, with candidates restricted to nodes reachable under the single-root routing contract (Ruling Q03): the subtree of the case's expected_primary_domain root plus the subtree of every root the deterministic router actually selected for the case; when this routing-feasible maximum equals the gate 2.0.0 value, the 2.0.0 record stands byte-identical; computed from the live projection artifact, never hardcoded",
+    "ceiling_definition_2.0.0": "max rubric_score over subsets of projected-graph nodes whose source_file is in the case's source_files, packed into a contract-shaped response payload within the case token_budget; computed from the live projection artifact, never hardcoded",
+    "gate_version": "2.1.0",
+    "legacy_rule_1.0.0": "accepted iff quality_system >= 1.0 (raw-corpus baseline) AND >= QUALITY_FLOOR \u2014 provably unreachable for any contract-compliant response; kept here for audit only",
+    "quality_floor": 0.6,
+    "rubric_scope": "rubric terms are scored over the response/ceiling payload JSON minus the provenance field (wave-3 W3-8(a)): provenance is routing metadata with zero relevance per spec, so a term appearing only in a soul:// URI filename cannot count as delivered knowledge; provenance still counts toward token estimation on both sides",
+    "rule": "accepted iff quality_system >= quality_ceiling (per-case compliant ceiling, single-root routing-feasible, epsilon 1e-9) AND quality_system >= quality_floor_applied (min(QUALITY_FLOOR, quality_ceiling))"
+  },
+  "generated_at": "2026-10-26T18:59:52Z",
+  "ledger_version": "2.0.0",
+  "repeats": 2,
+  "status": "ok",
+  "token_budget_contract": "docs/mathematics/token-budget-contract.md (1.0.0)"
+}

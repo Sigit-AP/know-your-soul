@@ -11,3 +11,4 @@ graphify-out/
 bench/results/*
 # Release evidence: the fresh green ledger cited by docs/verification.md stays tracked.
 !bench/results/ledger-20261026T031852Z.json
+!bench/results/ledger-20261026T185954Z.json
