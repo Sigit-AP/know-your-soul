@@ -212,6 +212,7 @@ def test_watch_loop_logs_detection_and_errors(tmp_path: Path, caplog: pytest.Log
 def _serve_app(
     tmp_path: Path,
     app_kwargs: dict[str, object],
+    sock_dir: Path,
 ) -> tuple[object, uvicorn.Server, threading.Thread, Path]:
     stack = build_stack(tmp_path / "soul.sqlite3", tmp_path / "out")
     corpus = _corpus(tmp_path)
@@ -219,7 +220,7 @@ def _serve_app(
     importer.import_directory(corpus, domain=PrimaryDomain.P1)
     stack.projector.rebuild()
     app = create_app(stack, **app_kwargs)  # type: ignore[arg-type]
-    socket_path = tmp_path / "api.sock"
+    socket_path = sock_dir / "api.sock"
     config = uvicorn.Config(app, uds=str(socket_path), log_level="error")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
@@ -273,7 +274,7 @@ def _watcher_invocations(stack: object) -> list[tuple[str, str]]:
     return [(str(row["operation"]), str(row["actor"])) for row in rows]
 
 
-def test_serve_watcher_emits_offer_without_intervention_and_holds_the_baseline(tmp_path: Path) -> None:
+def test_serve_watcher_emits_offer_without_intervention_and_holds_the_baseline(tmp_path: Path, sock_dir: Path) -> None:
     """The F-1 probe: a corpus edit surfaces a gated offer on its own."""
     stack, server, thread, corpus = _serve_app(
         tmp_path,
@@ -283,6 +284,7 @@ def test_serve_watcher_emits_offer_without_intervention_and_holds_the_baseline(t
             "watch_cooldown_seconds": 1.0,
             "watch_state_path": tmp_path / "watch-state.json",
         },
+        sock_dir,
     )
     try:
         service = stack.service  # type: ignore[attr-defined]
@@ -310,7 +312,7 @@ def test_serve_watcher_emits_offer_without_intervention_and_holds_the_baseline(t
         assert _watcher_invocations(stack) and all(
             actor == "source-watcher" for _, actor in _watcher_invocations(stack)
         )
-        assert _health(tmp_path / "api.sock") == 200
+        assert _health(sock_dir / "api.sock") == 200
     finally:
         server.should_exit = True
         thread.join(timeout=15)
@@ -320,7 +322,7 @@ def test_serve_watcher_emits_offer_without_intervention_and_holds_the_baseline(t
     assert not any(t.name == "soul-source-watch" for t in threading.enumerate())
 
 
-def test_serve_watcher_survives_restart_without_duplicate_offers(tmp_path: Path) -> None:
+def test_serve_watcher_survives_restart_without_duplicate_offers(tmp_path: Path, sock_dir: Path) -> None:
     """Restart safety: an unchanged corpus re-emits nothing; a fresh edit is detected."""
     state_path = tmp_path / "watch-state.json"
     kwargs = {
@@ -329,7 +331,7 @@ def test_serve_watcher_survives_restart_without_duplicate_offers(tmp_path: Path)
         "watch_cooldown_seconds": 0.3,
         "watch_state_path": state_path,
     }
-    stack, server, thread, corpus = _serve_app(tmp_path, kwargs)
+    stack, server, thread, corpus = _serve_app(tmp_path, kwargs, sock_dir)
     service = stack.service  # type: ignore[attr-defined]
     try:
         _wait_until(lambda: _soul_corpus_baseline_recorded(stack), what="startup baseline")
@@ -346,12 +348,12 @@ def test_serve_watcher_survives_restart_without_duplicate_offers(tmp_path: Path)
     stack2 = build_stack(tmp_path / "soul.sqlite3", tmp_path / "out")
     service2 = stack2.service
     app = create_app(stack2, **kwargs)  # type: ignore[arg-type]
-    config = uvicorn.Config(app, uds=str(tmp_path / "api.sock"), log_level="error")
+    config = uvicorn.Config(app, uds=str(sock_dir / "api.sock"), log_level="error")
     server2 = uvicorn.Server(config)
     thread2 = threading.Thread(target=server2.run, daemon=True)
     thread2.start()
     try:
-        _wait_until(lambda: (tmp_path / "api.sock").exists(), what="restarted socket")
+        _wait_until(lambda: (sock_dir / "api.sock").exists(), what="restarted socket")
         time.sleep(0.5)  # several polls against an unchanged corpus
         assert _offer_count(stack2) == 1, "an unchanged corpus re-emitted an offer after restart"
         assert service2.relearn_status().state == RELEARN_PENDING  # gate state survived the restart
@@ -364,7 +366,7 @@ def test_serve_watcher_survives_restart_without_duplicate_offers(tmp_path: Path)
     assert not thread2.is_alive()
 
 
-def test_serve_watcher_error_isolation_keeps_the_server_up(tmp_path: Path) -> None:
+def test_serve_watcher_error_isolation_keeps_the_server_up(tmp_path: Path, sock_dir: Path) -> None:
     """A broken watcher state file never takes the API down; repair resumes detection."""
     state_path = tmp_path / "watch-state.json"
     stack, server, thread, corpus = _serve_app(
@@ -375,13 +377,14 @@ def test_serve_watcher_error_isolation_keeps_the_server_up(tmp_path: Path) -> No
             "watch_cooldown_seconds": 0.3,
             "watch_state_path": state_path,
         },
+        sock_dir,
     )
     service = stack.service  # type: ignore[attr-defined]
     try:
         _wait_until(lambda: state_path.exists(), what="watcher state file")
         state_path.write_text("{corrupted", encoding="utf-8")
         time.sleep(0.5)  # several failing polls
-        assert _health(tmp_path / "api.sock") == 200, "watcher failure took the server down"
+        assert _health(sock_dir / "api.sock") == 200, "watcher failure took the server down"
         assert _offer_count(stack) == 0
 
         # Operator repairs by removing the corrupt state; detection resumes.

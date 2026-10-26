@@ -321,9 +321,9 @@ def test_f1_path_escape_message_does_not_leak_ops_root(stack: Any, tmp_path: Pat
 # ------------------------------------------------------ F2: unix socket mode
 
 
-def test_f2_unix_socket_created_0600_regardless_of_umask(stack: Any, tmp_path: Path) -> None:
+def test_f2_unix_socket_created_0600_regardless_of_umask(stack: Any, sock_dir: Path) -> None:
     """Even with a permissive ambient umask the socket is owner-only."""
-    socket_path = tmp_path / "api.sock"
+    socket_path = sock_dir / "api.sock"
     old_umask = os.umask(0o000)
     try:
         listener = http_api._bind_unix_socket(socket_path)
@@ -336,10 +336,10 @@ def test_f2_unix_socket_created_0600_regardless_of_umask(stack: Any, tmp_path: P
         listener.close()
 
 
-def test_f2_serve_over_prebound_socket_still_works(stack: Any, tmp_path: Path) -> None:
+def test_f2_serve_over_prebound_socket_still_works(stack: Any, sock_dir: Path) -> None:
     """The fd-passed uvicorn path serves real requests end to end."""
     app = create_app(stack)
-    socket_path = tmp_path / "api.sock"
+    socket_path = sock_dir / "api.sock"
     listener = http_api._bind_unix_socket(socket_path)
     config = uvicorn.Config(app, fd=listener.fileno(), log_level="error")
     server = uvicorn.Server(config)

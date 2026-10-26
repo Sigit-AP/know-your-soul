@@ -467,10 +467,10 @@ def test_restart_persistence(tmp_path: Path) -> None:
         second.close()
 
 
-def test_live_unix_socket_server_and_graceful_shutdown(stack: Any, tmp_path: Path) -> None:
+def test_live_unix_socket_server_and_graceful_shutdown(stack: Any, sock_dir: Path) -> None:
     """The app serves over a real unix socket and shuts down cleanly."""
     app = create_app(stack)
-    socket_path = tmp_path / "api.sock"
+    socket_path = sock_dir / "api.sock"
     config = uvicorn.Config(app, uds=str(socket_path), log_level="error")
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)

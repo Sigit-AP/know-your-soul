@@ -163,9 +163,9 @@ def _denial_scope(remote_addr: str = "10.9.9.9") -> dict[str, Any]:
 # ---------------------------------------------------- S-3: restartable socket
 
 
-def test_bind_unlinks_stale_socket_and_restarts_repeatedly(tmp_path: Path) -> None:
+def test_bind_unlinks_stale_socket_and_restarts_repeatedly(sock_dir: Path) -> None:
     """S-3: a clean shutdown leaves the socket file; every restart must still bind."""
-    socket_path = tmp_path / "api.sock"
+    socket_path = sock_dir / "api.sock"
     for attempt in range(3):
         listener = http_api._bind_unix_socket(socket_path)
         try:
@@ -176,9 +176,9 @@ def test_bind_unlinks_stale_socket_and_restarts_repeatedly(tmp_path: Path) -> No
         assert socket_path.exists(), f"attempt {attempt}: close alone must leave the file (non-vacuous setup)"
 
 
-def test_bind_refuses_a_live_listening_socket(tmp_path: Path) -> None:
+def test_bind_refuses_a_live_listening_socket(sock_dir: Path) -> None:
     """S-3 fail-closed: a socket another process is listening on is not 'stale'."""
-    socket_path = tmp_path / "live.sock"
+    socket_path = sock_dir / "live.sock"
     live = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     live.bind(str(socket_path))
     live.listen(1)
@@ -190,19 +190,19 @@ def test_bind_refuses_a_live_listening_socket(tmp_path: Path) -> None:
         live.close()
 
 
-def test_bind_refuses_a_non_socket_file(tmp_path: Path) -> None:
+def test_bind_refuses_a_non_socket_file(sock_dir: Path) -> None:
     """S-3 fail-closed: a regular file (or a symlink) is never unlinked."""
-    victim = tmp_path / "api.sock"
+    victim = sock_dir / "api.sock"
     victim.write_text("operator data — not a socket", encoding="utf-8")
     with pytest.raises(BindPolicyError):
         http_api._bind_unix_socket(victim)
     assert victim.read_text(encoding="utf-8") == "operator data — not a socket"
 
-    real_socket = tmp_path / "real.sock"
+    real_socket = sock_dir / "real.sock"
     holder = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     holder.bind(str(real_socket))
     try:
-        link = tmp_path / "link.sock"
+        link = sock_dir / "link.sock"
         link.symlink_to(real_socket)
         with pytest.raises(BindPolicyError):
             http_api._bind_unix_socket(link)
@@ -211,9 +211,9 @@ def test_bind_refuses_a_non_socket_file(tmp_path: Path) -> None:
         holder.close()
 
 
-def test_serve_removes_socket_file_on_shutdown(stack: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_serve_removes_socket_file_on_shutdown(stack: Any, sock_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """S-3: a clean ``serve`` shutdown deletes its socket file."""
-    socket_path = tmp_path / "served.sock"
+    socket_path = sock_dir / "served.sock"
 
     class _FakeServer:
         def __init__(self, config: Any) -> None:
@@ -230,9 +230,9 @@ def test_serve_removes_socket_file_on_shutdown(stack: Any, tmp_path: Path, monke
 # ------------------------------------------------- S-4: no bind→chmod window
 
 
-def test_bind_creates_socket_0600_with_world_open_umask(tmp_path: Path) -> None:
+def test_bind_creates_socket_0600_with_world_open_umask(sock_dir: Path) -> None:
     """S-4: the socket is born 0o600, regardless of the ambient umask."""
-    socket_path = tmp_path / "api.sock"
+    socket_path = sock_dir / "api.sock"
     previous = os.umask(0o000)
     try:
         listener = http_api._bind_unix_socket(socket_path)
@@ -244,13 +244,13 @@ def test_bind_creates_socket_0600_with_world_open_umask(tmp_path: Path) -> None:
         listener.close()
 
 
-def test_bind_never_chmods_through_a_swapped_symlink(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_bind_never_chmods_through_a_swapped_symlink(sock_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """S-4: a path swapped for a symlink between bind and chmod can no longer
     make the server chmod a victim file — the fixed code never chmods a path."""
-    victim = tmp_path / "victim.conf"
+    victim = sock_dir / "victim.conf"
     victim.write_text("mode must survive", encoding="utf-8")
     os.chmod(victim, 0o644)
-    socket_path = tmp_path / "api.sock"
+    socket_path = sock_dir / "api.sock"
     swap_ran = False
     real_chmod = os.chmod
 

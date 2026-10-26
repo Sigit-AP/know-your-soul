@@ -433,11 +433,11 @@ def test_replay_receive_passes_through_after_the_buffered_body() -> None:
 
 
 def test_unlink_stale_socket_refuses_when_the_probe_cannot_answer(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    sock_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import errno
 
-    sock_path = tmp_path / "stale.sock"
+    sock_path = sock_dir / "stale.sock"
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     listener.bind(str(sock_path))
     listener.close()
@@ -489,7 +489,7 @@ def test_serve_http_branch_builds_a_uvicorn_config(tmp_path: Path, monkeypatch: 
 
 
 def test_serve_cleanup_tolerates_a_socket_that_is_no_longer_ours(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, sock_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import uvicorn
 
@@ -506,7 +506,7 @@ def test_serve_cleanup_tolerates_a_socket_that_is_no_longer_ours(
 
     monkeypatch.setattr(http_api_module, "_unlink_stale_socket", _flaky)
     try:
-        serve(stack, socket_path=tmp_path / "api.sock")  # must not raise
+        serve(stack, socket_path=sock_dir / "api.sock")  # must not raise
         assert len(calls) == 2
     finally:
         stack.close()

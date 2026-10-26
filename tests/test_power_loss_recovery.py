@@ -113,15 +113,21 @@ def test_protected_backup_fsyncs_every_staged_file_before_activation(
     never reached disk."""
     store, projector = _populated(tmp_path)
     projector.rebuild()
-    events: list[tuple[str, str]] = []  # one ordered log of ("fsync"|"replace", path)
+    # Resolve fsynced fds by (st_dev, st_ino) instead of /proc/self/fd — fstat
+    # is portable (Linux + macOS); a rename preserves the inode, so a staged
+    # file fsynced before the activating os.replace matches the dest file's
+    # inode afterwards.
+    events: list[tuple[str, tuple[int, int] | str]] = []  # ordered ("fsync", (dev, ino)) | ("replace", path)
     real_fsync = os.fsync
     real_replace = os.replace
 
     def recording_fsync(fd: int) -> None:
         try:
-            events.append(("fsync", os.readlink(f"/proc/self/fd/{fd}")))
+            info = os.fstat(fd)
         except OSError:
             events.append(("fsync", f"fd:{fd}"))
+        else:
+            events.append(("fsync", (info.st_dev, info.st_ino)))
         real_fsync(fd)
 
     def recording_replace(src: object, dst: object) -> None:
@@ -135,15 +141,14 @@ def test_protected_backup_fsyncs_every_staged_file_before_activation(
     assert receipt.verified
     # Staged files are fsynced under the stage directory (`.<dest>.tmp-<pid>`);
     # the activating rename then moves them to `dest` unchanged.
-    relatives = [str(path.relative_to(dest)) for path in dest.rglob("*") if path.is_file()]
+    staged_files = [path for path in dest.rglob("*") if path.is_file()]
+    relatives = [str(path.relative_to(dest)) for path in staged_files]
     assert {"soul.db", "CURRENT"} <= set(relatives) and any(rel.startswith("generation/") for rel in relatives)
     activation = events.index(("replace", str(dest)))
-    stage_marker = f"/.{dest.name}.tmp-"
-    for rel in relatives:
+    for path, rel in zip(staged_files, relatives, strict=True):
+        info = path.stat()
         hits = [
-            index
-            for index, (kind, path) in enumerate(events)
-            if kind == "fsync" and path.endswith(f"/{rel}") and stage_marker in path
+            index for index, (kind, key) in enumerate(events) if kind == "fsync" and key == (info.st_dev, info.st_ino)
         ]
         assert hits, f"staged file {rel} was never fsynced"
         assert max(hits) < activation, f"staged file {rel} fsynced only after the activating rename"

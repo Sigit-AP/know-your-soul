@@ -643,10 +643,10 @@ def test_socket_guard_double_install_returns_self() -> None:
         guard.uninstall()
 
 
-def test_socket_guard_allows_unix_connect_ex(tmp_path: Path) -> None:
+def test_socket_guard_allows_unix_connect_ex(sock_dir: Path) -> None:
     import socket
 
-    listener_path = tmp_path / "l.sock"
+    listener_path = sock_dir / "l.sock"
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     listener.bind(str(listener_path))
     listener.listen(1)
@@ -664,10 +664,10 @@ def test_socket_guard_allows_unix_connect_ex(tmp_path: Path) -> None:
         listener.close()
 
 
-def test_socket_guard_allows_unix_sendto(tmp_path: Path) -> None:
+def test_socket_guard_allows_unix_sendto(sock_dir: Path) -> None:
     import socket
 
-    receiver_path = tmp_path / "r.sock"
+    receiver_path = sock_dir / "r.sock"
     receiver = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
     receiver.bind(str(receiver_path))
     guard = runtime_guard.SocketGuard()

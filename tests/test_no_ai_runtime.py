@@ -39,6 +39,10 @@ from know_your_soul import runtime_guard
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC = REPO_ROOT / "src"
 
+# AF_UNIX sun_path is limited to ~104 bytes on macOS; $TMPDIR there is a long
+# /var/folders/... path, so bind test sockets under short /tmp when available.
+_SHORT_TMP = "/tmp" if os.path.isdir("/tmp") else os.environ.get("TMPDIR", "/tmp")
+
 # RFC 5737 TEST-NET-1: never routed, so a probe can only fail by being denied.
 TEST_NET = ("192.0.2.1", 9)
 
@@ -62,7 +66,7 @@ def _clean_mcp_server():
 def _unix_roundtrip(name: str = "roundtrip") -> None:
     """Prove AF_UNIX sockets still work while a socket guard may be active."""
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    listener = os.path.join(os.environ.get("TMPDIR", "/tmp"), f"soul-guard-{name}-{os.getpid()}.sock")
+    listener = os.path.join(_SHORT_TMP, f"soul-guard-{name}-{os.getpid()}.sock")
     try:
         server.bind(listener)
         server.listen(1)
@@ -334,7 +338,7 @@ def test_outbound_http_clients_are_denied() -> None:
 
 def test_local_unix_sockets_stay_usable() -> None:
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    listener = os.path.join(os.environ.get("TMPDIR", "/tmp"), f"soul-guard-{os.getpid()}.sock")
+    listener = os.path.join(_SHORT_TMP, f"soul-guard-{os.getpid()}.sock")
     try:
         server.bind(listener)
         server.listen(1)

@@ -329,17 +329,24 @@ def test_publish_collapses_raw_newlines_and_tabs_in_summaries(tmp_path: Path) ->
 
 def test_new_generation_dir_parent_is_fsynced(tmp_path: Path, monkeypatch) -> None:
     """A crash after writing a new generation must see the dir entry persist."""
-    fsynced: list[str] = []
+    # Resolve fsynced fds by (st_dev, st_ino) instead of /proc/self/fd — fstat
+    # works on directory fds on both Linux and macOS, /proc is Linux-only.
+    fsynced: list[tuple[int, int]] = []
     real_fsync = os.fsync
 
     def spy(fd: int) -> None:
         try:
-            fsynced.append(os.readlink(f"/proc/self/fd/{fd}"))
+            info = os.fstat(fd)
         except OSError:
-            fsynced.append(str(fd))
+            pass
+        else:
+            fsynced.append((info.st_dev, info.st_ino))
         real_fsync(fd)
 
     monkeypatch.setattr(os, "fsync", spy)
     _store, _nodes = _imported_graph(tmp_path, {"alpha.md": b"# Alpha\n\nBody text.\n"})
-    generations_dir = str(tmp_path / "out" / "generations")
-    assert generations_dir in fsynced, fsynced
+    generations_dir = tmp_path / "out" / "generations"
+    info = os.stat(generations_dir)
+    assert (info.st_dev, info.st_ino) in fsynced, (
+        f"fsync was never called on an open handle of {generations_dir}; fsynced (dev, ino): {fsynced}"
+    )
