@@ -134,7 +134,20 @@ from soul_knowledge.security import redact_text
 from soul_knowledge.source_registry import ParserVersions, RelearnOffer, SourceKind
 from soul_knowledge.store import PUBLISH_CAPACITY_RATIO, EventStore, PublishCapacityExceeded, StoreError
 
-__all__ = ["KnowledgeService"]
+__all__ = ["InvalidPublishCapacity", "KnowledgeService"]
+
+
+class InvalidPublishCapacity(PublishCapacityExceeded):
+    """A ``publish_capacity_bytes`` override above the per-artifact cap.
+
+    SUB48-1: an override beyond ``ARTIFACT_MAX_BYTES`` silently disarmed the
+    F-3 write-side guard (live probe: ``2**20`` grew the store until every
+    publish/repair failed with ``OversizedArtifactError``). Construction now
+    fails closed with this typed error instead of accepting a guard ceiling
+    the projection can never honor. A ``PublishCapacityExceeded`` subclass so
+    the HTTP/MCP envelopes surface it through the existing StoreError path.
+    """
+
 
 _MAX_SNAPSHOT_CACHE = 8
 _MAX_PROVENANCE_ENTRIES = 32
@@ -225,11 +238,20 @@ class KnowledgeService:
         # service refuses log_event writes whose conservative size estimate
         # would cross 95% of it, so the store can never grow past the point
         # where a repair rebuild fails permanently.
-        self._publish_capacity_bytes = (
-            int(ARTIFACT_MAX_BYTES * PUBLISH_CAPACITY_RATIO)
-            if publish_capacity_bytes is None
-            else int(publish_capacity_bytes)
-        )
+        if publish_capacity_bytes is None:
+            self._publish_capacity_bytes = int(ARTIFACT_MAX_BYTES * PUBLISH_CAPACITY_RATIO)
+        else:
+            override = int(publish_capacity_bytes)
+            if override > ARTIFACT_MAX_BYTES:
+                # SUB48-1: fail closed. A ceiling above the per-artifact cap
+                # disarms the guard — the store grows until every publish and
+                # repair fails with OversizedArtifactError.
+                raise InvalidPublishCapacity(
+                    f"publish_capacity_bytes override {override} exceeds the per-artifact cap "
+                    f"{ARTIFACT_MAX_BYTES} bytes; the F-3 guard cannot protect a ceiling the "
+                    "projection can never publish. Lower the override or retire nodes instead."
+                )
+            self._publish_capacity_bytes = override
         # F-7: reader-triggered repairs are rate-limited so a sustained write
         # stream no longer forces one rebuild per read.
         self._repair_cooldown_seconds = float(repair_cooldown_seconds)

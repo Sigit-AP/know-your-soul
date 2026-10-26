@@ -49,6 +49,9 @@ no committed date).
 | F-SUB40-1 | minor | `domain.storage_payload` rendered quantized zero/sub-1e-6 Decimals in scientific notation (`0E-12`) vs `serialize_score`'s fixed point (`0.000000000000`) — parse-back safe, shape-only inconsistency | canonical serialization | **CLOSED** (SUB-46): fixed-point rendering via `format(quantize_score(v), "f")`; Task 3A fixtures untouched and green; bench re-run 24/24 with 0 per-case diffs vs ledger `20261026T031852Z` (`docs/recovery/sub46-final-residual-closures.md`) |
 | H-7 | minor | Dead code: `StructuredLogger.to_stream` (0 call sites, re-verified by grep before removal) | hygiene | **CLOSED** (SUB-46): removed with the orphaned `TextIO` import; suite + pyright fresh |
 | S-7 | minor | Design limit: the event chain detects partial tamper (T1/T2/T3/T6) but not a full rewrite with anchor recompute — the anchor lives in the same SQLite file it guards | audit chain integrity (documented boundary) | **CLOSED as documented** (SUB-46): honest limitation written up with the operator-facing mitigation (off-DB backups as external anchors) in `docs/recovery/sub46-final-residual-closures.md`; no code change recommended inside the repository trust model |
+| SUB48-1 | minor | `publish_capacity_bytes` override above `ARTIFACT_MAX_BYTES` accepted silently, disarming the F-3 write-side guard (live probe: `2**20` → `OversizedArtifactError` outage at 238,600 B over the 65,536 B cap) | fail-closed capacity guard | **CLOSED** (SUB-52): construction fails closed with the typed `InvalidPublishCapacity` (a `PublishCapacityExceeded`/StoreError subclass); RED-first probe pins `ARTIFACT_MAX_BYTES + 1` and `2**20` rejected, boundary value constructible (`docs/recovery/sub52-final-residual-closures.md`) |
+| F-SUB51-1 | important | `backup.inspect_backup` raised untyped `sqlite3.DatabaseError` on a non-SQLite file, breaking `restore_store`'s documented `BackupError` contract | typed error contract | **CLOSED** (SUB-52): first pragma wrapped → typed `BackupError`; regression tests pin both `inspect_backup` and `restore_store` paths (`docs/recovery/sub52-final-residual-closures.md`) |
+| F-SUB51-2 | cosmetic | Dead `elif isinstance(error, PayloadTooLarge)` branch in `error_envelope` (unreachable behind the `KnowledgeError` branch carrying the identical code) | hygiene | **CLOSED** (SUB-52): branch removed; behavior pinned unchanged (code, `retryable`, `audit_event_id`) (`docs/recovery/sub52-final-residual-closures.md`) |
 
 ## 3. Recovery loop (launch blockers only)
 
@@ -73,8 +76,9 @@ iterations (each with verified improvement: 4/24 → 21/24 → 23/24 → 24/24).
 Release requires **all** of:
 
 - [x] Full `pytest -q` green with no integration-pending acceptance skips
-      remaining (fresh 2026-10-26: **`898 passed, 1 warning`, 0 skipped**,
-      exit 0 — supersedes the dated historical runs `632 passed, 1 skipped`
+      remaining (fresh 2026-10-26 ~12:35 UTC, SUB-52: **`1369 passed,
+      1 warning`, 0 skipped**, exit 0 — supersedes `898 passed` (SUB-44) and
+      the dated historical runs `632 passed, 1 skipped`
       (the one skip was the external Hermes-install check) and `690 passed,
       0 skipped` (wave-3 fix round, W3-11 closure: the check now runs for
       real) — `docs/verification.md` §1/§6).
@@ -89,8 +93,9 @@ Release requires **all** of:
       their byte-identical gate 2.0.0 ceilings; q03 vacuous-accepted with the
       explicit ledger annotation
       `vacuous: rubric unreachable under expected routing (case-design debt)`.
-      Ledger: `bench/results/ledger-20261026T031852Z.json` (fresh 2026-10-26;
-      supersedes `ledger-20261025T202627Z` after W3-2).
+      Ledger: `bench/results/ledger-20261026T122910Z.json` (fresh 2026-10-26
+      ~12:29 UTC, SUB-52; zero drift vs `ledger-20261026T031852Z` — 0/216
+      per-case field comparisons changed, verified programmatically).
 - [x] Graphify coverage ≥ 90% of the applicable 40-feature inventory, counted
       only from matrix rows whose owning contract tests pass (**40/40 =
       100%** — all three partial residuals closed; consistent with
@@ -106,5 +111,5 @@ Release requires **all** of:
 | Decision | **RELEASE-GO** — final whole-branch adversarial review (SUB-27, report `.superpowers/sdd/2026-10-24-superpower-knowledge-soul/review-final-whole-branch.md`, 2026-10-25 ~20:46 UTC) independently re-executed every release claim in a clean worktree (632 passed/1 skipped; bench 24/24 exit 0; frozen contracts byte-identical since 5f27976; bench-gate integrity attacked and held; security guards bite live). 3 MINOR findings closed in the release-evidence commit. |
 | Release commit | `docs: publish verified release evidence` (this commit) |
 | Fast-follow items | none open (F2/F4/F5 closed in wave-1 fix round; wave-2 F4/F5/F6 closed) |
-| Track items | **All closed**: T10-2/row 23 (`71f7547`), W2-F7/F8/F9 (`eebe06e`), K1 (operator ruling: minimum stays 128), Task 1 deferred minors ×9 (`f9a3237`), external Hermes-install verification (wave-3 W3-11: real git-clean/tag-pin test, runs green on this host); wave-3 minors W3-7/W3-8(a)/W3-9/W3-11 closed by SUB-34 (`docs/recovery/wave3-ops-timeout-rubric-external.md`); case-design debt (non-blocking, ledger-annotated): q03 rubric unreachable under expected routing (vacuous-accepted), q07 ceiling feasible only via actual P7 routing vs expected P2 |
-| Unmeasured claims (explicit) | (1) NL answer quality vs the raw-corpus read — measured gap remains (mean `gap_vs_raw_read` 0.5549, ledger 20261026T031852Z); against the achievable compliant ceiling the system delivers 24/24, one of them (q03) vacuous-accepted as case-design debt, not delivered quality. (2) Latency claims limited to 5 repeats on this host (p50 median 14.29 ms, p95 median 20.40 ms — host-dependent, re-measured 2026-10-26). (3) ~~Hermes source-tree non-modification verified corpus-side only~~ — **now evidenced on both sides**: the install-tree check runs for real (`TestNoHermesSourceModification`, wave-3 W3-11): `/root/.hermes/hermes-agent` HEAD `bf0203a7` == `v0.22.5^{commit}`, `git status --porcelain` empty, stash empty; the test fails against a dirty synthetic tree (non-vacuous). (4) Token savings (mean 94.18%) measured against the raw-corpus baseline; they do not imply raw-read-equivalent answers while `gap_vs_raw_read` > 0. |
+| Track items | **All closed**: T10-2/row 23 (`71f7547`), W2-F7/F8/F9 (`eebe06e`), K1 (operator ruling: minimum stays 128), Task 1 deferred minors ×9 (`f9a3237`), external Hermes-install verification (wave-3 W3-11: real git-clean/tag-pin test, runs green on this host); wave-3 minors W3-7/W3-8(a)/W3-9/W3-11 closed by SUB-34 (`docs/recovery/wave3-ops-timeout-rubric-external.md`); final residuals SUB48-1/F-SUB51-1/F-SUB51-2 closed by SUB-52 (`docs/recovery/sub52-final-residual-closures.md`); case-design debt (non-blocking, ledger-annotated): q03 rubric unreachable under expected routing (vacuous-accepted), q07 ceiling feasible only via actual P7 routing vs expected P2 |
+| Unmeasured claims (explicit) | (1) NL answer quality vs the raw-corpus read — measured gap remains (mean `gap_vs_raw_read` 0.5549, ledger 20261026T122910Z); against the achievable compliant ceiling the system delivers 24/24, one of them (q03) vacuous-accepted as case-design debt, not delivered quality. (2) Latency claims limited to 5 repeats on this host (p50 median 9.69 ms, p95 median 12.15 ms — host-dependent, re-measured 2026-10-26 ~12:29 UTC). (3) ~~Hermes source-tree non-modification verified corpus-side only~~ — **now evidenced on both sides**: the install-tree check runs for real (`TestNoHermesSourceModification`, wave-3 W3-11): `/root/.hermes/hermes-agent` HEAD `bf0203a7` == `v0.22.5^{commit}`, `git status --porcelain` empty, stash empty; the test fails against a dirty synthetic tree (non-vacuous). (4) Token savings (mean 94.18%) measured against the raw-corpus baseline; they do not imply raw-read-equivalent answers while `gap_vs_raw_read` > 0. |

@@ -289,7 +289,13 @@ def inspect_backup(backup_path: str | Path) -> dict[str, Any]:
         raise BackupError(f"backup {str(path)!r} does not exist")
     conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     try:
-        quick = conn.execute("PRAGMA quick_check").fetchone()
+        try:
+            quick = conn.execute("PRAGMA quick_check").fetchone()
+        except sqlite3.DatabaseError as exc:
+            # F-SUB51-1: a file that is not a SQLite database fails the very
+            # first pragma with an untyped DatabaseError; surface the
+            # documented BackupError so restore_store's typed contract holds.
+            raise BackupError(f"backup {str(path)!r} is not a SQLite database: {exc}") from exc
         ok = quick is not None and str(quick[0]) == "ok"
         try:
             count, head = _anchor(conn)

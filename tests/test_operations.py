@@ -313,6 +313,23 @@ def test_backup_rejects_missing_source(tmp_path: Path) -> None:
         inspect_backup(tmp_path / "does-not-exist.sqlite3")
 
 
+def test_inspect_backup_rejects_a_non_sqlite_file(tmp_path: Path) -> None:
+    """F-SUB51-1: a non-SQLite file must surface the typed BackupError."""
+    bogus = tmp_path / "bogus.sqlite3"
+    bogus.write_bytes(b"this is not a sqlite database at all")
+    with pytest.raises(BackupError) as caught:
+        inspect_backup(bogus)
+    assert "not a SQLite database" in str(caught.value)
+
+
+def test_restore_store_rejects_a_non_sqlite_backup(tmp_path: Path) -> None:
+    """F-SUB51-1: restore_store keeps its documented BackupError contract."""
+    bogus = tmp_path / "bogus.sqlite3"
+    bogus.write_bytes(b"\x00\x01\x02\x03 not sqlite " * 256)
+    with pytest.raises(BackupError):  # never the untyped sqlite3.DatabaseError
+        restore_store(bogus, tmp_path / "dest.sqlite3")
+
+
 # ------------------------------------------------------------- concurrency
 
 

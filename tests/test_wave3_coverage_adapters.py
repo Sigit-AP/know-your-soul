@@ -167,11 +167,13 @@ def _raise_type_error(raw: Any) -> Any:
 
 
 def test_error_envelope_maps_payload_too_large() -> None:
-    # NOTE (F-SUB51-2): PayloadTooLarge is a KnowledgeError, so the dedicated
-    # elif branch in error_envelope is unreachable; the pinned behavior is the
-    # KnowledgeError branch carrying the same code.
+    # F-SUB51-2: PayloadTooLarge is a KnowledgeError carrying the same code, so
+    # the dedicated elif branch was dead and has been removed; the KnowledgeError
+    # branch behavior is pinned here (code, retryable, audit_event_id unchanged).
     envelope = error_envelope(PayloadTooLarge("too big"))
     assert envelope["error"]["code"] == "PAYLOAD_TOO_LARGE"
+    assert envelope["error"]["retryable"] is False
+    assert envelope["error"]["audit_event_id"] is None
 
 
 def test_ops_unknown_operation_is_a_404(tmp_path: Path) -> None:

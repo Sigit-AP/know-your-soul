@@ -26,6 +26,6 @@ USER soul
 VOLUME ["/data"]
 # Default store location inside the container; projections live next to it.
 ENV SOUL_STORE=/data/soul.sqlite3
-# The `soul-knowledge` console script is delivered by Task 7 (cli.py) and is
+# The `soul-knowledge` console script ships in the package (cli.py) and is
 # installed by the build above; e.g.: docker run --rm <image> soul-knowledge --help
 ENTRYPOINT ["soul-knowledge"]

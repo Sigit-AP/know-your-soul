@@ -61,7 +61,7 @@ from soul_knowledge.projection import (
     ProjectionValidationError,
     ProjectorBusy,
 )
-from soul_knowledge.service import KnowledgeService
+from soul_knowledge.service import InvalidPublishCapacity, KnowledgeService
 from soul_knowledge.store import EventStore, PublishCapacityExceeded
 
 NOW = datetime(2026, 10, 26, 12, 0, tzinfo=UTC)
@@ -380,6 +380,29 @@ def test_log_event_fails_closed_typed_near_publish_cap(tmp_path: Path) -> None:
     assert rows and all(str(row["status"]) == "complete" for row in rows)
 
 
+def test_publish_capacity_override_above_artifact_cap_fails_closed(tmp_path: Path) -> None:
+    """SUB48-1: an override above the per-artifact cap silently disarmed F-3.
+
+    Live probe: ``publish_capacity_bytes=2**20`` let the store grow until
+    every publish/repair failed with ``OversizedArtifactError`` (238600B over
+    the 65536B cap). Construction must now fail closed with a typed error
+    instead of accepting a guard ceiling the projection can never honor.
+    """
+    store = EventStore(tmp_path / "soul.sqlite3")
+    projector = GraphProjector(store, output_root=tmp_path / "out")
+    with pytest.raises(InvalidPublishCapacity) as caught:
+        KnowledgeService(store, projector, publish_capacity_bytes=ARTIFACT_MAX_BYTES + 1)
+    assert str(ARTIFACT_MAX_BYTES) in str(caught.value)
+    with pytest.raises(InvalidPublishCapacity):
+        KnowledgeService(store, projector, publish_capacity_bytes=2**20)
+    # InvalidPublishCapacity stays inside the StoreError family so the HTTP/MCP
+    # envelopes surface it typed, like the write-side PublishCapacityExceeded.
+    assert isinstance(caught.value, PublishCapacityExceeded)
+    # Boundary: an override at exactly the cap remains constructible.
+    service = KnowledgeService(store, projector, publish_capacity_bytes=ARTIFACT_MAX_BYTES)
+    assert service._publish_capacity_bytes == ARTIFACT_MAX_BYTES
+
+
 def test_publish_capacity_guard_still_allows_small_writes(tmp_path: Path) -> None:
     store = EventStore(tmp_path / "soul.sqlite3")
     projector = GraphProjector(store, output_root=tmp_path / "out")
@@ -519,8 +542,10 @@ def test_reader_storm_under_write_stream_bounds_repairs(tmp_path: Path) -> None:
     """F-7: a sustained write stream must not make every reader pay a rebuild."""
     store = EventStore(tmp_path / "soul.sqlite3")
     projector = GraphProjector(store, output_root=tmp_path / "out")
-    # A large capacity limit keeps the F-3 guard out of this scenario.
-    service = KnowledgeService(store, projector, repair_cooldown_seconds=2.0, publish_capacity_bytes=2**20)
+    # The maximum legal capacity limit keeps the F-3 guard out of this scenario
+    # (SUB48-1: overrides above ARTIFACT_MAX_BYTES are now rejected at
+    # construction, so this test rides the boundary value).
+    service = KnowledgeService(store, projector, repair_cooldown_seconds=2.0, publish_capacity_bytes=ARTIFACT_MAX_BYTES)
     _upsert(store, _node("KROOT"))
     _upsert(store, _node("n-1", parent="KROOT"), key="test:upsert:n-1")
     projector.rebuild()

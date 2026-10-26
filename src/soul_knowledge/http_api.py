@@ -775,8 +775,6 @@ def error_envelope(error: BaseException) -> dict[str, Any]:
         code, retryable, audit_event_id = "HOST_NOT_ALLOWED", False, None
     elif isinstance(error, UnauthorizedError):
         code, retryable, audit_event_id = "UNAUTHORIZED", False, None
-    elif isinstance(error, PayloadTooLarge):
-        code, retryable, audit_event_id = "PAYLOAD_TOO_LARGE", False, None
     elif isinstance(error, PathEscapeError):
         code, retryable, audit_event_id = "PATH_ESCAPE", False, None
     elif isinstance(error, StoreError):

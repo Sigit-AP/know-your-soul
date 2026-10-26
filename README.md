@@ -70,9 +70,14 @@ knowledge payload within 160 estimated tokens.
 
 ## Three access paths
 
-1. **CLI** — `soul-knowledge <operation>` for all fourteen operations plus
-   projection rebuild, backup, restore, and health.
-2. **Persistent local API** — versioned `/v1` JSON, Unix socket by default,
+1. **CLI** — `soul-knowledge <operation>` for all fourteen operations plus the
+   operator ops: projection rebuild, backup, restore, health, and the
+   operator-gated relearn lifecycle (`relearn-scan`, `relearn-status`,
+   `relearn-preview`, `relearn-apply`).
+2. **Persistent local API** — versioned `/v1` JSON (knowledge ops plus
+   `ops/rebuild`, `ops/backup`, `ops/restore`, `ops/health` and
+   `ops/relearn_scan` / `ops/relearn_status` / `ops/relearn_preview` /
+   `ops/relearn_apply`), Unix socket by default,
    optional loopback HTTP; API key required beyond loopback.
 3. **MCP server** — stdio (and optional Streamable HTTP), one startup
    allowlisted graph root, strict schemas/ranges, tools+resources-only

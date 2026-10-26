@@ -33,6 +33,18 @@ fixed to `uv run python bench/run.py …` (plain `python` fails
 `ModuleNotFoundError` outside the uv environment, audit H-1); `ruff format`
 offender count corrected to 162/163 files (§1).
 
+**Update 2026-10-26 ~12:35 UTC (SUB-52, HEAD `81e1823` + this fix wave)**:
+three final residuals closed — SUB48-1 (`publish_capacity_bytes` overrides
+above `ARTIFACT_MAX_BYTES` now fail closed at construction with the typed
+`InvalidPublishCapacity`; live-probe value `2**20` rejected), F-SUB51-1
+(`inspect_backup` surfaces the typed `BackupError` on non-SQLite files),
+F-SUB51-2 (dead `PayloadTooLarge` branch removed from `error_envelope`,
+behavior pinned unchanged). §1/§2 refreshed with fresh gate output: full
+suite **1369 passed, 0 skipped**; code coverage **99.47%** (7,227 stmts, 38
+miss); bench ledger `20261026T122910Z` — **zero drift** vs `20261026T031852Z`
+(0/216 per-case field comparisons changed, verified programmatically).
+Recovery doc: `docs/recovery/sub52-final-residual-closures.md`.
+
 *Concurrency note:* these rows were measured while the SUB-40..43 fix waves
 were landing in the working tree; the tree is transiently red mid-wave
 (e.g. `uv run ruff check` and even collection can fail on another agent's
@@ -46,11 +58,12 @@ audit, `uv run python bench/run.py`, then the Graphify coverage calculation.
 
 | Gate | Command | Exit code | Evidence (tail of fresh output) | Date (UTC) |
 |------|---------|-----------|----------------------------------|------------|
-| Full test suite | `.venv/bin/pytest tests/ -q` | **0** | `898 passed, 1 warning in 220.12s` — **0 skipped** (732 core + SUB-40 property tests + SUB-43 redaction probes, both landed concurrently); supersedes the dated historical rows `632 passed, 1 skipped` (pre-wave-3) and `690 passed` (wave-3 fix round) | 2026-10-26 |
-| Acceptance e2e | `.venv/bin/pytest tests/test_acceptance_e2e.py -q` | **0** | `49 passed in 35.70s` — the install-tree check (`TestNoHermesSourceModification`) executes for real; skip-gates only when no git-managed Hermes install exists | 2026-10-26 |
+| Full test suite | `.venv/bin/pytest tests/ -q` | **0** | `1369 passed, 1 warning in 244.02s` — **0 skipped** (SUB-52 wave incl. SUB48-1/F-SUB51-1/F-SUB51-2 regression probes); supersedes the dated historical rows `898 passed` (SUB-44), `632 passed, 1 skipped` (pre-wave-3) and `690 passed` (wave-3 fix round) | 2026-10-26 |
+| Acceptance e2e | `.venv/bin/pytest tests/test_acceptance_e2e.py -q` | **0** | `49 passed in 48.72s` — the install-tree check (`TestNoHermesSourceModification`) executes for real; skip-gates only when no git-managed Hermes install exists | 2026-10-26 |
+| Code coverage | `.venv/bin/pytest tests/ -q --cov=soul_knowledge --cov-report=term` | **0** | **99.47%** (7,227 statements, 38 miss; supersedes 99.46% / 7,220 / 39 from the wave-3 push) | 2026-10-26 |
 | Type checking | `.venv/bin/pyright` | **0** | `0 errors, 0 warnings, 0 informations` | 2026-10-26 |
 | Lint | `.venv/bin/ruff check .` | **0** | `All checks passed!` | 2026-10-26 |
-| Format | `.venv/bin/ruff format --check .` | **1 (pre-existing)** | `1 file would be reformatted, 162 files already formatted`; the single offender is `docs/mathematics/scoring.md` (comment alignment inside a fenced code block) — drift committed in `724843c` and never touched since (verified `git log --follow docs/mathematics/scoring.md` → sole commit `724843c`), i.e. pre-existing every fix wave; the contracts directory is frozen, so the drift is documented, not reformatted | 2026-10-26 |
+| Format | `.venv/bin/ruff format --check .` | **1 (pre-existing)** | `1 file would be reformatted, 190 files already formatted`; the single offender is `docs/mathematics/scoring.md` (comment alignment inside a fenced code block) — drift committed in `724843c` and never touched since (verified `git log --follow docs/mathematics/scoring.md` → sole commit `724843c`), i.e. pre-existing every fix wave; the contracts directory is frozen, so the drift is documented, not reformatted | 2026-10-26 |
 | Dependency audit | `/root/.local/bin/uv lock --check` | **0** | `Resolved 101 packages in 3ms` (lock consistent; zero forbidden distributions — `TestLockedNoProviderEnvironment`) | 2026-10-26 |
 
 Pre-existing issues found and fixed by the full-tree gates at integration
@@ -61,11 +74,14 @@ behavior unchanged — verified by the green suite above).
 
 ## 2. Benchmark (paired raw-SOUL vs system)
 
-Ledger: `bench/results/ledger-20261026T031852Z.json` (`repeats: 5`,
+Ledger: `bench/results/ledger-20261026T122910Z.json` (`repeats: 5`,
 `status: ok`, gate contract **2.1.0** "Opsi C + Ruling Q03") — refreshed
-2026-10-26 after W3-2 (injective ids, `c1165b5`); the previous
-`20261025T202627Z` numbers are superseded (token savings and token ranges
-shifted, quality/ceiling means unchanged). Command
+2026-10-26 ~12:29 UTC by SUB-52 after the final residual closures;
+**zero drift** vs `20261026T031852Z` (0/216 per-case comparisons across
+`quality_system`, `quality_ceiling`, `system_estimated_tokens`,
+`token_saving_ratio`, `gap_vs_raw_read`, `ceiling_node_ids`,
+`ceiling_method`, `verdict`, `expected_primary_domain` — verified
+programmatically). Command
 `.venv/bin/python bench/run.py run` (equivalently `uv run python
 bench/run.py run`) exits **0**: **24/24 cases accepted** —
 23 at their (byte-identical) gate 2.0.0 ceilings, q03 vacuous-accepted with
@@ -117,8 +133,8 @@ q16 stays 0.75 = ceiling — its `steelman` hit is content-delivered
 | Frozen questions | `bench/cases.json` | 24 cases, all 7 domains covered | `check: OK` exit 0 |
 | Estimator parity | `tests/fixtures/token_budget_cases.json` | 7/7 payload fixtures match | `TestTokenEstimatorParity` |
 | Repeats | bench ledger | 5 per case | ledger `repeats: 5` |
-| Latency p50 (per case, across 24 cases) | bench ledger | median **14.29 ms** (min 4.74, max 29.83; host-dependent, re-measured 2026-10-26) | ledger `latency_ms.p50` |
-| Latency p95 (per case, across 24 cases) | bench ledger | median **20.40 ms** (max 54.86; host-dependent) | ledger `latency_ms.p95` |
+| Latency p50 (per case, across 24 cases) | bench ledger | median **9.69 ms** (min 4.82, max 16.70; host-dependent, re-measured 2026-10-26 ~12:29 UTC) | ledger `latency_ms.p50` |
+| Latency p95 (per case, across 24 cases) | bench ledger | median **12.15 ms** (max 39.74; host-dependent) | ledger `latency_ms.p95` |
 | Token savings (paired) | bench ledger | mean **94.18%** (min 92.64%); system 420–968 est. tokens vs 13,151 raw-corpus baseline | ledger `token_saving_ratio` |
 | Compliant ceiling | bench ledger | per-case 0.0–1.0, mean **0.4042**; 18/24 cases below the 0.6 floor (`ceiling_below_floor`, enrichment debt) | ledger `quality_ceiling`, `ceiling_method: exact-full` (q03: `exact-full+single-root`) |
 | Quality verdicts | bench ledger | **24/24 accepted**; quality mean **0.4451**; q03 vacuous-accepted (annotated, `ceiling_unrestricted_2.0.0: 0.333333` preserved) | ledger `quality_system`, `quality_ceiling`, `verdict`, `ceiling_routing_note` |
@@ -201,6 +217,9 @@ reviewer verifies both the regression probe and the fix.
 | W3-9 (`body_timeout_seconds=0` wedge) | minor (config) | **CLOSED** — non-positive body deadlines refused at startup before any socket is bound | `docs/recovery/wave3-ops-timeout-rubric-external.md` |
 | W3-8(a) (rubric counts provenance filenames) | minor (measurement) | **CLOSED** — provenance excluded from rubric scoring text on both sides; 0/24 per-case numbers changed; bench exit 0, 24/24 | `docs/recovery/wave3-ops-timeout-rubric-external.md` |
 | W3-11 (external test was a vacuous stub) | minor (evidence integrity) | **CLOSED** — real git-clean/tag-pin check, runs and passes on this host; proven non-vacuous against a dirty synthetic tree | `docs/recovery/wave3-ops-timeout-rubric-external.md` |
+| SUB48-1 (`publish_capacity_bytes` override above `ARTIFACT_MAX_BYTES` disarmed F-3) | minor (fail-closed guard) | **CLOSED** — construction rejects overrides above the cap with typed `InvalidPublishCapacity` (fail-closed); live-probe value `2**20` rejected; boundary value stays constructible | `docs/recovery/sub52-final-residual-closures.md` |
+| F-SUB51-1 (`inspect_backup` leaked untyped `sqlite3.DatabaseError` on non-SQLite files) | important (typed error contract) | **CLOSED** — first pragma wrapped; `BackupError("... is not a SQLite database")`; `restore_store` keeps its documented typed contract | `docs/recovery/sub52-final-residual-closures.md` |
+| F-SUB51-2 (dead `PayloadTooLarge` branch in `error_envelope`) | cosmetic (hygiene) | **CLOSED** — branch removed; behavior pinned unchanged (code/`retryable`/`audit_event_id`) | `docs/recovery/sub52-final-residual-closures.md` |
 
 ## 6. External check (wave-3 W3-11 closure — no vacuous skips remain)
 
