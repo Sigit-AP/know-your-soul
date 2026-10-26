@@ -165,7 +165,10 @@ def build_parser() -> argparse.ArgumentParser:
     export_parser.add_argument(
         "--formats",
         default=None,
-        help="comma-separated artifact names (default: all registered 'format' exports)",
+        help=(
+            "comma-separated artifact names, short aliases (dot, mermaid, tabular, graphml, svg, html, book) "
+            "or 'all' (default: all registered 'format' exports)"
+        ),
     )
     export_parser.add_argument(
         "--out",
@@ -180,7 +183,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--modules",
         dest="formats",
         default=None,
-        help="comma-separated artifact names (default: all registered 'analytics' modules)",
+        help=(
+            "comma-separated artifact names, short aliases (centrality, components, cycles, communities, "
+            "bridges, review-signals, health, report-v2, generation-diff, timeline) or 'all' "
+            "(default: all registered 'analytics' modules)"
+        ),
     )
     analytics_parser.add_argument(
         "--out",

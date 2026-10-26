@@ -1,12 +1,22 @@
 """The operational ``export``/``analytics`` CLI commands (ATM F-D1).
 
-Both commands read the *active* generation's ``graph.json`` (never the store
-directly, never a rebuild), run the export registry over that read model —
-round-trip-validated and cap-checked, fail-closed — and write the artifacts
-into a contained output directory (default ``<output-root>/exports``),
-printing a canonical JSON summary on stdout. Structured errors go to stderr.
+Both commands read the *active* generation's ``graph.json`` (never a rebuild,
+never a store write), run the built-in ATM registry
+(:mod:`know_your_soul.exporters.builtin`) over that read model —
+round-trip-validated and cap-checked, fail-closed — and write the artifacts into a
+contained output directory (default ``<output-root>/exports``), printing a
+canonical JSON summary on stdout. Structured errors go to stderr.
 
-Argument validation is strict: unknown format names and empty selections are
+Context-dependent artifacts (timeline, generation-diff, components,
+review-signals, report-v2, book) are fed by
+:func:`know_your_soul.exporters.builtin.gather_context`, which reads the
+store with strictly read-only ``SELECT`` statements. Selections accept full
+artifact names, short aliases (``dot``, ``mermaid``, ``tabular``, ``graphml``,
+``svg``, ``html``, ``book``, ``centrality``, ``components``, ``cycles``,
+``communities``, ``bridges``, ``review-signals``, ``health``, ``report-v2``,
+``generation-diff``, ``timeline``) or ``all``.
+
+Argument validation is strict: unknown names/aliases and empty selections are
 usage errors (exit 2), and every output path resolves through
 :func:`know_your_soul.security.resolve_within_root` — escapes fail closed.
 These commands are OPS surface only: they are not knowledge operations and
@@ -24,10 +34,10 @@ from pathlib import Path
 from typing import Any
 
 from know_your_soul.domain import canonical_json
+from know_your_soul.exporters import builtin
 from know_your_soul.exporters.orchestrator import (
     ExportError,
     UnknownExportFormatError,
-    default_registry,
     produce_exports,
 )
 from know_your_soul.http_api import build_stack
@@ -77,12 +87,6 @@ def run_export_command(args: argparse.Namespace, *, command: str) -> int:
     """Run the ``export`` or ``analytics`` command; return the exit code."""
     kind = _COMMAND_KIND[command]
     requested = getattr(args, "formats", None)
-    select: tuple[str, ...] | None = None
-    if requested is not None:
-        parts = [part.strip() for part in str(requested).split(",")]
-        if not parts or any(not part for part in parts):
-            return _usage_error(f"--formats/--modules needs a comma-separated list of names, got {requested!r}")
-        select = tuple(parts)
 
     stack = build_stack(args.store, args.output_root, ops_root=args.ops_root)
     try:
@@ -99,14 +103,22 @@ def run_export_command(args: argparse.Namespace, *, command: str) -> int:
         if not isinstance(read_model, dict):
             return _operation_error("GENERATION_UNREADABLE", "active generation graph.json is not an object")
 
-        registry = default_registry()
+        # The store feeds the context-dependent producers through a strictly
+        # read-only snapshot (SELECTs only; the event log is never written).
+        try:
+            context = builtin.gather_context(stack.store, generation_dir=generation)
+        except ExportError as error:
+            return _operation_error("EXPORT_CONTEXT_FAILED", str(error))
+        registry = builtin.build_registry(context)
+
+        select: tuple[str, ...] | None = None
+        if requested is not None:
+            try:
+                select = builtin.resolve_selection(str(requested), kind=kind, registry=registry)
+            except ValueError as error:
+                return _usage_error(str(error))
         if select is None:
             select = registry.names(kind=kind)
-        unknown = sorted(set(select) - set(registry.names()))
-        if unknown:
-            return _usage_error(
-                f"unknown export format(s): {', '.join(unknown)}; registered: {', '.join(registry.names())}"
-            )
         try:
             artifacts = produce_exports(registry, read_model, select=select)
         except UnknownExportFormatError as error:

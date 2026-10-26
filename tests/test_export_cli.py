@@ -22,7 +22,7 @@ from know_your_soul.domain import (
     NodeKind,
     PrimaryDomain,
 )
-from know_your_soul.exporters.orchestrator import default_registry
+from know_your_soul.exporters.builtin import build_registry
 from know_your_soul.http_api import KNOWLEDGE_OPERATIONS, OPS_OPERATIONS
 from know_your_soul.projection import GraphProjector
 from know_your_soul.store import EventStore
@@ -76,7 +76,7 @@ def test_export_writes_default_formats_and_prints_summary(tmp_path: Path, capsys
     assert out is not None
     assert out["ok"] is True
     assert out["command"] == "export"
-    registry = default_registry()
+    registry = build_registry()
     expected = set(registry.names(kind="format"))
     written = {entry["name"]: entry for entry in out["artifacts"]}  # type: ignore[index]
     assert set(written) == expected
@@ -94,14 +94,14 @@ def test_analytics_writes_analytics_modules(tmp_path: Path, capsys: pytest.Captu
     assert code == 0, err
     assert out is not None
     assert out["command"] == "analytics"
-    registry = default_registry()
+    registry = build_registry()
     written = {entry["name"] for entry in out["artifacts"]}  # type: ignore[index]
     assert written == set(registry.names(kind="analytics"))
 
 
 def test_export_with_explicit_format_selection(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     db_path, out_path = _seeded_paths(tmp_path)
-    registry = default_registry()
+    registry = build_registry()
     chosen = registry.names(kind="analytics")[0]
     code, out, err = _invoke(_base(db_path, out_path) + ["export", "--formats", chosen], capsys)
     assert code == 0, err
@@ -131,7 +131,7 @@ def test_export_honours_contained_custom_output_dir(tmp_path: Path, capsys: pyte
     assert out is not None
     out_dir = Path(str(out["output_dir"]))
     assert out_dir.is_relative_to(out_path.resolve())
-    assert (out_dir / default_registry().names(kind="format")[0]).is_file()
+    assert (out_dir / build_registry().names(kind="format")[0]).is_file()
 
 
 # ------------------------------------------------------------ strict failure

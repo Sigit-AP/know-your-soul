@@ -134,6 +134,73 @@ server's lifespan (arch review F-1; `update_pipeline.SourceWatchLoop` +
   persisted snapshot and the registry baseline agree); changes made while
   the server was down surface as an offer on the first poll.
 
+## Export and analytics artifacts (ATM)
+
+Two operational commands turn the **active generation** into derived
+artifacts. Both are read-only against the store (plain `SELECT`s; the event
+count is pinned unchanged by
+`tests/test_export_cli.py::test_export_and_analytics_do_not_touch_the_store`),
+never trigger a rebuild, and are OPS surface only — they are not knowledge
+operations and are never dispatched over MCP or HTTP.
+
+```bash
+know-your-soul --store soul.sqlite3 --output-root graph export --formats all
+know-your-soul --store bench.sqlite3 --output-root graph analytics --modules all
+```
+
+- `export` produces the **format** artifacts (16): `exports/node-index.json`,
+  `exports/graph.dot` (Graphviz), `exports/graph.mmd` (Mermaid),
+  `exports/nodes.csv` + `exports/edges.csv` (RFC 4180),
+  `exports/graph.graphml`, `exports/graph.svg`, `exports/graph.html`
+  (self-contained viewer, positions from the deterministic layout engine),
+  and the book `book/index.md` + `book/P1.md`..`book/P7.md` (one page per
+  primary domain, fixed page set — empty domains get an explicit empty page).
+- `analytics` produces the **analytics** artifacts (14):
+  `analytics/domain-rollup.json`, `analytics/centrality.json`,
+  `analytics/components.json`, `analytics/cycles.json`,
+  `analytics/communities.json`, `analytics/bridges.json`,
+  `analytics/review-signals.json`, `analytics/health.json`,
+  `analytics/report-v2.json` + `analytics/graph-report-v2.md`,
+  `analytics/generation-diff.json` + `analytics/DIFF.md`,
+  `analytics/timeline.json` + `analytics/TIMELINE.md`.
+- `--formats` / `--modules` accept full artifact names, short aliases (`dot`,
+  `mermaid`, `tabular`, `graphml`, `svg`, `html`, `book`, `centrality`,
+  `components`, `cycles`, `communities`, `bridges`, `review-signals`,
+  `health`, `report-v2`, `generation-diff`, `timeline`), or `all` (every
+  artifact of the command's kind). Unknown selections are usage errors
+  (exit 2); an example with a real artifact name:
+  `know-your-soul ... export --formats exports/graph.dot`.
+- Every artifact is produced fail-closed through the export registry
+  (`exporters/orchestrator.py` + `exporters/builtin.py`): an explicit
+  per-artifact byte cap, then a format-specific round-trip validator that
+  parses the produced bytes back before anything is written. Writes are
+  atomic and idempotent (unchanged bytes are not rewritten; the summary marks
+  `written: false`).
+- The summary on stdout is canonical JSON: `ok`, `generation`,
+  `registry_fingerprint`, `output_dir`, and per-artifact
+  `name/sha256/size/version/kind/written`.
+- `--out DIR` redirects output (default `<output-root>/exports`); the path is
+  contained by `resolve_within_root` and escapes fail closed (exit 2).
+- **generation-diff** compares the active generation with the newest other
+  on-disk generation (highest knowledge watermark, content-hash tie-break).
+  When only one generation exists — or retention collected the older ones —
+  the artifact reports `no_previous_generation` as a valid result, not an
+  error.
+- **timeline** replays the store's domain event log (`event_log WHERE
+  kind='domain' ORDER BY event_seq`, read-only) into per-node/per-domain P/M/E
+  learning series with the frozen scoring contract.
+
+## Generation retention (ATM wave D)
+
+`src/know_your_soul/ops/retention.py` (SUB-69) implements deterministic
+generation GC: `RetentionPolicy` (keep N newest + pinned), `plan_retention`
+(pure plan), `run_retention` (delete only non-CURRENT, non-pinned generations
+not referenced by any backup, with an audit event per deletion). Retention
+never touches the store (the SSOT); it only removes derived generation
+directories. Because `export`/`analytics` treat a missing previous
+generation as an honest `no_previous_generation` result, retention and the
+diff artifact compose safely.
+
 ## Container
 
 `deploy/Dockerfile`: two-stage build on `python:3.14-slim`, non-root `soul`

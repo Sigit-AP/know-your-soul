@@ -33,6 +33,7 @@ import csv
 import io
 import re
 from collections.abc import Mapping
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from know_your_soul.exporters.orchestrator import (
@@ -41,6 +42,7 @@ from know_your_soul.exporters.orchestrator import (
     ExportRegistry,
     ExportRoundTripError,
 )
+from know_your_soul.scoring import serialize_score
 
 __all__ = [
     "EDGE_COLUMNS",
@@ -128,12 +130,41 @@ def _score(node: dict[str, Any], field: str, default: str) -> str:
     if isinstance(scores, dict):
         value = scores.get({"u": "uncertainty"}.get(field, field))
         if value not in (None, ""):
-            return str(value)
+            # The read model renders exact zero as ``0E-12``; the CSV contract
+            # is the fixed-point 12-decimal serialization (spec section 9).
+            try:
+                return serialize_score(Decimal(str(value)))
+            except InvalidOperation:
+                return str(value)  # non-numeric scores fail the round-trip
     return default
 
 
 def _as_int(value: Any, default: int) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) else default
+
+
+def _node_confidence(node: dict[str, Any]) -> str:
+    """The numeric confidence column: ``scores.confidence`` first.
+
+    The read model also carries a top-level confidence *label* (EXTRACTED /
+    INFERRED / AMBIGUOUS); a label is not a score, so the numeric column
+    falls back to it only when it actually parses as a number.
+    """
+    scores = node.get("scores")
+    if isinstance(scores, dict):
+        value = scores.get("confidence")
+        if value not in (None, ""):
+            try:
+                return serialize_score(Decimal(str(value)))
+            except InvalidOperation:
+                pass
+    raw = node.get("confidence")
+    if raw not in (None, ""):
+        try:
+            return serialize_score(Decimal(str(raw)))
+        except InvalidOperation:
+            return str(raw)  # non-numeric confidence fails the round-trip
+    return _ZERO
 
 
 def _write_csv(columns: tuple[str, ...], rows: list[list[str]]) -> str:
@@ -166,7 +197,7 @@ def render_nodes_csv(read_model: Mapping[str, Any]) -> str:
                 _score(node, "m", _ZERO),
                 _score(node, "e", _ZERO),
                 _score(node, "u", _ONE),
-                str(node.get("confidence") or _score(node, "confidence", _ZERO)),
+                _node_confidence(node),
                 str(_as_int(node.get("version"), 0)),
                 str(degree.get(node_id, 0)),
                 str(node.get("community_sig") or ""),

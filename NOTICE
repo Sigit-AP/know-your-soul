@@ -4,7 +4,9 @@ Copyright 2026 Know Your Soul contributors
 This product includes a design inspired by and a runtime dependency on
 Graphify (https://github.com/Graphlet-AI/graphify), Copyright 2026
 Safi Shamsi, licensed under Apache-2.0 OR MIT. Graphify's graph
-projection format is consumed via the pinned `graphifyy` package.
+projection format is consumed via the pinned `graphifyy` package;
+the observed dependency is pinned as graphifyy==0.9.95 (see
+pyproject.toml and uv.lock).
 Feature ideas adapted from Graphify were re-implemented from scratch
 under this project's own architecture; no Graphify source code is
 copied into this repository. See docs/research/ and

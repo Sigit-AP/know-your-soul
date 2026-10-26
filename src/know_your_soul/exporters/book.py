@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from know_your_soul.domain import PRIMARY_DOMAINS
@@ -242,6 +242,7 @@ def build_book(
     evidence_counts: Mapping[str, int] | None = None,
     max_pages: int = MAX_BOOK_PAGES,
     max_page_bytes: int = MAX_BOOK_PAGE_BYTES,
+    include_domains: Iterable[str] | None = None,
 ) -> dict[str, str]:
     """Build the book page set (``path -> markdown``), fail-closed on caps.
 
@@ -249,6 +250,9 @@ def build_book(
     output mapping or a bare list of community mappings; without it the book
     is per-domain only. ``evidence_counts`` maps node id → evidence count
     (nodes default to 0 — the read model carries no evidence cardinality).
+    ``include_domains`` forces a page for each listed domain even when it
+    holds no nodes, so a caller (the built-in registry) can publish a fixed,
+    data-independent page set.
     """
     if max_pages < 1:
         raise BookError(f"max_pages must be >= 1, got {max_pages}")
@@ -260,7 +264,7 @@ def build_book(
     community_list = _normalize_communities(communities)
     counts = {str(key): int(value) for key, value in (evidence_counts or {}).items()}
 
-    domains = sorted({node["domain"] for node in nodes.values()})
+    domains = sorted({node["domain"] for node in nodes.values()} | {str(domain) for domain in (include_domains or ())})
     domain_page = {domain: _domain_page_path(domain) for domain in domains}
     # Two distinct domains must never collapse onto one filename.
     if len(set(domain_page.values())) != len(domain_page):

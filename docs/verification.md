@@ -54,6 +54,21 @@ windows; the coordinator's final gate run supersedes them.
 Gate order (plan Task 10): full `pytest -q`, type checking, lint, dependency
 audit, `uv run python bench/run.py`, then the Graphify coverage calculation.
 
+**Update 2026-10-26 ~21:5x UTC (SUB-70, ATM final integration, HEAD
+`65bb301` + this wave)**: the built-in export registry
+(`exporters/builtin.py`) now wires **all** ATM wave A/B/C modules — 30
+artifacts (16 format + 14 analytics), each capped and round-trip-validated —
+into the operational CLI (`export --formats all`, `analytics --modules all`,
+short aliases `dot|mermaid|tabular|graphml|svg|html|book|centrality|...`).
+End-to-end on a real store built from `bench/corpus` (36 nodes / 35 edges /
+71 domain events): all 30 artifacts produced, hashed, idempotent on re-run,
+store event count unchanged (74/74 before/after); a second generation after
+a real `record-outcome` turns `generation-diff` into a real diff and the
+timeline shows a real scored point (P=1.0, level 2). Fresh gates: full suite
+**2025 passed** (251.62s), `ruff check`/`format` clean on `src/`+`tests/`,
+pyright **0/0/0**, `bench/run.py check` **OK**. Full evidence + artifact
+table (size + sha256): §7 and `docs/recovery/atm-integration-final.md`.
+
 ## 1. Test suite
 
 | Gate | Command | Exit code | Evidence (tail of fresh output) | Date (UTC) |
@@ -232,3 +247,21 @@ HEAD `bf0203a794a07aac3ff764972ab9087baa4e4f4e` == tag, clean tree); on hosts
 without a git-managed installation it skip-gates at runtime — an honest
 "not applicable", never a silent pass. The corpus-side pin (live SOUL corpus
 unchanged since freeze) runs for real in `TestFrozenCorpus` and passes.
+
+## 7. ATM export/analytics integration (SUB-70)
+
+| Gate | Command | Exit code | Evidence | Date (UTC) |
+|------|---------|-----------|----------|------------|
+| Integration tests | `.venv/bin/pytest tests/test_builtin_integration.py tests/test_export_cli.py -q` | **0** | `24 passed` (13 new + 11 CLI tests (registry reference updated)) | 2026-10-26 |
+| Full suite | `.venv/bin/python -m pytest tests/ -q` | **0** | `2025 passed, 1 warning in 251.62s` | 2026-10-26 |
+| Lint/type | `ruff check src/ tests/` + `ruff format --check` + `pyright src tests` | **0** | `All checks passed!` / 147 files formatted / `0 errors, 0 warnings` | 2026-10-26 |
+| Bench | `python bench/run.py check` | **0** | `check: OK (cases schema, frozen corpus integrity, estimator parity)` | 2026-10-26 |
+| E2E export | `know-your-soul --store bench.sqlite3 --output-root graph export --formats all` | **0** | 16 format artifacts on disk, sha256 per artifact in summary; re-run all `written: false` | 2026-10-26 |
+| E2E analytics | `know-your-soul ... analytics --modules all` | **0** | 14 analytics artifacts; timeline `events_processed` == store domain events; report staleness `{known: true, stale: false}`; health `{ok: true, score: 1.0}` | 2026-10-26 |
+| E2E diff/timeline (2 generations) | real `record-outcome` + `rebuild` + `analytics --modules generation-diff,timeline` | **0** | diff `status: "diff"` (36→36 nodes, 35→35 edges); timeline point P=`1.000000000000`, level 2 | 2026-10-26 |
+| Store read-only | `SELECT COUNT(*) FROM event_log` before/after export+analytics | — | **74 / 74** — no write, no rebuild | 2026-10-26 |
+| Frozen surface | `test_export_and_analytics_are_not_knowledge_or_http_ops` | **0** | export/analytics ∉ 14 knowledge ops, ∉ OPS_OPERATIONS, no MCP/HTTP dispatch | 2026-10-26 |
+
+The full artifact listing (30 names with byte sizes and sha256 from the real
+run) is in `docs/recovery/atm-integration-final.md` §"Tabel artifact".
+Usage: `docs/operations.md` §"Export and analytics artifacts (ATM)".

@@ -34,6 +34,9 @@ jobs:
       - name: ruff format --check
         run: uv run --frozen ruff format --check src tests bench
 
+      - name: license guard
+        run: uv run --frozen python scripts/license_guard.py
+
   types:
     runs-on: ubuntu-latest
     steps:
