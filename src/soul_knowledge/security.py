@@ -115,7 +115,10 @@ def sanitize_text(text: str, *, max_length: int = DEFAULT_MAX_TEXT_LENGTH) -> st
 # The single source of truth for secret shapes: the read-model validator
 # (publish gate) scans artifacts with exactly this list — no second copy.
 SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("openai-style key", re.compile(r"sk-[A-Za-z0-9_\-]{16,}")),
+    # The lookbehind keeps kebab/identifier text (``task-10-T10-1-…`` contains
+    # ``sk-1``) from matching mid-word: real keys are token-boundaried by
+    # whitespace, quotes or ``=``/``:`` (SUB-35-F1 class, pinned-pattern side).
+    ("openai-style key", re.compile(r"(?<![A-Za-z0-9_\-])sk-[A-Za-z0-9_\-]{16,}")),
     ("aws access key", re.compile(r"AKIA[0-9A-Z]{16}")),
     ("github token", re.compile(r"(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}")),
     ("slack token", re.compile(r"xox[baprs]-[A-Za-z0-9\-]{10,}")),
@@ -212,28 +215,38 @@ _HOMOGLYPH_FOLD = str.maketrans(
 
 
 def _redaction_match_view(text: str) -> str:
-    """NFKC + control-strip + homoglyph fold view used for secret matching only.
+    """NFKC + separator-strip + homoglyph fold view used for secret matching only.
 
-    Every Unicode format (Cf: zero-width, bidi, BOM) and control (Cc:
-    tab/newline/…) character is dropped, re-joining secrets split by
-    invisible or whitespace controls (``AKIA\\u200bIOSF…``, ``AKIA\\tIOSF…``).
-    Plain spaces survive: several pinned patterns require a ``\\s+``
-    separator, and the raw-text pass has already matched anything the
-    control-strip would hide behind one.
+    Every non-ASCII space separator (Zs: NBSP, hair/thin/narrow/ideographic
+    space, …) is dropped *before* NFKC, because NFKC would fold them into
+    plain ASCII spaces that keep a split secret split (SUB-35-F2). Every
+    Unicode format (Cf: zero-width, bidi, BOM) and control (Cc:
+    tab/newline/…) character is likewise dropped, re-joining secrets split
+    by invisible or whitespace separators (``AKIA\\u200bIOSF…``,
+    ``AKIA\\u200aIOSF…``, ``AKIA\\tIOSF…``). Plain ASCII spaces survive:
+    several pinned patterns require a ``\\s+`` separator, and the raw-text
+    pass has already matched anything the strip would hide behind one.
     """
-    view = unicodedata.normalize("NFKC", text)
+    joined = "".join(char for char in text if unicodedata.category(char) != "Zs" or char == " ")
+    view = unicodedata.normalize("NFKC", joined)
     view = "".join(char for char in view if unicodedata.category(char) not in ("Cf", "Cc"))
     return view.translate(_HOMOGLYPH_FOLD)
 
 
 # High-entropy token runs (wave-3 W3-4): long base64-ish blobs carry API
 # keys and session tokens that match no pinned prefix shape. A run is
-# redacted only when it spans at least three character classes (lower /
-# upper / digit / symbol); pure-hex runs (any single case) are hash-shaped
-# content — sha256 pins, git objects, content digests — and are deliberately
-# left alone, as are UUIDs (36 chars, below the 40-char floor). Standalone
-# pure-hex *secrets* remain reachable only through the credential-assignment
-# pattern — a documented design boundary.
+# redacted only when it mixes the lower, upper AND digit character classes
+# and carries no identifier separator (``-``/``_``): kebab-case paths and
+# snake_case names — this repo's own naming conventions — are
+# identifier-shaped, not secret-shaped (SUB-35-F1: the old rule counted
+# ``-`` toward the symbol class, so dated kebab paths like
+# ``docs/superpowers/specs/2026-10-24-…`` were redacted; 35/55 repo docs
+# tripped). Pure-hex runs (any single case) remain hash-shaped content —
+# sha256 pins, git objects, content digests — as do UUIDs (36 chars, below
+# the 40-char floor). Standalone secrets that are pure-hex, all-one-case or
+# base64url (``-``/``_`` alphabet) stay reachable only through the pinned
+# patterns and the credential-assignment rule — a documented design
+# boundary.
 _ENTROPY_RUN_RE = re.compile(r"[A-Za-z0-9+/=_\-]{40,}")
 _PURE_HEX_RE = re.compile(r"[0-9a-fA-F]+")
 
@@ -243,13 +256,14 @@ def _redact_entropy_runs(text: str) -> str:
         run = match.group(0)
         if _PURE_HEX_RE.fullmatch(run):
             return run
-        classes = (
-            any(char.islower() for char in run),
-            any(char.isupper() for char in run),
-            any(char.isdigit() for char in run),
-            any(char in "+/=_-" for char in run),
+        if "-" in run or "_" in run:
+            return run  # identifier-shaped: kebab slugs, snake_case, paths
+        secret_shaped = (
+            any(char.islower() for char in run)
+            and any(char.isupper() for char in run)
+            and any(char.isdigit() for char in run)
         )
-        return "[REDACTED:high-entropy token]" if sum(classes) >= 3 else run
+        return "[REDACTED:high-entropy token]" if secret_shaped else run
 
     return _ENTROPY_RUN_RE.sub(_sub, text)
 

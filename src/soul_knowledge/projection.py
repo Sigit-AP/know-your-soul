@@ -576,7 +576,11 @@ class GraphProjector:
                     return name
         return None
 
-    def _quarantine_secret_nodes(self, node_dicts: dict[str, dict[str, Any]]) -> list[tuple[str, str, str]]:
+    def _quarantine_secret_nodes(
+        self,
+        node_dicts: dict[str, dict[str, Any]],
+        raw_fields: dict[str, tuple[tuple[str, str], ...]] | None = None,
+    ) -> list[tuple[str, str, str]]:
         """Wave-2 F7: fail closed *per node*, not per generation.
 
         A node whose publish-bound fields carry a secret-shaped string is
@@ -586,9 +590,23 @@ class GraphProjector:
         strongest form of the invariant: the secret never reaches any
         artifact. Returns ``(node_id, field, category)`` triples for the
         typed audit/warning — never any secret material.
+
+        SUB-35-F2: the raw (pre-sanitization) free-text fields are scanned
+        too, because publish sanitization collapses Zs-class separators to
+        plain ASCII spaces (W3-6) — a split secret would otherwise reach the
+        scan already re-shaped into a form the match view keeps split.
         """
         quarantined: list[tuple[str, str, str]] = []
         for node_id in sorted(node_dicts):
+            offending_field: str | None = None
+            offending_category: str | None = None
+            if raw_fields is not None:
+                for field, raw_value in raw_fields.get(node_id, ()):
+                    hit = self._secret_category(raw_value)
+                    if hit is not None:
+                        offending_field = field
+                        offending_category = hit
+                        break
 
             def _scan(value: Any) -> str | None:
                 if isinstance(value, str):
@@ -605,14 +623,13 @@ class GraphProjector:
                             return hit
                 return None
 
-            offending_field: str | None = None
-            offending_category: str | None = None
-            for field, value in node_dicts[node_id].items():
-                hit = _scan(value)
-                if hit is not None:
-                    offending_field = field
-                    offending_category = hit
-                    break
+            if offending_field is None:
+                for field, value in node_dicts[node_id].items():
+                    hit = _scan(value)
+                    if hit is not None:
+                        offending_field = field
+                        offending_category = hit
+                        break
             if offending_field is not None and offending_category is not None:
                 del node_dicts[node_id]
                 quarantined.append((node_id, offending_field, offending_category))
@@ -677,6 +694,7 @@ class GraphProjector:
                 relations.append(event.relation)
 
         node_dicts: dict[str, dict[str, Any]] = {}
+        raw_fields: dict[str, tuple[tuple[str, str], ...]] = {}
         sentences_by_node = self._source_sentences(nodes)
         for node_id in sorted(nodes):
             node = nodes[node_id]
@@ -710,6 +728,15 @@ class GraphProjector:
             raw_source = str(
                 node.payload.get("source_file") or (node.provenance[-1] if node.provenance else "soul://store")
             )
+            # SUB-35-F2: keep the pre-sanitization free text for the
+            # quarantine scan — W3-6 whitespace collapsing would otherwise
+            # reshape a Zs-split secret before the scan sees it.
+            raw_fields[node_id] = (
+                ("summary", node.summary or ""),
+                ("source_file", raw_source),
+                *(("provenance", entry) for entry in node.provenance),
+                *(("context_tags", tag) for tag in node.context_tags),
+            )
             source_file = self._sanitize_entry(raw_source, node_id, "source_file")
             node_dicts[node_id] = {
                 "id": node.node_id,
@@ -734,7 +761,7 @@ class GraphProjector:
         # extraction *before* any artifact exists — the rest of the graph
         # keeps publishing and serving reads. The whole-generation validator
         # stays as the backstop for anything that slips past this scan.
-        quarantined = self._quarantine_secret_nodes(node_dicts)
+        quarantined = self._quarantine_secret_nodes(node_dicts, raw_fields)
 
         edges: list[dict[str, Any]] = []
         seen: set[tuple[str, str, str]] = set()
