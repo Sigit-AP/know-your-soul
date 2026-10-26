@@ -13,6 +13,16 @@ with the final fresh gate run after the bench ceiling correction (gate
 The benchmark gate now exits **0 with 24/24 accepted**; the release-gate
 line in `docs/audit-release.md` §4 is updated accordingly.
 
+**Update 2026-10-25 ~23:59 UTC (SUB-34, wave-3 audit fix round, HEAD
+`ff06e3d` + uncommitted wave-3 fixes)**: four audit-wave-3 minors closed —
+W3-7 (ops-path hardlink refusal + post-operation re-resolution), W3-9
+(`body_timeout_seconds <= 0` refused at startup), W3-8(a) (bench rubric
+excludes the `provenance` field from scoring text on both sides; **0/24
+per-case numbers changed**, bench stays exit 0, 24/24), W3-11 (the external
+Hermes-install test is now a real git-clean/tag-pin check — it **runs and
+passes** on this host; the last vacuous skip is gone). Recovery doc:
+`docs/recovery/wave3-ops-timeout-rubric-external.md`.
+
 Gate order (plan Task 10): full `pytest -q`, type checking, lint, dependency
 audit, `python bench/run.py`, then the Graphify coverage calculation.
 
@@ -21,7 +31,9 @@ audit, `python bench/run.py`, then the Graphify coverage calculation.
 | Gate | Command | Exit code | Evidence (tail of fresh output) | Date (UTC) |
 |------|---------|-----------|----------------------------------|------------|
 | Full test suite | `.venv/bin/pytest tests/ -q` | **0** | `632 passed, 1 skipped, 1 warning in 91.17s` | 2026-10-25 |
+| Full test suite (wave-3 fix round) | `.venv/bin/pytest tests/ -q` | **0** | `690 passed, 1 warning in 104.78s` — **0 skipped**: the external Hermes-install check now runs for real | 2026-10-25 |
 | Acceptance e2e | `.venv/bin/pytest tests/test_acceptance_e2e.py -q` | **0** | 48 passed, 1 skipped (1 skip = external Hermes-install check); last verified at integration, and the full-suite row above re-runs it fresh | 2026-10-25 |
+| Acceptance e2e (wave-3 fix round) | `.venv/bin/pytest tests/test_acceptance_e2e.py -q` | **0** | `49 passed` — the install-tree check (`TestNoHermesSourceModification`) executes for real and passes; skip-gates only when no git-managed Hermes install exists | 2026-10-25 |
 | Type checking | `.venv/bin/pyright` | **0** | `0 errors, 0 warnings, 0 informations` | 2026-10-25 |
 | Lint | `.venv/bin/ruff check .` | **0** | `All checks passed!` | 2026-10-25 |
 | Format | `.venv/bin/ruff format --check .` | **1 (pre-existing)** | `139 files already formatted`; the single offender is `docs/mathematics/scoring.md` — committed drift reproduced at clean HEAD (verified via stash), not introduced by this change; `bench/run.py` itself is format-clean | 2026-10-25 |
@@ -66,6 +78,21 @@ only via the router's actual P7 choice, expected P2 — routing-expectation
 mismatch, case-design debt). `gap_vs_raw_read` is untouched: q03 still
 reports an honest 1.0.
 
+**Wave-3 W3-8(a) (SUB-34)**: rubric scoring now excludes the `provenance`
+field from the scored payload text on BOTH sides (system response and
+compliant ceiling) via `rubric_scoring_text` — per the spec, provenance is
+routing metadata with zero relevance, so a rubric term present only in a
+`soul://` URI filename can no longer count as delivered knowledge (q16's
+`steelman` was satisfiable by `09-premortem-steelman.md`'s *filename* alone).
+Provenance still counts toward token estimation on both sides. Fresh ledger
+`bench/results/ledger-20261025T235210Z.json` (repeats=5, exit 0, **24/24
+accepted**): **0/24 cases changed** in `quality_system`, `quality_ceiling`,
+`system_estimated_tokens`, `token_saving_ratio`, `gap_vs_raw_read`,
+`ceiling_node_ids` or `ceiling_method` versus `20261025T233953Z` (verified
+programmatically); the gate record carries an explicit `rubric_scope` note.
+q16 stays 0.75 = ceiling — its `steelman` hit is content-delivered
+(`test_q16_steel_man_hit_is_content_delivered`).
+
 | Metric | Source of truth | Value | Evidence |
 |--------|-----------------|-------|----------|
 | Frozen corpus | `bench/corpus/manifest.json` | 28 files, 52,604 bytes, 13,151 est. tokens | `freeze: 28 files, 52604 bytes` exit 0; matches contract baseline tok-011 |
@@ -98,10 +125,10 @@ target is ≥ 90% of the applicable 40-feature inventory
 |------|-------|----------|
 | Applicable features (denominator) | 40 | feature matrix §1 |
 | Rows with passing named contract tests | **40/40** | fresh junit run of all 40 named tests: `40 passed in 6.89s`, exit 0 (`TestGraphifyCoverageGate`) |
-| Counted coverage | **39/40 = 97.5%** (row 23 excluded: residual open) | matrix rule: partials count only once residual closed and test passes |
-| Coverage gate (≥ 90%) | **PASS** | 97.5% ≥ 90% |
+| Counted coverage | **40/40 = 100%** (row 23 residual closed in `71f7547`) | matrix rule: partials count only once residual closed and test passes |
+| Coverage gate (≥ 90%) | **PASS** | 100% ≥ 90% |
 | Partial residual 1 | Row 22 (schema/version provenance) — **closed at Task 3** (event log is source of truth; deterministic rebuild migrates) | matrix §3.2 note; named test passes |
-| Partial residual 2 | Row 23 (deterministic serialization + atomic writes) — **OPEN**, residual owner Task 9: whole-set durability / power-loss recovery | matrix note "Row 23's residual stays open with Task 9" (audit wave-1 fix round) |
+| Partial residual 2 | Row 23 (deterministic serialization + atomic writes) — **CLOSED** in `71f7547` (SUB-29): staged-backup fsync, two-phase backup activation, orphan-temp sweep; 12 crash-injection tests green | `tests/test_power_loss_recovery.py` (12 passed); `docs/recovery/` row-23 durability record; matrix row 23 Covered?=yes |
 | Partial residual 3 | Row 38 (token-reduction benchmark) — residual owner Task 10: **closed at integration** by the delivered harness (N repeats, p50/p95 latency, quality rubric, paired ledger); the gate it measured (finding T10-1) is now green — gate 2.1.0, exit 0, 24/24 (§2) | `bench/run.py`, ledger `ledger-20261025T202627Z`, `tests/test_service.py::test_canonical_token_parity` passes |
 
 Matrix doc correction at integration: three named-test cells (rows 25/36/40)
@@ -114,7 +141,8 @@ record this).
 
 Every Task 10 acceptance bullet is a named test in
 `tests/test_acceptance_e2e.py`. Status at integration: **48 passed,
-1 skipped** (exit 0).
+1 skipped** (exit 0); after the wave-3 W3-11 closure: **49 passed,
+0 skipped** (exit 0, fresh).
 
 | Acceptance bullet | Test | Status |
 |-------------------|------|--------|
@@ -136,7 +164,7 @@ Every Task 10 acceptance bullet is a named test in
 | Recommendation shape | `TestRecommendationShape` | **PASS** (2 tests) |
 | RESET/ACCUMULATE/rollback | `TestRelearn` | **PASS** (2 tests; operator-gated, zero evidence weight after RESET) |
 | No stale mixing | `TestNoStaleMixing` | **PASS** (ACCUMULATE anchor-mapped carry; RESET version exclusion) |
-| No Hermes source modification | `TestNoHermesSourceModification` + `test_live_soul_corpus_unmodified_since_freeze` | corpus-side pin **PASS**; install-tree check **SKIP-GATED (external)** |
+| No Hermes source modification | `TestNoHermesSourceModification` + `test_live_soul_corpus_unmodified_since_freeze` | **PASS** — both sides run for real: corpus-side pin green; install-tree check verifies HEAD == `v0.22.5^{commit}`, clean `git status --porcelain`, empty stash against `/root/.hermes/hermes-agent` (wave-3 W3-11 closure; skip-gates only when no git-managed install exists) |
 | Graphify coverage ≥ 90% | `TestGraphifyCoverageGate` | **PASS** (3 tests) |
 | Benchmark quality gate | `TestBenchmarkQualityGate` | **PASS** (gate semantics verified on a real run; the system passes the gate 24/24 under gate 2.1.0 — §2) |
 
@@ -151,11 +179,19 @@ reviewer verifies both the regression probe and the fix.
 | Finding ID | Class | Status | Recovery doc |
 |------------|-------|--------|--------------|
 | T10-1 (benchmark quality) | launch-blocking | **CLOSED — gate 2.1.0, bench exit 0, 24/24 accepted (q03 vacuous-accepted, annotated)** | `docs/recovery/task-10-T10-1-opsi-c-gate-recalibration.md`, `docs/recovery/task-10-retrieval-q03-q05-q16.md`, `docs/recovery/task-10-ceiling-single-root-ruling-q03.md`, `docs/audit-release.md` §2/§3 |
+| W3-7 (ops-path hardlink/TOCTOU) | minor (security, bounded) | **CLOSED** — multi-linked regular files refused (`st_nlink > 1`); post-operation re-resolution detects parent-swap; 7 non-vacuous probes | `docs/recovery/wave3-ops-timeout-rubric-external.md` |
+| W3-9 (`body_timeout_seconds=0` wedge) | minor (config) | **CLOSED** — non-positive body deadlines refused at startup before any socket is bound | `docs/recovery/wave3-ops-timeout-rubric-external.md` |
+| W3-8(a) (rubric counts provenance filenames) | minor (measurement) | **CLOSED** — provenance excluded from rubric scoring text on both sides; 0/24 per-case numbers changed; bench exit 0, 24/24 | `docs/recovery/wave3-ops-timeout-rubric-external.md` |
+| W3-11 (external test was a vacuous stub) | minor (evidence integrity) | **CLOSED** — real git-clean/tag-pin check, runs and passes on this host; proven non-vacuous against a dirty synthetic tree | `docs/recovery/wave3-ops-timeout-rubric-external.md` |
 
-## 6. Remaining skip (external, recorded)
+## 6. External check (wave-3 W3-11 closure — no vacuous skips remain)
 
-`TestNoHermesSourceModification::test_hermes_source_tree_is_unmodified` stays
-skip-gated: it verifies the *installed Hermes source tree*, which is external
-to this repo and checked at release time against the Hermes installation. The
-corpus-side pin (live SOUL corpus unchanged since freeze) runs for real in
-`TestFrozenCorpus` and passes.
+`TestNoHermesSourceModification::test_hermes_source_tree_is_unmodified` is a
+**real test**: it verifies the installed Hermes source tree
+(`/root/.hermes/hermes-agent`) is a clean checkout of the pinned release tag
+(`HEAD == v0.22.5^{commit}`, empty `git status --porcelain`, empty stash
+list). On hosts with the installation it runs and passes (verified fresh:
+HEAD `bf0203a794a07aac3ff764972ab9087baa4e4f4e` == tag, clean tree); on hosts
+without a git-managed installation it skip-gates at runtime — an honest
+"not applicable", never a silent pass. The corpus-side pin (live SOUL corpus
+unchanged since freeze) runs for real in `TestFrozenCorpus` and passes.

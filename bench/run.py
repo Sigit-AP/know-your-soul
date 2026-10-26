@@ -308,6 +308,21 @@ def rubric_score(rubric_terms: list[str], answer_text: str) -> float:
     return hits / len(rubric_terms)
 
 
+def rubric_scoring_text(payload: dict[str, Any]) -> str:
+    """The JSON text the rubric scores: *payload* minus ``provenance``.
+
+    Wave-3 W3-8(a): provenance is routing metadata — per the spec it
+    contributes zero relevance, yet it rides the payload, so a rubric term
+    could be satisfied by a corpus *filename* inside a ``soul://`` URI alone
+    (e.g. q16's ``steelman`` via ``09-premortem-steelman.md``) with no
+    delivered knowledge. Excluding the field on BOTH sides (system response
+    and compliant ceiling) keeps the signal honest and the comparison
+    symmetric. Provenance still counts toward token estimation — those are
+    real wire bytes a compliant response must pay for.
+    """
+    return json.dumps({key: value for key, value in payload.items() if key != "provenance"}, ensure_ascii=False)
+
+
 # ------------------------------------------------------- compliant ceiling
 
 
@@ -324,10 +339,12 @@ def _ceiling_payload(nodes: list[dict[str, Any]], source_files: list[str]) -> di
 
     Keys and value shapes mirror the frozen response contract exactly
     (``soul_knowledge.contracts.QueryResponse.canonical_payload``), with
-    fixed dummy metadata. The rubric is scored over the JSON of this object —
-    the same way the harness scores a real response — so payload keys
-    (e.g. ``estimated_tokens``) and provenance URIs count identically on both
-    sides of the comparison.
+    fixed dummy metadata. The rubric is scored over the JSON of this object
+    minus ``provenance`` (``rubric_scoring_text``) — the same way the harness
+    scores a real response — so payload keys (e.g. ``estimated_tokens``)
+    count identically on both sides of the comparison. Provenance stays in
+    the payload for token estimation; it is excluded from rubric scoring on
+    both sides (W3-8(a)).
     """
     return {
         "access_only": False,
@@ -395,8 +412,9 @@ def compliant_ceiling(
     def score_of(subset: tuple[int, ...]) -> float:
         # Exact: score the real payload text, the same way a live response is
         # scored — no set-union approximation, so cross-field matches count.
+        # Provenance is excluded from the scored text on both sides (W3-8(a)).
         payload = _ceiling_payload([nodes[i] for i in subset], source_files)
-        return rubric_score(rubric_terms, json.dumps(payload, ensure_ascii=False))
+        return rubric_score(rubric_terms, rubric_scoring_text(payload))
 
     def tokens_of(subset: tuple[int, ...]) -> int:
         return estimate_tokens_of_payload(_ceiling_payload([nodes[i] for i in subset], source_files))
@@ -615,6 +633,13 @@ def run_benchmark(repeats: int) -> int:
                 "quality_floor_applied (min(QUALITY_FLOOR, quality_ceiling))"
             ),
             "quality_floor": QUALITY_FLOOR,
+            "rubric_scope": (
+                "rubric terms are scored over the response/ceiling payload JSON minus the "
+                "provenance field (wave-3 W3-8(a)): provenance is routing metadata with zero "
+                "relevance per spec, so a term appearing only in a soul:// URI filename cannot "
+                "count as delivered knowledge; provenance still counts toward token estimation "
+                "on both sides"
+            ),
             "ceiling_definition": (
                 "max rubric_score over subsets of projected-graph nodes whose source_file is in "
                 "the case's source_files, packed into a contract-shaped response payload within "
@@ -683,7 +708,9 @@ def run_benchmark(repeats: int) -> int:
             latencies.sort()
             payload = last_response.canonical_payload()
             system_tokens = estimate_tokens_of_payload(payload)
-            answer_text = json.dumps(payload, ensure_ascii=False)
+            # W3-8(a): rubric scoring excludes the provenance field (routing
+            # metadata, zero relevance per spec); token estimation does not.
+            answer_text = rubric_scoring_text(payload)
             quality_system = rubric_score(case["rubric_terms"], answer_text)
             # Gate 2.1.0 (Ruling Q03): the ceiling is computed against the
             # roots the routing contract designates for this case — the

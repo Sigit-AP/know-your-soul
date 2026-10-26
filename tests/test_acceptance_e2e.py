@@ -11,9 +11,11 @@ Every acceptance bullet from the Task 10 brief appears here as a named test.
   audit/idempotency/determinism/rollback contracts, the MCP contract,
   conditional access, recommendation shape, relearn gating, stale mixing, the
   Graphify coverage gate and the benchmark quality gate.
-* The only remaining skip is the genuinely external one: verifying the
-  *installed Hermes source tree* is unmodified (release-time check against the
-  Hermes installation, not this repo). The corpus-side pin runs for real.
+* The genuinely external bullet — the *installed Hermes source tree* is
+  unmodified — runs for real when the host carries a git-managed Hermes
+  installation (``/root/.hermes/hermes-agent`` pinned at the release tag) and
+  skip-gates only when no such installation exists. The corpus-side pin runs
+  for real.
 """
 
 from __future__ import annotations
@@ -1080,13 +1082,48 @@ class TestNoStaleMixing:
         assert response.stale is False
 
 
-@pytest.mark.skip(
-    reason="genuinely external: verified at release time against the installed Hermes "
-    "source tree, not this repo; the corpus-side pin (live SOUL corpus unchanged since "
-    "freeze) runs for real in TestFrozenCorpus"
-)
+# The Hermes release this repo's frozen SOUL corpus was taken from; the
+# install-tree check below pins the installed source tree to this tag.
+HERMES_INSTALL_TREE = Path("/root/.hermes/hermes-agent")
+HERMES_PINNED_TAG = "v0.22.5"
+
+
 class TestNoHermesSourceModification:
-    def test_hermes_source_tree_is_unmodified(self) -> None: ...
+    """The installed Hermes source tree must be a clean checkout of the
+    pinned release tag — the corpus-freeze provenance claim ("the SOUL corpus
+    came from an unmodified Hermes install") is only as good as that tree.
+
+    This is a genuinely external property (the host's Hermes installation,
+    not this repo), so the test skip-gates at runtime when no git checkout is
+    present; on a host with the installation it runs for real. The
+    corpus-side pin (live SOUL corpus unchanged since freeze) runs for real
+    in ``TestFrozenCorpus``. Evidence for the release record lives in
+    ``docs/audit-release.md`` §5 (wave-3 W3-11 closure).
+    """
+
+    def test_hermes_source_tree_is_unmodified(self) -> None:
+        if not (HERMES_INSTALL_TREE / ".git").exists():
+            pytest.skip(f"no git-managed Hermes installation at {HERMES_INSTALL_TREE} (external host dependency)")
+
+        def git(*args: str) -> str:
+            proc = subprocess.run(
+                ["git", "-C", str(HERMES_INSTALL_TREE), *args],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            assert proc.returncode == 0, f"git {' '.join(args)} failed: {proc.stderr.strip()}"
+            return proc.stdout.strip()
+
+        head = git("rev-parse", "HEAD")
+        pinned = git("rev-parse", f"{HERMES_PINNED_TAG}^{{commit}}")
+        assert head == pinned, f"install-tree HEAD {head} is not the pinned release {HERMES_PINNED_TAG} ({pinned})"
+        dirty = git("status", "--porcelain")
+        assert dirty == "", f"install tree has uncommitted changes/untracked files:\n{dirty}"
+        stashes = git("stash", "list")
+        assert stashes == "", f"install tree carries stashed modifications:\n{stashes}"
+        # Non-vacuous self-check: the assertions above ran against a real tree.
+        assert len(head) == 40 and all(c in "0123456789abcdef" for c in head)
 
 
 # ------------------------------------------------------- graphify coverage

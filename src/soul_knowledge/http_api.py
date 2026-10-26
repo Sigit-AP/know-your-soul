@@ -40,6 +40,7 @@ import json
 import logging
 import os
 import socket
+import stat
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
@@ -334,6 +335,29 @@ def _call_rebuild(stack: LocalStack, request: _RebuildPayload, actor: str, idem:
     return stack.projector.rebuild(upto_knowledge_seq=request.upto_knowledge_seq)
 
 
+def _reject_hardlinked_ops_file(resolved: Path, candidate: str) -> None:
+    """Refuse multi-linked regular files inside the ops root (wave-3 W3-7).
+
+    Path-based containment is structurally blind to hardlinks: a link inside
+    the root to an outside inode resolves "inside" while naming the outside
+    inode. ``st_nlink > 1`` on a regular file means another name shares the
+    inode — possibly outside the root — so the path is refused. Missing
+    paths (backup destinations yet to be written) pass; directories are
+    exempt (their link count includes subdirectory entries).
+    """
+    try:
+        info = resolved.stat()
+    except FileNotFoundError:
+        return
+    except OSError as error:
+        raise PathEscapeError(f"path {candidate!r} cannot be inspected: {error}") from error
+    if stat.S_ISREG(info.st_mode) and info.st_nlink > 1:
+        raise PathEscapeError(
+            f"path {candidate!r} is a multi-linked file (nlink={info.st_nlink}); "
+            "containment cannot see the other inode names, so it is refused"
+        )
+
+
 def _resolve_ops_path(stack: LocalStack, candidate: str) -> Path:
     """Confine an operator-supplied backup/restore path to the stack's ops root.
 
@@ -345,21 +369,42 @@ def _resolve_ops_path(stack: LocalStack, candidate: str) -> Path:
     if stack.ops_root is None:
         raise PathEscapeError("no ops root is configured; backup/restore paths are refused")
     try:
-        return resolve_within_root(stack.ops_root, candidate)
+        resolved = resolve_within_root(stack.ops_root, candidate)
     except PathEscapeError as error:
         raise PathEscapeError(f"path {candidate!r} is outside the permitted operations root") from error
+    _reject_hardlinked_ops_file(resolved, candidate)
+    return resolved
+
+
+def _recheck_ops_path(stack: LocalStack, candidate: str, pre_op: Path) -> None:
+    """Re-resolve *candidate* after an operation; require the identical path.
+
+    Closes the resolve-then-use TOCTOU window (wave-3 W3-7) as far as is
+    deterministically possible: if a parent directory inside the ops root was
+    swapped for a symlink between resolution and use, the post-operation
+    resolution either escapes the root (:func:`_resolve_ops_path` raises) or
+    names a different path — both fail closed. The surfaced message names
+    only the caller-supplied candidate, never a server-side absolute path.
+    """
+    resolved = _resolve_ops_path(stack, candidate)
+    if resolved != pre_op:
+        raise PathEscapeError(f"path {candidate!r} moved during the operation; refusing to trust the result")
 
 
 def _call_backup(stack: LocalStack, request: _BackupPayload, actor: str, idem: str | None) -> Any:
-    return backup_store(stack.store, _resolve_ops_path(stack, request.dest_path))
+    dest = _resolve_ops_path(stack, request.dest_path)
+    receipt = backup_store(stack.store, dest)
+    _recheck_ops_path(stack, request.dest_path, dest)
+    return receipt
 
 
 def _call_restore(stack: LocalStack, request: _RestorePayload, actor: str, idem: str | None) -> Any:
-    return restore_store(
-        _resolve_ops_path(stack, request.backup_path),
-        _resolve_ops_path(stack, request.dest_path),
-        overwrite=request.overwrite,
-    )
+    backup_path = _resolve_ops_path(stack, request.backup_path)
+    dest = _resolve_ops_path(stack, request.dest_path)
+    receipt = restore_store(backup_path, dest, overwrite=request.overwrite)
+    _recheck_ops_path(stack, request.backup_path, backup_path)
+    _recheck_ops_path(stack, request.dest_path, dest)
+    return receipt
 
 
 def _call_health(stack: LocalStack, request: _EmptyPayload, actor: str, idem: str | None) -> Any:
@@ -638,6 +683,15 @@ class BoundaryMiddleware:
         body_timeout_seconds: float = 10.0,
         denial_recorder: Callable[[Mapping[str, Any], BaseException], None] | None = None,
     ) -> None:
+        # Wave-3 W3-9: a non-positive body deadline makes wait_for() lose
+        # every race, wedging *all* requests that carry a body with 408s.
+        # Refuse the misconfiguration at startup (fail-closed) instead of
+        # serving a dead endpoint. ``not x > 0`` also rejects NaN.
+        if not body_timeout_seconds > 0:
+            raise ValueError(
+                f"body_timeout_seconds must be positive, got {body_timeout_seconds!r}; "
+                "0 or negative wedges every request that carries a body"
+            )
         self._app = app
         self._api_key = api_key
         self._host_allowlist = tuple(host_allowlist)
