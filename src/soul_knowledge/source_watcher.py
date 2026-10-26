@@ -53,7 +53,7 @@ class SourceWatcher:
         root: str | Path,
         *,
         state_path: str | Path | None = None,
-        patterns: tuple[str, ...] = (".md",),
+        patterns: tuple[str, ...] | None = (".md",),
         on_change: Callable[[list[SourceChange]], object] | None = None,
     ) -> None:
         self._root = Path(root).resolve()
@@ -115,6 +115,11 @@ class SourceWatcher:
         os.replace(tmp, self._state_path)
 
 
-def file_is_candidate(path: Path, patterns: tuple[str, ...]) -> bool:
-    """A watched file: a regular file whose suffix is in *patterns*."""
-    return path.is_file() and path.suffix in patterns
+def file_is_candidate(path: Path, patterns: tuple[str, ...] | None) -> bool:
+    """A watched file: a regular file whose suffix is in *patterns*.
+
+    ``patterns=None`` watches every regular file — the serve-time wiring uses
+    it so the watcher sees exactly the file set the source registry's
+    ``SOUL_CORPUS`` scan hashes (arch review F-1).
+    """
+    return path.is_file() and (patterns is None or path.suffix in patterns)

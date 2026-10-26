@@ -50,7 +50,8 @@ import socket
 import stat
 import threading
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -74,12 +75,13 @@ from soul_knowledge.contracts import (
     QueryRequest,
     ReviewRequest,
     RollbackRequest,
+    TraversalMode,
 )
-from soul_knowledge.domain import Evidence, Node, canonical_json, new_id
+from soul_knowledge.domain import Evidence, Node, RelationKind, canonical_json, new_id
 from soul_knowledge.events import Invocation, InvocationOutcome
 from soul_knowledge.observability import HealthReport, check_readiness
 from soul_knowledge.projection import GraphProjector, ProjectionError
-from soul_knowledge.relearn import RelearnApproval
+from soul_knowledge.relearn import RelearnApproval, RelearnOffer
 from soul_knowledge.security import (
     DEFAULT_MAX_PAYLOAD_BYTES,
     BindPolicyError,
@@ -95,7 +97,9 @@ from soul_knowledge.security import (
 )
 from soul_knowledge.service import KnowledgeService
 from soul_knowledge.source_registry import SourceKind
+from soul_knowledge.source_watcher import SourceChange, SourceWatcher
 from soul_knowledge.store import EventStore, StoreError
+from soul_knowledge.update_pipeline import SourceWatchLoop, UpdatePipelineError
 
 __all__ = [
     "API_VERSION",
@@ -255,7 +259,11 @@ def build_stack(store_path: str | Path, output_root: str | Path, *, ops_root: st
 
 
 class _Payload(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    # Strict like the contracts.py request models (arch review F-2): the wire
+    # adapters must reject coercions — numeric strings, bools-as-ints — exactly
+    # as the MCP adapter's schema layer does. Parity is guarded by
+    # tests/test_adapter_validation_parity.py.
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
 
 class _EmptyPayload(_Payload):
@@ -267,12 +275,15 @@ class _GetNodePayload(_Payload):
 
 
 class _GetSubtreePayload(_Payload):
+    # Bounds and enums mirror QueryRequest and the MCP schema (F-2): without
+    # them the adapter accepted depth=0/99 or mode="random" and the traversal
+    # raised an untyped ValueError deep in the service.
     node_id: str = Field(min_length=1)
-    depth: int = 2
-    mode: str = "bfs"
-    relation_allowlist: tuple[str, ...] | None = None
-    max_nodes: int = 64
-    max_edges: int = 256
+    depth: int = Field(default=2, ge=1, le=6)
+    mode: TraversalMode = TraversalMode.BFS
+    relation_allowlist: tuple[RelationKind, ...] | None = None
+    max_nodes: int = Field(default=64, ge=1, le=1024)
+    max_edges: int = Field(default=256, ge=1, le=4096)
     token_budget: int = 1024
 
 
@@ -572,10 +583,12 @@ _OPERATIONS: dict[str, _OpSpec] = {
 def _validation_summary(error: ValidationError, *, max_errors: int = 3) -> str:
     """Field/type summary of a pydantic failure — never raw input values.
 
-    Mirrors the MCP adapter's ``_validation_summary`` (wave-2 F8): pydantic's
-    own ``str()`` rendering embeds ``input_value=...``, which would echo
-    attacker-supplied values back onto the wire; the ``loc`` + ``msg`` pair
-    carries the diagnostic without the value.
+    The MCP adapter keeps the same value-free rendering; the two validators'
+    accept/reject parity is guarded by tests/test_adapter_validation_parity.py
+    (arch review F-2 — a contract test, not a mirror comment, holds the lock).
+    Pydantic's own ``str()`` rendering embeds ``input_value=...``, which would
+    echo attacker-supplied values back onto the wire; the ``loc`` + ``msg``
+    pair carries the diagnostic without the value.
     """
     entries = error.errors()
     parts: list[str] = []
@@ -1053,6 +1066,58 @@ class BoundaryMiddleware:
         await self._app(scope, replay_receive, send)
 
 
+def _build_watch_loop(
+    stack: LocalStack,
+    watch_root: str | Path,
+    *,
+    interval_seconds: float,
+    cooldown_seconds: float,
+    state_path: str | Path | None,
+) -> SourceWatchLoop:
+    """Wire the serve-time doc-change watcher to the gated relearn path (F-1).
+
+    Spec 13.5: the doc-change watcher drives the deterministic update
+    pipeline. The watcher only *detects*: every change batch rides the
+    service's audited ``offer_relearn`` — the same gated path as
+    ``ops/relearn_scan`` — so a detected change publishes the deterministic
+    offer plus ``RELEARN_PENDING`` and nothing more. No auto-apply, no
+    baseline flip (final-audit F-4 semantics); the operator's
+    ``relearn_preview``/``relearn_apply`` decision stays mandatory.
+    """
+    root = Path(watch_root).resolve()
+    if not root.is_dir():
+        raise UpdatePipelineError(f"watch root {str(root)!r} is not an existing directory")
+    if state_path is not None:
+        resolved_state = Path(state_path).resolve()
+    elif stack.store.db_path != ":memory:":
+        resolved_state = Path(stack.store.db_path).resolve().parent / "source-watch.json"
+    else:
+        raise UpdatePipelineError("watching with an in-memory store requires an explicit watch_state_path")
+    # The registry's SOUL_CORPUS scan hashes every regular file under the
+    # root, so the watcher mirrors it (patterns=None) and its snapshot must
+    # live *outside* the root — a state file inside would perturb the very
+    # fingerprint detection depends on and mint spurious offers.
+    try:
+        resolve_within_root(root, resolved_state)
+    except PathEscapeError:
+        pass  # outside the watched root: required
+    else:
+        raise UpdatePipelineError(
+            f"watch state path {str(resolved_state)!r} lies inside the watched root {str(root)!r}; "
+            "state writes would perturb the corpus fingerprint"
+        )
+
+    def _gate(changes: list[SourceChange]) -> RelearnOffer | None:
+        return stack.service.offer_relearn(root, SourceKind.SOUL_CORPUS, actor="source-watcher")
+
+    return SourceWatchLoop(
+        SourceWatcher(root, state_path=resolved_state, patterns=None),
+        _gate,
+        interval_seconds=interval_seconds,
+        cooldown_seconds=cooldown_seconds,
+    )
+
+
 def create_app(
     stack: LocalStack,
     *,
@@ -1060,8 +1125,37 @@ def create_app(
     host_allowlist: Sequence[str] = DEFAULT_HOST_ALLOWLIST,
     max_body_bytes: int = DEFAULT_MAX_PAYLOAD_BYTES,
     body_timeout_seconds: float = 10.0,
+    watch_root: str | Path | None = None,
+    watch_interval_seconds: float = 30.0,
+    watch_cooldown_seconds: float = 300.0,
+    watch_state_path: str | Path | None = None,
 ) -> Any:
-    """Build the versioned ``/v1`` ASGI app over *stack*."""
+    """Build the versioned ``/v1`` ASGI app over *stack*.
+
+    With ``watch_root`` the app runs the spec-13.5 doc-change watcher for its
+    own lifespan (arch review F-1): polling starts at server startup and stops
+    at shutdown; a detected corpus change publishes the gated relearn offer
+    (``RELEARN_PENDING``) with no auto-apply — see :func:`_build_watch_loop`.
+    """
+    watch_loop: SourceWatchLoop | None = None
+    if watch_root is not None:
+        watch_loop = _build_watch_loop(
+            stack,
+            watch_root,
+            interval_seconds=watch_interval_seconds,
+            cooldown_seconds=watch_cooldown_seconds,
+            state_path=watch_state_path,
+        )
+
+    @asynccontextmanager
+    async def _lifespan(app: Starlette) -> AsyncIterator[None]:
+        if watch_loop is not None:
+            watch_loop.start()
+        try:
+            yield
+        finally:
+            if watch_loop is not None:
+                watch_loop.stop()
 
     async def health(request: Request) -> Response:
         report = await run_in_threadpool(_call_health, stack, _EmptyPayload(), "operator", None)
@@ -1084,7 +1178,7 @@ def create_app(
         Route("/v1/knowledge/{operation}", knowledge, methods=["POST"]),
         Route("/v1/ops/{operation}", ops, methods=["POST"]),
     ]
-    app = Starlette(routes=routes)
+    app = Starlette(routes=routes, lifespan=_lifespan if watch_loop is not None else None)
     denial_recorder = BoundaryDenialRecorder(stack.store)
     return BoundaryMiddleware(
         app,
@@ -1215,6 +1309,10 @@ def serve(
     max_body_bytes: int = DEFAULT_MAX_PAYLOAD_BYTES,
     timeout_keep_alive: int = 5,
     body_timeout_seconds: float = 10.0,
+    watch_root: str | Path | None = None,
+    watch_interval_seconds: float = 30.0,
+    watch_cooldown_seconds: float = 300.0,
+    watch_state_path: str | Path | None = None,
 ) -> None:
     """Serve the API: Unix socket by default, opt-in loopback HTTP.
 
@@ -1224,7 +1322,9 @@ def serve(
     unix-socket peers included (wave-2 F1). The unix socket is created
     owner-only (``0o600``) via :func:`_bind_unix_socket` (wave-2 F2).
     Uvicorn owns SIGINT/SIGTERM graceful shutdown; the store is closed by the
-    caller when ``serve`` returns.
+    caller when ``serve`` returns. With ``watch_root`` the spec-13.5
+    doc-change watcher runs for the server's lifespan — detect-only, gated
+    offers, never an auto-apply (:func:`create_app`, arch review F-1).
     """
     if (socket_path is None) == (http is None):
         raise BindPolicyError("exactly one of socket_path or http is required")
@@ -1236,6 +1336,10 @@ def serve(
         host_allowlist=host_allowlist,
         max_body_bytes=max_body_bytes,
         body_timeout_seconds=body_timeout_seconds,
+        watch_root=watch_root,
+        watch_interval_seconds=watch_interval_seconds,
+        watch_cooldown_seconds=watch_cooldown_seconds,
+        watch_state_path=watch_state_path,
     )
     listener: socket.socket | None = None
     if socket_path is not None:

@@ -376,10 +376,14 @@ def _check_property(name: str, value: Any, spec: Any) -> None:
         allowed = expected if isinstance(expected, list) else [expected]
         if not any(_type_matches(value, candidate) for candidate in allowed):
             raise _invalid(name, f"must be of type {'/'.join(str(item) for item in allowed)}")
-    if value is None:
-        return
+    # Arch review F-2: the enum check precedes the null early-return — a null
+    # must never bypass a closed vocabulary (enum-only specs like ``mode``
+    # carry no null in their value set, so null fails here; nullable specs
+    # pass the type check above and skip the rest below as before).
     if "enum" in spec and value not in spec["enum"]:
         raise _invalid(name, f"must be one of {spec['enum']}")
+    if value is None:
+        return
     if type(value) is int:
         if "minimum" in spec and value < spec["minimum"]:
             raise _invalid(name, f"must be >= {spec['minimum']}")
@@ -701,16 +705,25 @@ class _Adapter:
         return _model_payload(receipt)
 
     def _op_rollback(self, args: dict[str, Any]) -> dict[str, Any]:
-        if args.get("node_id") is None and args.get("relearn_id") is None:
+        # Arch review F-2: the cross-field rule mirrors RollbackRequest's
+        # model validator — exactly one target, and to_version only with a
+        # node target — at the adapter, like every other MCP validation.
+        node_id = args.get("node_id")
+        relearn_id = args.get("relearn_id")
+        if (node_id is None) == (relearn_id is None):
             raise ToolError(
                 "INVALID_ARGUMENTS",
-                "property 'node_id': knowledge_rollback requires 'node_id' (improvement)"
-                " or 'relearn_id' (relearn rollback)",
+                "knowledge_rollback requires exactly one of 'node_id' (improvement) or 'relearn_id' (relearn rollback)",
+            )
+        if relearn_id is not None and args.get("to_version") is not None:
+            raise ToolError(
+                "INVALID_ARGUMENTS",
+                "property 'to_version': only applies to an improvement rollback (with 'node_id')",
             )
         receipt = self._service.rollback(
-            node_id=args.get("node_id"),
+            node_id=node_id,
             to_version=args.get("to_version"),
-            relearn_id=args.get("relearn_id"),
+            relearn_id=relearn_id,
             actor=self._actor,
             idempotency_key=args.get("idempotency_key"),
         )

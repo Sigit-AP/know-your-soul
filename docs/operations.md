@@ -98,6 +98,42 @@ schedule; keep receipts with the backup so rollback can assert the chain head.
   generations are content-addressed and deterministic, repair re-derives the
   same directory and restores torn/corrupted artifacts byte-identically.
 
+## Source watch (spec 13.5)
+
+`soul-knowledge serve --watch PATH` runs the doc-change watcher for the
+server's lifespan (arch review F-1; `update_pipeline.SourceWatchLoop` +
+`source_watcher.SourceWatcher`):
+
+- **Detect-only, always gated.** The watcher polls the corpus root
+  (`--watch-interval`, default 30s) for content-hash changes. A detected
+  change rides the same gated path as `ops/relearn_scan`: the deterministic
+  `RelearnOffer` is recorded and the gate becomes `RELEARN_PENDING` —
+  audited as `knowledge.relearn_offer` with actor `source-watcher`. The
+  watcher **never** applies, never selects a mode, never flips the
+  operator-approved baseline; `relearn_preview` / `relearn_apply` stay
+  mandatory. The first poll after startup records the `SOUL_CORPUS`
+  detection baseline and emits no offer (the initial import stays
+  operator-explicit).
+- **Cooldown.** After an offer is emitted the watcher pauses
+  (`--watch-cooldown`, default 300s). Edits during the pause accumulate and
+  arrive as one batched offer — a save storm cannot mint a stream of offers,
+  and no change is ever absorbed silently.
+- **State file.** The watcher's snapshot defaults to `source-watch.json`
+  alongside the store file (override with `--watch-state`). It must live
+  *outside* the watched root — startup fails closed otherwise, because a
+  state file inside would perturb the corpus fingerprint and mint spurious
+  offers. The snapshot is anchored to the resolved root; a snapshot written
+  for another root fails closed (`WatcherStateError`).
+- **Failure isolation.** Watcher errors (corrupt/foreign state file,
+  unreadable corpus) and gate-callback failures are logged
+  (`soul_knowledge.update_pipeline`) and backed off exponentially — they
+  never take the API down. Operator repair: remove or fix the state file;
+  detection resumes on the next polls. The watch thread
+  (`soul-source-watch`) starts and stops with the server.
+- **Restart.** An unchanged corpus after a restart re-emits nothing (the
+  persisted snapshot and the registry baseline agree); changes made while
+  the server was down surface as an offer on the first poll.
+
 ## Container
 
 `deploy/Dockerfile`: two-stage build on `python:3.14-slim`, non-root `soul`

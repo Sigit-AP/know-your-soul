@@ -49,6 +49,7 @@ from soul_knowledge.http_api import (
     to_jsonable,
 )
 from soul_knowledge.security import BindPolicyError
+from soul_knowledge.update_pipeline import UpdatePipelineError
 
 __all__ = ["build_parser", "main"]
 
@@ -107,6 +108,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="comma-separated Host allowlist (default: localhost,127.0.0.1,::1)",
     )
     serve_parser.add_argument("--max-body-bytes", type=int, default=None, help="request body size cap")
+    serve_parser.add_argument(
+        "--watch",
+        default=None,
+        metavar="PATH",
+        help="watch a corpus root and emit gated relearn offers on change (spec 13.5; detect-only, never applies)",
+    )
+    serve_parser.add_argument(
+        "--watch-interval",
+        type=float,
+        default=30.0,
+        help="seconds between watcher polls (default 30)",
+    )
+    serve_parser.add_argument(
+        "--watch-cooldown",
+        type=float,
+        default=300.0,
+        help="seconds the watcher pauses after emitting an offer (default 300)",
+    )
+    serve_parser.add_argument(
+        "--watch-state",
+        default=None,
+        metavar="PATH",
+        help="watcher snapshot path (default: alongside the store; must live outside the watched root)",
+    )
     return parser
 
 
@@ -144,8 +169,16 @@ def _serve_command(args: argparse.Namespace) -> int:
         kwargs: dict[str, Any] = {"api_key": api_key, "host_allowlist": allowlist}
         if args.max_body_bytes is not None:
             kwargs["max_body_bytes"] = args.max_body_bytes
+        if args.watch is not None:
+            # Arch review F-1: the spec-13.5 doc-change watcher rides the
+            # server's lifespan; detect-only, offers gated on the operator.
+            kwargs["watch_root"] = args.watch
+            kwargs["watch_interval_seconds"] = args.watch_interval
+            kwargs["watch_cooldown_seconds"] = args.watch_cooldown
+            if args.watch_state is not None:
+                kwargs["watch_state_path"] = args.watch_state
         serve(stack, socket_path=socket_path, http=http, **kwargs)
-    except BindPolicyError as error:
+    except (BindPolicyError, UpdatePipelineError) as error:
         _print_error(error)
         return 1
     except KeyboardInterrupt:

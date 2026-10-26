@@ -30,8 +30,10 @@ operator-explicit (``SeedImporter.import_directory``).
 
 from __future__ import annotations
 
+import logging
+import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
@@ -40,13 +42,15 @@ from soul_knowledge.domain import PrimaryDomain
 from soul_knowledge.importer import SeedImporter
 from soul_knowledge.projection import GraphProjector, ProjectionReceipt, ProjectorBusy
 from soul_knowledge.source_registry import RELEARN_PENDING, RelearnOffer, SourceKind
-from soul_knowledge.source_watcher import SourceChange
+from soul_knowledge.source_watcher import SourceChange, SourceWatcher
 from soul_knowledge.store import StoreError
 
 __all__ = [
     "ApprovedUpdateReceipt",
+    "SourceWatchLoop",
     "UpdatePipelineError",
     "UpdateReceipt",
+    "WatchPollReceipt",
     "apply_approved_update",
     "update_from_changes",
 ]
@@ -75,6 +79,156 @@ class ApprovedUpdateReceipt(BaseModel):
     retired_node_ids: tuple[str, ...] = ()
     imported_files: int = 0
     projection: ProjectionReceipt | None = None
+
+
+class WatchPollReceipt(BaseModel):
+    """The outcome of one watch-loop poll cycle; errors are data, never raised."""
+
+    model_config = ConfigDict(frozen=True)
+
+    changes: tuple[SourceChange, ...] = ()
+    offer_emitted: bool = False
+    error: str | None = None
+
+
+class SourceWatchLoop:
+    """Drive a :class:`SourceWatcher` for the lifetime of a server (F-1).
+
+    The loop polls on ``interval_seconds`` and routes every change batch
+    through the injected ``on_changes`` gate callback — in production the
+    service's audited ``offer_relearn``, so a detected change publishes the
+    deterministic offer plus ``RELEARN_PENDING`` and nothing more: detection
+    never flips the baseline and never applies (final-audit F-4 semantics).
+
+    Discipline:
+
+    * Lifecycle: :meth:`start` spawns one daemon thread (``soul-source-watch``),
+      :meth:`stop` joins it; a double start is a typed
+      :class:`UpdatePipelineError` and :meth:`stop` is idempotent.
+    * Cooldown: after a poll whose callback emitted an offer, the loop pauses
+      for ``cooldown_seconds`` — edits during the pause accumulate on disk and
+      arrive as one batched poll, so a save storm cannot mint a stream of
+      offers. The watcher's own snapshot is untouched while paused, so nothing
+      is silently absorbed.
+    * Fail-isolated: a watcher error (``WatcherStateError``, ``OSError``) or a
+      callback failure becomes a typed :class:`WatchPollReceipt` error, is
+      logged, and backs the poll off exponentially up to
+      ``max_error_backoff_seconds`` — the loop never takes its server down.
+    """
+
+    def __init__(
+        self,
+        watcher: SourceWatcher,
+        on_changes: Callable[[list[SourceChange]], object],
+        *,
+        interval_seconds: float = 30.0,
+        cooldown_seconds: float = 300.0,
+        max_error_backoff_seconds: float = 300.0,
+        logger: logging.Logger | None = None,
+    ) -> None:
+        if interval_seconds <= 0:
+            raise UpdatePipelineError(f"watch interval must be positive, got {interval_seconds}")
+        if cooldown_seconds < 0:
+            raise UpdatePipelineError(f"watch cooldown must be non-negative, got {cooldown_seconds}")
+        if max_error_backoff_seconds <= 0:
+            raise UpdatePipelineError(f"watch error backoff cap must be positive, got {max_error_backoff_seconds}")
+        self._watcher = watcher
+        self._on_changes = on_changes
+        self._interval_seconds = float(interval_seconds)
+        self._cooldown_seconds = float(cooldown_seconds)
+        self._max_error_backoff_seconds = float(max_error_backoff_seconds)
+        self._logger = logger if logger is not None else logging.getLogger(__name__)
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._cooldown_until = 0.0
+        self._consecutive_errors = 0
+
+    @property
+    def running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    def cooldown_remaining(self) -> float:
+        """Seconds left of the post-offer pause (0 when none is active)."""
+        return max(0.0, self._cooldown_until - time.monotonic())
+
+    def start(self) -> None:
+        """Spawn the daemon watch thread; a double start fails typed."""
+        if self._thread is not None:
+            raise UpdatePipelineError("the source watch loop is already started")
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, name="soul-source-watch", daemon=True)
+        self._thread.start()
+        self._logger.info(
+            "source watch started: interval %.2fs, cooldown %.2fs",
+            self._interval_seconds,
+            self._cooldown_seconds,
+        )
+
+    def stop(self, *, timeout: float = 5.0) -> None:
+        """Stop the watch thread; safe to call without a start or twice."""
+        self._stop.set()
+        thread, self._thread = self._thread, None
+        if thread is not None:
+            thread.join(timeout=timeout)
+            if thread.is_alive():  # pragma: no cover - the interruptible wait makes this unreachable
+                self._logger.warning("source watch thread did not stop within %.2fs", timeout)
+            else:
+                self._logger.info("source watch stopped")
+
+    def poll_once(self) -> WatchPollReceipt:
+        """One detect-and-gate cycle; the error path is a receipt, never a raise.
+
+        Exposed for tests and one-shot drivers; the thread loop is a thin
+        ``poll_once`` + sleep wrapper around exactly this method.
+        """
+        try:
+            changes = self._watcher.poll()
+        except Exception as error:  # noqa: BLE001 - the loop must never take its server down
+            return self._note_error(f"{type(error).__name__}: {error}")
+        if not changes:
+            self._consecutive_errors = 0
+            return WatchPollReceipt()
+        try:
+            outcome = self._on_changes(changes)
+        except Exception as error:  # noqa: BLE001 - same isolation rule for the gate callback
+            return self._note_error(f"{type(error).__name__}: {error}", changes=changes)
+        self._consecutive_errors = 0
+        offer_emitted = bool(outcome)
+        if offer_emitted:
+            self._cooldown_until = time.monotonic() + self._cooldown_seconds
+            offer_id = getattr(outcome, "offer_id", None)
+            self._logger.info(
+                "source change gated: %d file(s); relearn offer %s emitted, RELEARN_PENDING awaits the operator",
+                len(changes),
+                offer_id,
+            )
+        else:
+            self._logger.info(
+                "source change batch of %d file(s) recorded without an offer (baseline or unchanged fingerprint)",
+                len(changes),
+            )
+        return WatchPollReceipt(changes=tuple(changes), offer_emitted=offer_emitted)
+
+    def _note_error(self, message: str, *, changes: list[SourceChange] | None = None) -> WatchPollReceipt:
+        self._consecutive_errors += 1
+        self._logger.error("source watch poll failed (%s); backing off", message)
+        return WatchPollReceipt(changes=tuple(changes or ()), error=message)
+
+    def _next_delay(self, receipt: WatchPollReceipt) -> float:
+        if receipt.error is not None:
+            return min(
+                self._interval_seconds * (2 ** max(0, self._consecutive_errors - 1)),
+                self._max_error_backoff_seconds,
+            )
+        if receipt.offer_emitted:
+            return max(self._interval_seconds, self.cooldown_remaining())
+        return self._interval_seconds
+
+    def _run(self) -> None:
+        delay = self._interval_seconds
+        while not self._stop.wait(delay):
+            receipt = self.poll_once()
+            delay = self._next_delay(receipt)
 
 
 def update_from_changes(
