@@ -1,0 +1,479 @@
+{
+  "ledger": "kys-memory-benchmark/1.0.0",
+  "generated_at": "2026-10-27T17:54:35Z",
+  "dataset": {
+    "name": "LOCOMO locomo10.json",
+    "url": "https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json",
+    "sha256": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
+    "fetched": "2026-10-27",
+    "conversations": 10,
+    "turns": 5882,
+    "qa_total": 1986,
+    "qa_evaluable_non_empty_evidence": 1982
+  },
+  "methodology": {
+    "unit": "one candidate = one dialog turn (dia_id), the granularity of LOCOMO evidence",
+    "hit_at_k": "any top-k node id maps to a dia_id in the question's evidence list",
+    "k": 10,
+    "sample": "deterministic random.Random(83).sample of 300 from the 1982 evaluable QA pairs",
+    "graphify_harness": "memory/runner.py referenced by Graphify BENCHMARKS.md but not published in Graphify-Labs/graphify@v8 (verified 2026-10-27); criteria reconstructed as documented here"
+  },
+  "product_topology": {
+    "shard_size_turns": 32,
+    "shard_count": 184,
+    "max_graph_json_bytes": 26874,
+    "artifact_cap_bytes": 65536,
+    "note": "the product's 64 KiB per-artifact cap bounds one store to ~40 turns; sharding into independent product stores is the supported scale-out topology; cross-shard IDF is per-shard (federation artifact)"
+  },
+  "results": {
+    "kys_federated": {
+      "recall_at_10_full": 0.5419,
+      "n_full": 1982,
+      "recall_at_10_sample300": 0.5433,
+      "all_evidence_recall_at_10_full": 0.449,
+      "per_category_full": {
+        "1": {
+          "recall_at_10": 0.5177,
+          "n": 282
+        },
+        "2": {
+          "recall_at_10": 0.5732,
+          "n": 321
+        },
+        "3": {
+          "recall_at_10": 0.3152,
+          "n": 92
+        },
+        "4": {
+          "recall_at_10": 0.5684,
+          "n": 841
+        },
+        "5": {
+          "recall_at_10": 0.5314,
+          "n": 446
+        }
+      }
+    },
+    "kys_global_diagnostic": {
+      "recall_at_10_full": 0.5969,
+      "n_full": 1982,
+      "recall_at_10_sample300": 0.59,
+      "all_evidence_recall_at_10_full": 0.499,
+      "per_category_full": {
+        "1": {
+          "recall_at_10": 0.5496,
+          "n": 282
+        },
+        "2": {
+          "recall_at_10": 0.6199,
+          "n": 321
+        },
+        "3": {
+          "recall_at_10": 0.413,
+          "n": 92
+        },
+        "4": {
+          "recall_at_10": 0.6326,
+          "n": 841
+        },
+        "5": {
+          "recall_at_10": 0.5807,
+          "n": 446
+        }
+      }
+    },
+    "bm25_anchor": {
+      "recall_at_10_full": 0.5121,
+      "n_full": 1982,
+      "recall_at_10_sample300": 0.51,
+      "all_evidence_recall_at_10_full": 0.4395,
+      "per_category_full": {
+        "1": {
+          "recall_at_10": 0.3333,
+          "n": 282
+        },
+        "2": {
+          "recall_at_10": 0.6137,
+          "n": 321
+        },
+        "3": {
+          "recall_at_10": 0.2935,
+          "n": 92
+        },
+        "4": {
+          "recall_at_10": 0.5719,
+          "n": 841
+        },
+        "5": {
+          "recall_at_10": 0.4843,
+          "n": 446
+        }
+      }
+    }
+  },
+  "graphify_published_locomo_recall_at_10": {
+    "graphify_graph_expand": 0.497,
+    "hybrid_rrf": 0.493,
+    "graphify_surreal": 0.485,
+    "dense_rag": 0.439,
+    "bm25": 0.362,
+    "supermemory": 0.149,
+    "mem0": 0.048
+  },
+  "sanity_query_vs_index": {
+    "checks": [
+      {
+        "qid": "conv-42#q52",
+        "routing": "direct",
+        "query_top10": [
+          "t_conv42_d15_1",
+          "t_conv42_d15_5",
+          "t_conv42_d15_10",
+          "t_conv42_d14_19",
+          "t_conv42_d14_21",
+          "t_conv42_d14_23",
+          "t_conv42_d14_24",
+          "t_conv42_d14_25",
+          "t_conv42_d14_27",
+          "t_conv42_d15_11"
+        ],
+        "index_top10": [
+          "t_conv42_d15_1",
+          "t_conv42_d15_5",
+          "t_conv42_d15_10",
+          "t_conv42_d14_19",
+          "t_conv42_d14_21",
+          "t_conv42_d14_23",
+          "t_conv42_d14_24",
+          "t_conv42_d14_25",
+          "t_conv42_d14_27",
+          "t_conv42_d15_11"
+        ],
+        "match": true
+      },
+      {
+        "qid": "conv-41#q12",
+        "routing": "direct",
+        "query_top10": [
+          "t_conv41_d8_18",
+          "t_conv41_d8_23",
+          "t_conv41_d8_8",
+          "t_conv41_d8_25",
+          "t_conv41_d8_9",
+          "t_conv41_d8_10",
+          "t_conv41_d8_11",
+          "t_conv41_d8_12",
+          "t_conv41_d8_13",
+          "t_conv41_d8_14"
+        ],
+        "index_top10": [
+          "t_conv41_d8_18",
+          "t_conv41_d8_23",
+          "t_conv41_d8_8",
+          "t_conv41_d8_25",
+          "t_conv41_d8_9",
+          "t_conv41_d8_10",
+          "t_conv41_d8_11",
+          "t_conv41_d8_12",
+          "t_conv41_d8_13",
+          "t_conv41_d8_14"
+        ],
+        "match": true
+      },
+      {
+        "qid": "conv-42#q239",
+        "routing": "direct",
+        "query_top10": [
+          "t_conv42_d23_18",
+          "t_conv42_d23_17",
+          "t_conv42_d23_16",
+          "t_conv42_d23_24",
+          "t_conv42_d23_11",
+          "t_conv42_d23_13",
+          "t_conv42_d23_15",
+          "t_conv42_d23_19",
+          "t_conv42_d23_2",
+          "t_conv42_d23_21"
+        ],
+        "index_top10": [
+          "t_conv42_d23_18",
+          "t_conv42_d23_17",
+          "t_conv42_d23_16",
+          "t_conv42_d23_24",
+          "t_conv42_d23_11",
+          "t_conv42_d23_13",
+          "t_conv42_d23_15",
+          "t_conv42_d23_19",
+          "t_conv42_d23_2",
+          "t_conv42_d23_21"
+        ],
+        "match": true
+      },
+      {
+        "qid": "conv-49#q170",
+        "routing": "direct",
+        "query_top10": [
+          "t_conv49_d8_13",
+          "t_conv49_d8_14",
+          "t_conv49_d8_12",
+          "t_conv49_d7_11",
+          "t_conv49_d7_13",
+          "t_conv49_d7_14",
+          "t_conv49_d7_15",
+          "t_conv49_d7_16",
+          "t_conv49_d7_3",
+          "t_conv49_d7_5"
+        ],
+        "index_top10": [
+          "t_conv49_d8_13",
+          "t_conv49_d8_14",
+          "t_conv49_d8_12",
+          "t_conv49_d7_11",
+          "t_conv49_d7_13",
+          "t_conv49_d7_14",
+          "t_conv49_d7_15",
+          "t_conv49_d7_16",
+          "t_conv49_d7_3",
+          "t_conv49_d7_5"
+        ],
+        "match": true
+      },
+      {
+        "qid": "conv-43#q124",
+        "routing": "direct",
+        "query_top10": [
+          "t_conv43_d15_4",
+          "t_conv43_d15_19",
+          "t_conv43_d15_2",
+          "t_conv43_d15_5",
+          "t_conv43_d15_3",
+          "t_conv43_d15_9",
+          "t_conv43_d14_12",
+          "t_conv43_d14_14",
+          "t_conv43_d14_16",
+          "t_conv43_d14_18"
+        ],
+        "index_top10": [
+          "t_conv43_d15_4",
+          "t_conv43_d15_19",
+          "t_conv43_d15_2",
+          "t_conv43_d15_5",
+          "t_conv43_d15_3",
+          "t_conv43_d15_9",
+          "t_conv43_d14_12",
+          "t_conv43_d14_14",
+          "t_conv43_d14_16",
+          "t_conv43_d14_18"
+        ],
+        "match": true
+      },
+      {
+        "qid": "conv-43#q18",
+        "routing": "direct",
+        "query_top10": [
+          "t_conv43_d10_1",
+          "t_conv43_d10_11",
+          "t_conv43_d10_2",
+          "t_conv43_d10_3",
+          "t_conv43_d10_4",
+          "t_conv43_d10_5",
+          "t_conv43_d10_7",
+          "t_conv43_d10_9",
+          "t_conv43_d1_1",
+          "t_conv43_d1_10"
+        ],
+        "index_top10": [
+          "t_conv43_d10_1",
+          "t_conv43_d10_11",
+          "t_conv43_d10_2",
+          "t_conv43_d10_3",
+          "t_conv43_d10_4",
+          "t_conv43_d10_5",
+          "t_conv43_d10_7",
+          "t_conv43_d10_9",
+          "t_conv43_d1_1",
+          "t_conv43_d1_10"
+        ],
+        "match": true
+      },
+      {
+        "qid": "conv-43#q90",
+        "routing": "direct",
+        "query_top10": [
+          "t_conv43_d6_17",
+          "t_conv43_d6_16",
+          "t_conv43_d6_18",
+          "t_conv43_d6_15",
+          "t_conv43_d6_19",
+          "t_conv43_d6_12",
+          "t_conv43_d6_14",
+          "t_conv43_d5_10",
+          "t_conv43_d5_12",
+          "t_conv43_d5_14"
+        ],
+        "index_top10": [
+          "t_conv43_d6_17",
+          "t_conv43_d6_16",
+          "t_conv43_d6_18",
+          "t_conv43_d6_15",
+          "t_conv43_d6_19",
+          "t_conv43_d6_12",
+          "t_conv43_d6_14",
+          "t_conv43_d5_10",
+          "t_conv43_d5_12",
+          "t_conv43_d5_14"
+        ],
+        "match": true
+      },
+      {
+        "qid": "conv-41#q21",
+        "routing": "direct",
+        "query_top10": [
+          "t_conv41_d11_4",
+          "t_conv41_d10_1",
+          "t_conv41_d10_11",
+          "t_conv41_d10_13",
+          "t_conv41_d10_14",
+          "t_conv41_d10_15",
+          "t_conv41_d10_17",
+          "t_conv41_d10_18",
+          "t_conv41_d10_2",
+          "t_conv41_d10_3"
+        ],
+        "index_top10": [
+          "t_conv41_d11_4",
+          "t_conv41_d10_1",
+          "t_conv41_d10_11",
+          "t_conv41_d10_13",
+          "t_conv41_d10_14",
+          "t_conv41_d10_15",
+          "t_conv41_d10_17",
+          "t_conv41_d10_18",
+          "t_conv41_d10_2",
+          "t_conv41_d10_3"
+        ],
+        "match": true
+      },
+      {
+        "qid": "conv-44#q108",
+        "routing": "direct",
+        "query_top10": [
+          "t_conv44_d23_12",
+          "t_conv44_d22_1",
+          "t_conv44_d23_10",
+          "t_conv44_d23_14",
+          "t_conv44_d22_2",
+          "t_conv44_d22_4",
+          "t_conv44_d23_13",
+          "t_conv44_d23_7",
+          "t_conv44_d23_9",
+          "t_conv44_d21_18"
+        ],
+        "index_top10": [
+          "t_conv44_d23_12",
+          "t_conv44_d22_1",
+          "t_conv44_d23_10",
+          "t_conv44_d23_14",
+          "t_conv44_d22_2",
+          "t_conv44_d22_4",
+          "t_conv44_d23_13",
+          "t_conv44_d23_7",
+          "t_conv44_d23_9",
+          "t_conv44_d21_18"
+        ],
+        "match": true
+      },
+      {
+        "qid": "conv-47#q52",
+        "routing": "direct",
+        "query_top10": [
+          "t_conv47_d25_10",
+          "t_conv47_d25_7",
+          "t_conv47_d25_8",
+          "t_conv47_d25_9",
+          "t_conv47_d25_11",
+          "t_conv47_d25_13",
+          "t_conv47_d25_16",
+          "t_conv47_d26_3",
+          "t_conv47_d26_4",
+          "t_conv47_d26_9"
+        ],
+        "index_top10": [
+          "t_conv47_d25_10",
+          "t_conv47_d25_7",
+          "t_conv47_d25_8",
+          "t_conv47_d25_9",
+          "t_conv47_d25_11",
+          "t_conv47_d25_13",
+          "t_conv47_d25_16",
+          "t_conv47_d26_3",
+          "t_conv47_d26_4",
+          "t_conv47_d26_9"
+        ],
+        "match": true
+      },
+      {
+        "qid": "conv-43#q137",
+        "routing": "direct",
+        "query_top10": [
+          "t_conv43_d19_3",
+          "t_conv43_d19_21",
+          "t_conv43_d19_9",
+          "t_conv43_d19_10",
+          "t_conv43_d19_4",
+          "t_conv43_d18_10",
+          "t_conv43_d18_11",
+          "t_conv43_d18_13",
+          "t_conv43_d18_15",
+          "t_conv43_d19_1"
+        ],
+        "index_top10": [
+          "t_conv43_d19_3",
+          "t_conv43_d19_21",
+          "t_conv43_d19_9",
+          "t_conv43_d19_10",
+          "t_conv43_d19_4",
+          "t_conv43_d18_10",
+          "t_conv43_d18_11",
+          "t_conv43_d18_13",
+          "t_conv43_d18_15",
+          "t_conv43_d19_1"
+        ],
+        "match": true
+      },
+      {
+        "qid": "conv-43#q150",
+        "routing": "direct",
+        "query_top10": [
+          "t_conv43_d22_13",
+          "t_conv43_d22_10",
+          "t_conv43_d22_12",
+          "t_conv43_d21_17",
+          "t_conv43_d22_14",
+          "t_conv43_d22_9",
+          "t_conv43_d22_1",
+          "t_conv43_d22_2",
+          "t_conv43_d21_10",
+          "t_conv43_d21_11"
+        ],
+        "index_top10": [
+          "t_conv43_d22_13",
+          "t_conv43_d22_10",
+          "t_conv43_d22_12",
+          "t_conv43_d21_17",
+          "t_conv43_d22_14",
+          "t_conv43_d22_9",
+          "t_conv43_d22_1",
+          "t_conv43_d22_2",
+          "t_conv43_d21_10",
+          "t_conv43_d21_11"
+        ],
+        "match": true
+      }
+    ],
+    "matched": 12,
+    "total": 12
+  },
+  "build_seconds": 109.52,
+  "eval_seconds": 473.56
+}

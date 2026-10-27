@@ -1,0 +1,225 @@
+{
+  "ledger": "kys-keyfact-coverage/1.0.0",
+  "generated_at": "2026-10-27T17:48:59Z",
+  "construct": "key-fact (rubric term) coverage of the product's query responses over the frozen SOUL benchmark corpus (bench/cases.json, 24 cases)",
+  "equivalence_note": "Graphify's ERPNext cross-tool row (82.0% vs grep/read 70.8%) is NOT replicable: the crosstool harness, the n=6 graded questions and the key-fact gold sets are unpublished, and the harness drives a Claude Opus coding agent (LLM-bound, outside our no-AI boundary). This ledger measures the same construct (does retrieval surface the known key facts) on our own frozen corpus. Equivalent construct, NOT an identical benchmark.",
+  "mean_coverage": 0.4312,
+  "cases": [
+    {
+      "case": "q01-evidence-labels",
+      "covered": 3,
+      "total": 3,
+      "coverage": 1.0,
+      "results": 3,
+      "routing": "ranked",
+      "latency_ms": 60.53
+    },
+    {
+      "case": "q02-base-rate-rule",
+      "covered": 1,
+      "total": 3,
+      "coverage": 0.3333,
+      "results": 3,
+      "routing": "ranked",
+      "latency_ms": 8.78
+    },
+    {
+      "case": "q03-overconfidence-countermeasure",
+      "covered": 0,
+      "total": 3,
+      "coverage": 0.0,
+      "results": 3,
+      "routing": "ranked",
+      "latency_ms": 13.1
+    },
+    {
+      "case": "q04-blind-verification",
+      "covered": 0,
+      "total": 3,
+      "coverage": 0.0,
+      "results": 3,
+      "routing": "ranked",
+      "latency_ms": 19.08
+    },
+    {
+      "case": "q05-chestertons-fence",
+      "covered": 1,
+      "total": 2,
+      "coverage": 0.5,
+      "results": 2,
+      "routing": "ranked",
+      "latency_ms": 11.59
+    },
+    {
+      "case": "q06-heuristic-count",
+      "covered": 2,
+      "total": 4,
+      "coverage": 0.5,
+      "results": 2,
+      "routing": "ranked",
+      "latency_ms": 16.92
+    },
+    {
+      "case": "q07-goodhart",
+      "covered": 1,
+      "total": 3,
+      "coverage": 0.3333,
+      "results": 4,
+      "routing": "ranked",
+      "latency_ms": 16.41
+    },
+    {
+      "case": "q08-kill-criteria-format",
+      "covered": 0,
+      "total": 4,
+      "coverage": 0.0,
+      "results": 5,
+      "routing": "ranked",
+      "latency_ms": 20.47
+    },
+    {
+      "case": "q09-token-budget-kill",
+      "covered": 0,
+      "total": 3,
+      "coverage": 0.0,
+      "results": 5,
+      "routing": "ranked",
+      "latency_ms": 20.11
+    },
+    {
+      "case": "q10-execution-phases",
+      "covered": 4,
+      "total": 4,
+      "coverage": 1.0,
+      "results": 5,
+      "routing": "ranked",
+      "latency_ms": 16.95
+    },
+    {
+      "case": "q11-l1-no-query",
+      "covered": 1,
+      "total": 3,
+      "coverage": 0.3333,
+      "results": 5,
+      "routing": "ranked",
+      "latency_ms": 17.18
+    },
+    {
+      "case": "q12-effort-classification",
+      "covered": 1,
+      "total": 3,
+      "coverage": 0.3333,
+      "results": 5,
+      "routing": "ranked",
+      "latency_ms": 15.72
+    },
+    {
+      "case": "q13-decision-matrix",
+      "covered": 2,
+      "total": 4,
+      "coverage": 0.5,
+      "results": 4,
+      "routing": "ranked",
+      "latency_ms": 7.94
+    },
+    {
+      "case": "q14-assumption-format",
+      "covered": 1,
+      "total": 4,
+      "coverage": 0.25,
+      "results": 4,
+      "routing": "ranked",
+      "latency_ms": 14.82
+    },
+    {
+      "case": "q15-tradeoff-fields",
+      "covered": 3,
+      "total": 4,
+      "coverage": 0.75,
+      "results": 4,
+      "routing": "ranked",
+      "latency_ms": 10.43
+    },
+    {
+      "case": "q16-premortem-steelman",
+      "covered": 3,
+      "total": 4,
+      "coverage": 0.75,
+      "results": 4,
+      "routing": "ranked",
+      "latency_ms": 13.74
+    },
+    {
+      "case": "q17-reasoning-modes",
+      "covered": 4,
+      "total": 4,
+      "coverage": 1.0,
+      "results": 4,
+      "routing": "ranked",
+      "latency_ms": 13.87
+    },
+    {
+      "case": "q18-confirmation-bias",
+      "covered": 0,
+      "total": 2,
+      "coverage": 0.0,
+      "results": 4,
+      "routing": "ranked",
+      "latency_ms": 12.01
+    },
+    {
+      "case": "q19-synthesis-questions",
+      "covered": 1,
+      "total": 3,
+      "coverage": 0.3333,
+      "results": 4,
+      "routing": "ranked",
+      "latency_ms": 11.99
+    },
+    {
+      "case": "q20-ledger-fields",
+      "covered": 2,
+      "total": 4,
+      "coverage": 0.5,
+      "results": 5,
+      "routing": "ranked",
+      "latency_ms": 20.63
+    },
+    {
+      "case": "q21-communication-format",
+      "covered": 4,
+      "total": 4,
+      "coverage": 1.0,
+      "results": 5,
+      "routing": "ranked",
+      "latency_ms": 21.46
+    },
+    {
+      "case": "q22-subagent-soul",
+      "covered": 1,
+      "total": 3,
+      "coverage": 0.3333,
+      "results": 5,
+      "routing": "ranked",
+      "latency_ms": 35.39
+    },
+    {
+      "case": "q23-p1-metrics",
+      "covered": 0,
+      "total": 4,
+      "coverage": 0.0,
+      "results": 4,
+      "routing": "ranked",
+      "latency_ms": 29.71
+    },
+    {
+      "case": "q24-card-schema",
+      "covered": 3,
+      "total": 5,
+      "coverage": 0.6,
+      "results": 5,
+      "routing": "ranked",
+      "latency_ms": 35.66
+    }
+  ]
+}

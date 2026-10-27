@@ -1,4 +1,22 @@
-# bench/ — deterministic SOUL benchmark harness (Task 10)
+# bench/ — deterministic benchmark suites
+
+Three reproducible, no-AI benchmark suites ship with the product. Anyone can
+run them against the system as-is and reproduce the published numbers:
+
+| Suite | What it measures | How to run |
+|-------|------------------|------------|
+| `bench/run.py` | Token saving, latency, retrieval quality vs the frozen SOUL corpus (24 cases) | `uv run python bench/run.py run` |
+| `bench/memory/` | recall@10 on the real LOCOMO conversational-memory dataset | `uv run python bench/memory/run.py run` |
+| `bench/institutional/` | Graph-algorithm correctness + performance, GAPBS/LDBC-Graphalytics style | `uv run python bench/institutional/run.py` |
+
+Everything is deterministic: corpora and datasets are pinned by sha256,
+questions are frozen, no model is involved anywhere, and `--strict` exits 1 on
+any failure so CI can gate on it. Latest results live in each suite's
+`results/` directory.
+
+---
+
+# bench/run.py — SOUL corpus benchmark (Task 10)
 
 Reproducible, no-AI benchmark of the knowledge system against the raw SOUL
 corpus. Everything here is deterministic: the corpus is pinned by sha256, the
