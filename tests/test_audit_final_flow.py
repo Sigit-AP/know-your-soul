@@ -577,7 +577,10 @@ def test_reader_storm_under_write_stream_bounds_repairs(tmp_path: Path) -> None:
                 errors.append(f"writer: {type(error).__name__}: {error}")
 
     def reader() -> None:
-        while not stop.is_set():
+        # Progress-based, not time-based: CI runners can be slow, so keep
+        # reading until a fixed number of attempts happened (or the writer
+        # stopped). The progress assertion below is then deterministic.
+        while not stop.is_set() and reads["ok"] + reads["stale"] < 25:
             try:
                 service.get_node("n-1")
                 reads["ok"] += 1
