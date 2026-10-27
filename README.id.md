@@ -6,54 +6,29 @@
 
 # Know Your Soul
 
-<p align="center">
-  <a href="https://github.com/Sigit-AP/know-your-soul/actions/workflows/ci.yml"><img src="https://github.com/Sigit-AP/know-your-soul/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"/></a>
-  <a href="https://pypi.org/project/know-your-soul/"><img src="https://img.shields.io/pypi/v/know-your-soul" alt="PyPI"/></a>
-  <img src="https://img.shields.io/badge/python-3.14-blue" alt="Python 3.14"/>
-  <img src="https://img.shields.io/badge/cakupan-97.7%25-brightgreen" alt="Cakupan 97.7%"/>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/Lisensi-Apache%202.0-blue" alt="Lisensi: Apache-2.0"/></a>
-</p>
+[![CI](https://github.com/Sigit-AP/know-your-soul/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Sigit-AP/know-your-soul/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/know-your-soul)](https://pypi.org/project/know-your-soul/)
+[![Python 3.14](https://img.shields.io/badge/python-3.14-blue)](https://www.python.org/)
+[![Lisensi: Apache 2.0](https://img.shields.io/badge/Lisensi-Apache%202.0-blue)](LICENSE)
 
-Know Your Soul adalah graph pengetahuan dan pembelajaran yang deterministik
-untuk [Hermes Agent](https://hermes-agent.nousresearch.com/docs). Ia menyimpan
-apa yang dipelajari agent sebagai graph event-sourced yang teraudit, menilai
-setiap node dengan aritmetika Decimal yang eksak, dan hanya berubah lewat
-proposal yang kamu setujui. Tidak ada model, embedding, atau panggilan provider
-di mana pun dalam runtime. AI-nya tetap di sisi Hermes; ini memori yang bisa
-dipercaya.
+**Layanan memori untuk agent.** Ia menyimpan apa yang dipelajari agent dalam
+satu graph lokal yang teraudit — dinilai, berversi, dan mustahil berubah tanpa
+persetujuanmu. Tidak ada model, embedding, atau panggilan provider di dalamnya.
+AI tetap di sisi agent; ini bagian yang tidak pernah menebak.
 
-<p align="center">
-  <img src="docs/assets/screenshots/graph-viewer.png" alt="Graph viewer hasil ekspor sistem yang berjalan: 36 node dan 35 edge bertipe dari korpus asli, berwarna per domain P1–P7" width="900"/>
-</p>
-<p align="center">
-  <em>Graph viewer, diekspor oleh sistem yang sedang berjalan. 36 node, 35 edge
-  bertipe, berwarna per domain. Data asli, bukan mockup.</em>
-</p>
+> Agent membaca ulang dokumen yang sama di setiap sesi dan membayar harga token
+> penuh untuk itu. Know Your Soul menjawab dari graph: **hemat token 94,2%**,
+> setiap jawaban membawa provenance dan id audit-nya.
 
-## Kenapa
+## Instalasi
 
-Agent membaca ulang dokumen yang sama di setiap sesi dan membayar harga token
-penuh untuk itu. Know Your Soul memberi agent satu memori lokal sebagai
-gantinya:
-
-- Query, bukan baca ulang. Retrieval berbatas token, terukur hemat ~94%
-  dibanding membaca korpus mentah (24/24 kasus benchmark beku).
-- Setiap panggilan teraudit. Termasuk bacaan. Setiap operasi tercatat sebagai
-  satu event dalam store SQLite append-only berantai-hash.
-- Belajar itu dinilai, bukan kira-kira. Setiap node membawa skor P/M/E
-  terkalibrasi di bawah kontrak matematika beku.
-- Tidak ada yang menulis ulang dirinya sendiri. Perbaikan berupa proposal diff
-  yang kamu setujui; rollback byte-exact.
-
-## Mulai cepat
-
-Butuh Python 3.14.
+**Butuh:** Python 3.14
 
 ```bash
 pip install know-your-soul
 ```
 
-Dari source, dengan environment terkunci:
+Dari source:
 
 ```bash
 git clone https://github.com/Sigit-AP/know-your-soul.git
@@ -61,153 +36,109 @@ cd know-your-soul
 uv sync --frozen
 ```
 
-Catat dua node lalu query:
+## Pemakaian
 
 ```bash
-know-your-soul --store demo.sqlite3 --output-root graph log-event \
-  '{"node_id":"p1-root","kind":"primary","domain":"P1",
-    "summary":"P1 root: disiplin verifikasi",
-    "provenance":["soul://demo"],"source_version_id":"demo-v1"}'
-
-know-your-soul --store demo.sqlite3 --output-root graph log-event \
+know-your-soul --store demo.sqlite3 log-event \
   '{"node_id":"n1","parent_id":"p1-root","domain":"P1",
     "summary":"Selalu verifikasi sebelum mengklaim selesai",
     "provenance":["soul://demo"],"source_version_id":"demo-v1"}'
 
-know-your-soul --store demo.sqlite3 --output-root graph rebuild
-know-your-soul --store demo.sqlite3 --output-root graph query \
+know-your-soul --store demo.sqlite3 rebuild
+know-your-soul --store demo.sqlite3 query \
   '{"purpose":"verify before claiming done","token_budget":400}'
+
+know-your-soul export --format all        # graph.html + DOT/Mermaid/CSV/GraphML/SVG + buku
+know-your-soul analytics --modules all    # centrality, communities, cycles, health, timeline
+know-your-soul serve --socket demo.sock   # API lokal persisten
+know-your-soul diagnose                   # self-check menyeluruh, exit code mencerminkan kesehatan
 ```
 
-Jawaban nyata dari server yang berjalan, lengkap dengan jejak auditnya:
+Hermes mendaftarkannya sebagai MCP server; setup:
+[docs/integration/hermes.md](docs/integration/hermes.md).
+
+## Apa yang kamu dapatkan
+
+**Graph viewer** — `export` menulis `graph.html` mandiri. Tanpa CDN, tanpa
+dependensi JavaScript, jalan offline. Ini hasil nyata dari sistem yang berjalan
+di korpus benchmark:
 
 <p align="center">
-  <img src="docs/assets/screenshots/live-api-query.png" alt="Respons query langsung dari server HTTP yang berjalan: hasil, provenance, akuntansi token, dan id event audit" width="900"/>
+  <img src="docs/assets/screenshots/graph-viewer.png" alt="Graph viewer: 36 node, 35 edge bertipe, berwarna per domain" width="900"/>
 </p>
 
-API persisten menyajikan JSON `/v1` berversi lewat Unix socket (HTTP loopback
-opsional, API key wajib di luar loopback):
-
-```bash
-know-your-soul --store demo.sqlite3 --output-root graph serve --socket demo.sock
-
-curl -s --unix-socket demo.sock -X POST http://localhost/v1/knowledge/query \
-  -H 'content-type: application/json' \
-  -d '{"purpose":"verify before claiming done","token_budget":400}'
-```
-
-Hermes mendaftarkan sistem ini sebagai MCP server:
-
-```bash
-hermes mcp add know-your-soul \
-  --command /root/know-your-soul/.venv/bin/python \
-  --args -m know_your_soul.mcp_server \
-         --graph-root /root/know-your-soul/.local/graph \
-         --db /root/know-your-soul/.local/know-your-soul.sqlite3
-
-hermes mcp test know-your-soul
-```
-
-Setup lengkap: [docs/integration/hermes.md](docs/integration/hermes.md).
-
-## Graph viewer
-
-`know-your-soul export --formats all` menulis `graph.html` mandiri (tanpa CDN,
-tanpa dependensi JavaScript, jalan offline) plus dua belas format interchange
-lain: DOT, Mermaid, CSV (node + edge), GraphML, SVG, GEXF, Cytoscape.js,
-D3-force, matriks adjacency + edge list, TGF, dan buku markdown per domain.
-Setiap artifact ter-hash ke dalam manifest generasi dan tervalidasi round-trip.
-
-`know-your-soul analytics --modules all` menambahkan suite graph dalam di atas
-read model yang sama: centrality, components, communities, cycles, bridges,
-HITS, eigenvector dan Katz prestige, clustering, Louvain deterministik,
-reachability all-pairs, triad census 16 kelas, assortativity degree, probe
-k-shortest-paths, agregat skor per domain, dan kandidat near-duplicate yang
-proposal-only. Operasi harian dicakup tiga perintah read-only: `config
-describe` / `config effective` (konfigurasi berlapis dengan provenance),
-`metrics` (store/latensi/kapasitas/kesehatan), dan `diagnose` (11 self-check
-fail-closed; exit 1 bila ada yang rusak, jadi CI bisa gate langsung).
-
-Klik sebuah node untuk melihat skor, versi, dan provenance-nya:
+Klik sebuah node, dapatkan skor dan provenance-nya:
 
 <p align="center">
-  <img src="docs/assets/screenshots/node-detail.png" alt="Panel detail node pada graph viewer hasil ekspor: label, id, domain, skor P/M/E, dan provenance node korpus asli" width="900"/>
+  <img src="docs/assets/screenshots/node-detail.png" alt="Detail node: label, domain, skor P/M/E, provenance" width="900"/>
 </p>
-
-Tema gelap tersedia:
 
 <p align="center">
-  <img src="docs/assets/screenshots/dark-theme.png" alt="Graph viewer yang sama dalam tema gelap" width="900"/>
+  <img src="docs/assets/screenshots/dark-theme.png" alt="Tema gelap" width="700"/>
 </p>
 
-## Empat belas operasi
+**Jawaban dengan bukti** — setiap panggilan, termasuk bacaan, tercatat sebagai
+satu event dalam store SQLite append-only berantai-hash. Respons query langsung
+membawa id audit-nya:
 
-Identik di CLI, HTTP, dan MCP. Sepuluh operasi v1 beku; kontrak v2
-([docs/contracts/retrieval-verbs-v2.md](docs/contracts/retrieval-verbs-v2.md))
-menambah empat verb retrieval.
+<p align="center">
+  <img src="docs/assets/screenshots/live-api-query.png" alt="Respons query langsung dari server yang berjalan" width="900"/>
+</p>
 
-| # | Operasi | Fungsi |
-|---|---------|--------|
-| 1 | `query` | Retrieval berbatas token dengan provenance, versi, dan rekomendasi |
-| 2 | `get_node` | Satu node dengan evidence dan metadata proyeksi |
-| 3 | `get_subtree` | Traversal subtree terbatas |
-| 4 | `log_event` | Menambah event domain yang tak bisa diubah |
-| 5 | `record_outcome` | Menempelkan hasil ke evidence |
-| 6 | `evaluate` | Skor P/M/E, uncertainty, level, kelayakan promosi |
-| 7 | `review` | Mesin status review: evidence minimum, cooldown, hysteresis |
-| 8 | `propose_improvement` | Proposal diff terstruktur |
-| 9 | `apply_improvement` | Apply operator-gated dengan gerbang regresi |
-| 10 | `rollback` | Pembalikan byte-exact |
-| 11 | `path` | Jalur terpendek terarah antara dua node |
-| 12 | `explain` | Lingkungan relasional: link masuk/keluar plus hitungan per relasi |
-| 13 | `affected` | Penelusuran dependensi terbalik, kedalaman terbatas |
-| 14 | `god_nodes` | Node hub teratas berdasarkan degree terukur |
+**Belajar dengan kontrak** — node membawa skor P/M/E di bawah matematika beku.
+Perbaikan datang sebagai proposal diff yang kamu setujui; rollback byte-exact.
+Perubahan korpus menghasilkan relearn offer dan menunggumu.
+
+**Analitik graph** — PageRank, HITS, Katz, communities, Louvain, cycles,
+bridges, health check. Deterministik: input sama, byte sama, setiap run.
+
+**Dua belas format ekspor** — DOT, Mermaid, CSV, GraphML, GEXF, Cytoscape, D3,
+SVG, TGF, adjacency, plus buku markdown per domain.
 
 ## Benchmark
 
-`bench/` mengunci snapshot korpus dengan sha256 (28 file, 13.151 estimasi
-token) dan mengajukan 24 pertanyaan beku. Tanpa model. Ledger terbaru: 24/24
-diterima, rata-rata hemat token 94,2%, median latensi p50 7,9 ms.
+Korpus terkunci (28 file, 13.151 token), 24 pertanyaan beku, tanpa model:
 
-```bash
-uv run python bench/run.py check
-uv run python bench/run.py run
-```
+| Metrik | Hasil |
+|---|---|
+| Kasus diterima | 24/24 |
+| Rata-rata hemat token vs korpus mentah | 94,2% |
+| Median latensi query (p50) | 7,9 ms |
 
-Metodologi: [bench/README.md](bench/README.md). Bukti release:
+Benchmark memori pada dataset LOCOMO asli (5.882 turn, 1.982 pertanyaan):
+
+| Metrik | Hasil |
+|---|---|
+| recall@10 (produk, apa adanya) | 0,5433 |
+
+Jalankan sendiri keduanya: `uv run python bench/run.py run` dan
+`uv run python bench/memory/run.py run`. Bukti:
 [docs/verification.md](docs/verification.md).
+
+## Empat belas operasi
+
+Sama di CLI, HTTP, dan MCP:
+
+| | | | |
+|---|---|---|---|
+| `query` | `get_node` | `get_subtree` | `log_event` |
+| `record_outcome` | `evaluate` | `review` | `propose_improvement` |
+| `apply_improvement` | `rollback` | `path` | `explain` |
+| `affected` | `god_nodes` | | |
 
 ## Keamanan
 
-- Batas no-AI ditegakkan saat runtime: paket provider, vector, dan model
-  gagal-tertutup; socket keluar ditolak; MCP server menolak start bila menemukan
-  kredensial provider di environment-nya.
-- Host allowlist di setiap request. API key dibandingkan dalam waktu konstan.
-- Body request dibatasi. Bentuk secret dan PII email teredaksi saat tulis dan
-  di setiap permukaan baca. Path terkurung ke root tetap.
-
-## Relearn
-
-Saat korpus berubah, sistem menerbitkan `RelearnOffer` lalu berhenti. Ia tidak
-pernah memilih mode sendiri:
-
-```bash
-know-your-soul relearn-scan      # deteksi drift, catat offer
-know-your-soul relearn-status    # periksa offer yang tertunda
-know-your-soul relearn-preview   # dry-run rencananya
-know-your-soul relearn-apply     # apply, setelah kamu setujui (RESET atau ACCUMULATE)
-```
-
-Setiap apply mengambil backup atomik terverifikasi dulu. Rollback memulihkan
-hash dan skor persis seperti sebelum apply.
+Batas no-AI ditegakkan saat runtime: paket provider dan vector gagal-tertutup,
+socket keluar ditolak, dan MCP server menolak start bila menemukan kredensial
+provider di environment-nya. Host allowlist di setiap request, perbandingan API
+key dalam waktu konstan, body dibatasi, secret teredaksi, path terkurung.
 
 ## Development
 
 ```bash
 uv sync --frozen
 uv run pytest -q                 # 3.165 test
-uv run pytest -q --cov=src/know_your_soul
-uv run pyright                   # 0 error
+uv run pyright
 uv run ruff check
 uv run python bench/run.py run   # 24/24 diterima
 ```
@@ -215,15 +146,16 @@ uv run python bench/run.py run   # 24/24 diterima
 CI menjalankan gate yang sama di Ubuntu dan macOS, plus bandit, pip-audit, dan
 penjaga atribusi lisensi.
 
-## Kontribusi
+<details>
+<summary>Kontribusi</summary>
 
-Issue dan pull request diterima. Tiga aturan: jalankan seluruh gate dulu,
-jangan pernah menambah dependensi model atau provider, dan jangan mengubah
-perilaku kontrak beku tanpa versi kontrak baru.
+Issue dan pull request diterima. Jalankan seluruh gate dulu. Jangan pernah
+menambah dependensi model atau provider — penjaga runtime gagal-tertutup.
+Perubahan perilaku kontrak beku hanya lewat versi kontrak baru.
+
+</details>
 
 ## Lisensi
 
-[Apache 2.0](LICENSE). Ide desain yang diadaptasi dari
-[Graphify](https://github.com/Graphlet-AI/graphify) (Apache-2.0 ATAU MIT)
-diimplementasikan ulang dari nol di bawah arsitektur proyek ini. Tidak ada
-kode sumber Graphify yang disalin. Atribusi lengkap di [NOTICE](NOTICE).
+[Apache 2.0](LICENSE). Format proyeksi graph dikonsumsi lewat paket `graphifyy`
+yang ter-pin. Atribusi di [NOTICE](NOTICE).
