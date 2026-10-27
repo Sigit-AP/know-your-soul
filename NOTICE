@@ -11,3 +11,12 @@ Feature ideas adapted from Graphify were re-implemented from scratch
 under this project's own architecture; no Graphify source code is
 copied into this repository. See docs/research/ and
 .superpowers/sdd/ for the adaptation mapping (ATM: observe, re-implement, modify).
+
+This product's ingestion pipeline (contract v3 addendum) uses the
+parser-category dependencies tree-sitter and tree-sitter-language-pack
+(https://github.com/tree-sitter/tree-sitter,
+https://github.com/Goldziher/tree-sitter-language-pack), Copyright the
+tree-sitter contributors, licensed under MIT; and pypdf
+(https://github.com/py-pdf/pypdf), Copyright the pypdf contributors,
+licensed under BSD-3-Clause. They are used as libraries only; no upstream
+source code is copied into this repository.

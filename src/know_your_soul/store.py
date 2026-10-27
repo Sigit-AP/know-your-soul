@@ -29,7 +29,7 @@ import sqlite3
 import threading
 import time
 import weakref
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -56,14 +56,29 @@ __all__ = [
     "AuditOutcomeMismatch",
     "EventRow",
     "EventStore",
+    "FileRow",
+    "GraphEdgeRow",
     "IdempotencyConflict",
     "InvalidRelation",
+    "MigrationError",
     "PublishCapacityExceeded",
+    "SchemaStateError",
+    "SchemaVersionTooNew",
     "StoreError",
+    "SymbolRow",
+    "UnresolvedRefError",
+    "UnresolvedRefRow",
     "VersionConflict",
 ]
 
 DEFAULT_MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
+
+# Highest schema version this build supports. The file-based SQL migrations in
+# ``migrations/`` cover v1/v2 (ledger: ``schema_migration``); v3 onward are
+# applied transactionally from Python and recorded in ``schema_versions``
+# (codegraph pattern, RESEARCH-STORAGE.md §1.4) so a failed migration rolls
+# back atomically instead of leaving half-created objects behind.
+SCHEMA_VERSION = 3
 
 # Only these kinds create a new node revision and bump the node version.
 _VERSION_BUMPING_KINDS: frozenset[EventKind] = frozenset({EventKind.NODE_UPSERT, EventKind.NODE_RETIRE})
@@ -105,6 +120,26 @@ class PublishCapacityExceeded(StoreError):
     """
 
 
+class MigrationError(StoreError):
+    """A versioned schema migration failed; the transaction was rolled back."""
+
+
+class SchemaVersionTooNew(MigrationError):
+    """The database records a schema version newer than this build supports.
+
+    Fail-closed (codegraph rule): never open a store whose schema we do not
+    fully understand — a downgrade attempt would silently corrupt semantics.
+    """
+
+
+class SchemaStateError(MigrationError):
+    """The schema ledger and the actual objects disagree; refuse to guess."""
+
+
+class UnresolvedRefError(StoreError):
+    """An unresolved-ref lifecycle transition was requested illegally."""
+
+
 # Same-process registry of open file-backed stores (final flow audit F-1):
 # backup/restore must know when a destination path is a *live* store so the
 # replace can be coordinated with the handle (close → swap → reopen) instead
@@ -138,6 +173,146 @@ class EventRow:
     node_version: int | None
     prev_event_hash: str | None
     event_hash: str
+
+
+# ------------------------------------------------------------------ schema v3
+# Universal Knowledge Graph storage (W1, MASTER-PLAN.md; DDL patterns adopted
+# from codegraph per RESEARCH-STORAGE.md §1.2/§1.3). One statement per entry:
+# the runner executes them individually inside one transaction — never via
+# ``executescript``, which would COMMIT early and break rollback-safety.
+_SCHEMA_V3_DESCRIPTION = "universal knowledge graph: files, symbols, graph_edges, unresolved_refs"
+_SCHEMA_V3_TABLES = ("files", "symbols", "graph_edges", "unresolved_refs")
+_SCHEMA_V3_STATEMENTS: tuple[str, ...] = (
+    # Source-file tracking for incremental ingestion. Identity is the path;
+    # ``sha256`` confirms what the (size, mtime) pre-filter suspects changed.
+    "CREATE TABLE files ("
+    "    path TEXT PRIMARY KEY,"
+    "    sha256 TEXT NOT NULL,"
+    "    size INTEGER NOT NULL CHECK (size >= 0),"
+    "    mtime INTEGER NOT NULL,"
+    "    language TEXT NOT NULL DEFAULT 'unknown',"
+    "    generated_hint INTEGER NOT NULL DEFAULT 0 CHECK (generated_hint IN (0, 1)),"
+    "    extraction_version INTEGER NOT NULL"
+    ")",
+    "CREATE INDEX idx_files_language ON files (language)",
+    "CREATE INDEX idx_files_mtime ON files (mtime)",
+    # PARTIAL: generated files are the minority (codegraph idx_files_generated).
+    "CREATE INDEX idx_files_generated ON files (path) WHERE generated_hint = 1",
+    # Symbol lookup surface; identity is the stable node id
+    # ``kind:sha256(path:kind:name:line)[:col]`` minted by the extractor.
+    "CREATE TABLE symbols ("
+    "    node_id TEXT PRIMARY KEY,"
+    "    name TEXT NOT NULL,"
+    "    kind TEXT NOT NULL,"
+    "    path TEXT NOT NULL,"
+    "    line INTEGER NOT NULL,"
+    "    col INTEGER NOT NULL DEFAULT -1"
+    ")",
+    "CREATE INDEX idx_symbols_name ON symbols (name)",
+    # Expression index: case-insensitive lookup without a table scan. Queries
+    # must use ``lower(name) = lower(?)`` exactly or SQLite will not seek it.
+    "CREATE INDEX idx_symbols_lower_name ON symbols (lower(name))",
+    "CREATE INDEX idx_symbols_path ON symbols (path, line, col)",
+    "CREATE INDEX idx_symbols_kind ON symbols (kind)",
+    # Universal graph edges (contains/calls/imports/bridges/...). Hierarchy is
+    # edges rooted at file nodes; depth is computed at traversal, never stored.
+    "CREATE TABLE graph_edges ("
+    "    edge_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    "    source TEXT NOT NULL,"
+    "    target TEXT NOT NULL,"
+    "    kind TEXT NOT NULL,"
+    "    line INTEGER,"
+    "    col INTEGER,"
+    "    metadata TEXT,"
+    "    provenance TEXT"
+    ")",
+    # Left-prefix of the composite covers bare source/target adjacency scans;
+    # separate single-column indexes are deliberately omitted (codegraph v4).
+    "CREATE INDEX idx_graph_edges_source_kind ON graph_edges (source, kind)",
+    "CREATE INDEX idx_graph_edges_target_kind ON graph_edges (target, kind)",
+    # Unique edge identity: IFNULL folds NULL line/col to -1 because SQLite
+    # treats every NULL as distinct (codegraph idx_edges_identity, #1034).
+    "CREATE UNIQUE INDEX idx_graph_edges_identity"
+    "    ON graph_edges (source, target, kind, IFNULL(line, -1), IFNULL(col, -1))",
+    # Two-phase resolution: extractors park cross-file references here;
+    # a separate resolve pass turns them into edges. ``name_tail`` (the last
+    # dot segment by default) is the retry lookup key when new files appear.
+    "CREATE TABLE unresolved_refs ("
+    "    ref_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    "    source_node_id TEXT NOT NULL,"
+    "    target_name TEXT NOT NULL,"
+    "    name_tail TEXT NOT NULL DEFAULT '',"
+    "    kind TEXT NOT NULL,"
+    "    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'resolved', 'failed')),"
+    "    first_seen TEXT NOT NULL,"
+    "    attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0)"
+    ")",
+    "CREATE INDEX idx_unresolved_source ON unresolved_refs (source_node_id)",
+    "CREATE INDEX idx_unresolved_target_name ON unresolved_refs (target_name)",
+    # PARTIAL: pending is the hot retry queue; resolved rows never re-query.
+    "CREATE INDEX idx_unresolved_pending ON unresolved_refs (first_seen, ref_id) WHERE status = 'pending'",
+    # PARTIAL: failed refs are retried by tail when a candidate file lands.
+    "CREATE INDEX idx_unresolved_failed_tail ON unresolved_refs (name_tail) WHERE status = 'failed'",
+)
+
+# Adjacency statements are built per (direction, kinds) shape and cached —
+# sqlite3 caches the compiled statement per SQL string, so a bounded string
+# cache gives prepared-statement behaviour with a fixed memory ceiling
+# (codegraph edgeKindStmt cache, capped at 64 shapes).
+_ADJACENCY_SQL_CACHE_LIMIT = 64
+
+
+@dataclass(frozen=True)
+class FileRow:
+    """One tracked source file (schema v3 ``files``)."""
+
+    path: str
+    sha256: str
+    size: int
+    mtime: int
+    language: str
+    generated_hint: bool
+    extraction_version: int
+
+
+@dataclass(frozen=True)
+class SymbolRow:
+    """One named symbol (schema v3 ``symbols``)."""
+
+    node_id: str
+    name: str
+    kind: str
+    path: str
+    line: int
+    col: int
+
+
+@dataclass(frozen=True)
+class GraphEdgeRow:
+    """One universal-graph edge (schema v3 ``graph_edges``)."""
+
+    edge_id: int
+    source: str
+    target: str
+    kind: str
+    line: int | None
+    col: int | None
+    metadata: str | None
+    provenance: str | None
+
+
+@dataclass(frozen=True)
+class UnresolvedRefRow:
+    """One parked cross-file reference (schema v3 ``unresolved_refs``)."""
+
+    ref_id: int
+    source_node_id: str
+    target_name: str
+    name_tail: str
+    kind: str
+    status: str
+    first_seen: str
+    attempts: int
 
 
 def _now_iso() -> str:
@@ -223,6 +398,7 @@ class EventStore:
         if self.db_path != ":memory:":
             Path(self.db_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        self._adjacency_sql_cache: dict[tuple[str, tuple[str, ...]], str] = {}
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute(f"PRAGMA busy_timeout = {int(busy_timeout_ms)}")
@@ -322,6 +498,75 @@ class EventStore:
                     "INSERT OR IGNORE INTO schema_migration (version, name, applied_at) VALUES (?, ?, ?)",
                     (version, path.name, _now_iso()),
                 )
+            self._apply_versioned_migrations(conn)
+
+    # ------------------------------------------------------ schema versioning
+    # v1/v2 live in migrations/*.sql (ledger ``schema_migration``). v3 onward
+    # are applied here: one BEGIN IMMEDIATE transaction per version, recorded
+    # in ``schema_versions``. Rollback-safe (a failed statement aborts the
+    # whole version), idempotent (a recorded version with all its objects is
+    # a no-op), and fail-closed (newer-than-supported versions and
+    # ledger/object disagreements raise typed errors instead of guessing).
+
+    @staticmethod
+    def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
+        return (
+            conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)).fetchone()
+            is not None
+        )
+
+    def _apply_versioned_migrations(self, conn: sqlite3.Connection) -> None:
+        recorded = 0
+        if self._table_exists(conn, "schema_versions"):
+            row = conn.execute("SELECT MAX(version) AS v FROM schema_versions").fetchone()
+            recorded = int(row["v"] or 0) if row is not None else 0
+        if recorded > SCHEMA_VERSION:
+            raise SchemaVersionTooNew(
+                f"database schema is v{recorded}, newer than this build supports (v{SCHEMA_VERSION}); refusing to open"
+            )
+        if recorded >= 3:
+            missing = [name for name in _SCHEMA_V3_TABLES if not self._table_exists(conn, name)]
+            if missing:
+                raise SchemaStateError(
+                    f"schema_versions records v3 but tables are missing: {', '.join(missing)}; "
+                    "refusing to open an inconsistent store"
+                )
+            return
+        if SCHEMA_VERSION < 3:
+            # Capped below v3 (tests building genuine pre-v3 fixtures): leave
+            # the store exactly as v1/v2, including no schema_versions ledger.
+            return
+        present = [name for name in _SCHEMA_V3_TABLES if self._table_exists(conn, name)]
+        if present:
+            raise SchemaStateError(
+                f"v3 tables exist without a schema_versions record: {', '.join(present)}; "
+                "refusing to guess the schema state"
+            )
+        try:
+            with self.transaction() as tx:
+                tx.execute(
+                    "CREATE TABLE schema_versions ("
+                    "    version INTEGER PRIMARY KEY,"
+                    "    applied_at TEXT NOT NULL,"
+                    "    description TEXT"
+                    ")"
+                )
+                # Backfill the file-based v1/v2 history into the versioned
+                # ledger so schema_versions alone answers "what version am I".
+                tx.execute(
+                    "INSERT INTO schema_versions (version, applied_at, description) "
+                    "SELECT version, applied_at, name FROM schema_migration WHERE version < 3"
+                )
+                for statement in _SCHEMA_V3_STATEMENTS:
+                    tx.execute(statement)
+                tx.execute(
+                    "INSERT INTO schema_versions (version, applied_at, description) VALUES (3, ?, ?)",
+                    (_now_iso(), _SCHEMA_V3_DESCRIPTION),
+                )
+        except StoreError:
+            raise
+        except sqlite3.Error as error:
+            raise MigrationError(f"schema migration to v3 failed and was rolled back: {error}") from error
 
     def applied_migrations(self) -> list[int]:
         with self.read() as conn:
@@ -1004,3 +1249,368 @@ class EventStore:
                 "SELECT * FROM source_version WHERE source_version_id = ?", (source_version_id,)
             ).fetchone()
         return None if row is None else dict(row)
+
+    # ------------------------------------------------------------ v3: files
+
+    def upsert_file(
+        self,
+        *,
+        path: str,
+        sha256: str,
+        size: int,
+        mtime: int,
+        language: str,
+        generated_hint: bool,
+        extraction_version: int,
+    ) -> None:
+        """Record one tracked source file, replacing any earlier observation."""
+        with self.transaction() as conn:
+            conn.execute(
+                "INSERT INTO files (path, sha256, size, mtime, language, generated_hint, extraction_version) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (path) DO UPDATE SET "
+                "sha256 = excluded.sha256, size = excluded.size, mtime = excluded.mtime, "
+                "language = excluded.language, generated_hint = excluded.generated_hint, "
+                "extraction_version = excluded.extraction_version",
+                (path, sha256, int(size), int(mtime), language, int(generated_hint), int(extraction_version)),
+            )
+
+    @staticmethod
+    def _file_row(row: sqlite3.Row) -> FileRow:
+        return FileRow(
+            path=str(row["path"]),
+            sha256=str(row["sha256"]),
+            size=int(row["size"]),
+            mtime=int(row["mtime"]),
+            language=str(row["language"]),
+            generated_hint=bool(row["generated_hint"]),
+            extraction_version=int(row["extraction_version"]),
+        )
+
+    def get_file(self, path: str) -> FileRow | None:
+        with self.read() as conn:
+            row = conn.execute("SELECT * FROM files WHERE path = ?", (path,)).fetchone()
+        return None if row is None else self._file_row(row)
+
+    def list_files(self, *, language: str | None = None) -> list[FileRow]:
+        with self.read() as conn:
+            if language is None:
+                rows = conn.execute("SELECT * FROM files ORDER BY path").fetchall()
+            else:
+                rows = conn.execute("SELECT * FROM files WHERE language = ? ORDER BY path", (language,)).fetchall()
+        return [self._file_row(row) for row in rows]
+
+    # ---------------------------------------------------------- v3: symbols
+
+    def upsert_symbol(self, *, node_id: str, name: str, kind: str, path: str, line: int, col: int = -1) -> None:
+        with self.transaction() as conn:
+            conn.execute(
+                "INSERT INTO symbols (node_id, name, kind, path, line, col) VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (node_id) DO UPDATE SET "
+                "name = excluded.name, kind = excluded.kind, path = excluded.path, "
+                "line = excluded.line, col = excluded.col",
+                (node_id, name, kind, path, int(line), int(col)),
+            )
+
+    @staticmethod
+    def _symbol_row(row: sqlite3.Row) -> SymbolRow:
+        return SymbolRow(
+            node_id=str(row["node_id"]),
+            name=str(row["name"]),
+            kind=str(row["kind"]),
+            path=str(row["path"]),
+            line=int(row["line"]),
+            col=int(row["col"]),
+        )
+
+    def symbol_by_node(self, node_id: str) -> SymbolRow | None:
+        with self.read() as conn:
+            row = conn.execute("SELECT * FROM symbols WHERE node_id = ?", (node_id,)).fetchone()
+        return None if row is None else self._symbol_row(row)
+
+    def symbols_named(self, name: str, *, case_insensitive: bool = False) -> list[SymbolRow]:
+        """Exact-name lookup; the insensitive form seeks ``idx_symbols_lower_name``.
+
+        The insensitive predicate must stay exactly ``lower(name) = lower(?)``
+        — any other form (``COLLATE NOCASE``, pre-lowered parameter) silently
+        degenerates to a table scan (codegraph searchNodes rule).
+        """
+        with self.read() as conn:
+            if case_insensitive:
+                rows = conn.execute(
+                    "SELECT * FROM symbols WHERE lower(name) = lower(?) ORDER BY path, line, col, node_id",
+                    (name,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM symbols WHERE name = ? ORDER BY path, line, col, node_id", (name,)
+                ).fetchall()
+        return [self._symbol_row(row) for row in rows]
+
+    def symbols_in_path(self, path: str) -> list[SymbolRow]:
+        with self.read() as conn:
+            rows = conn.execute("SELECT * FROM symbols WHERE path = ? ORDER BY line, col, node_id", (path,)).fetchall()
+        return [self._symbol_row(row) for row in rows]
+
+    # ------------------------------------------------------ v3: graph edges
+
+    def add_graph_edge(
+        self,
+        source: str,
+        target: str,
+        kind: str,
+        line: int | None = None,
+        col: int | None = None,
+        metadata: str | None = None,
+        provenance: str | None = None,
+    ) -> bool:
+        """Insert one edge; identity duplicates (per ``idx_graph_edges_identity``) are ignored.
+
+        Returns True when a row was actually inserted.
+        """
+        with self.transaction() as conn:
+            cursor = conn.execute(
+                "INSERT OR IGNORE INTO graph_edges (source, target, kind, line, col, metadata, provenance) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (source, target, kind, line, col, metadata, provenance),
+            )
+        return cursor.rowcount > 0
+
+    def add_graph_edges(self, edges: Iterable[Mapping[str, Any]]) -> int:
+        """Insert a batch of edges in one transaction; returns the inserted count.
+
+        Each entry carries ``source``, ``target``, ``kind`` and optional
+        ``line``/``col``/``metadata``/``provenance``. Iteration order is the
+        insertion order, so a deterministic caller gets deterministic rowids.
+        """
+        inserted = 0
+        with self.transaction() as conn:
+            for edge in edges:
+                cursor = conn.execute(
+                    "INSERT OR IGNORE INTO graph_edges (source, target, kind, line, col, metadata, provenance) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(edge["source"]),
+                        str(edge["target"]),
+                        str(edge["kind"]),
+                        edge.get("line"),
+                        edge.get("col"),
+                        edge.get("metadata"),
+                        edge.get("provenance"),
+                    ),
+                )
+                inserted += cursor.rowcount
+        return inserted
+
+    @staticmethod
+    def _graph_edge_row(row: sqlite3.Row) -> GraphEdgeRow:
+        return GraphEdgeRow(
+            edge_id=int(row["edge_id"]),
+            source=str(row["source"]),
+            target=str(row["target"]),
+            kind=str(row["kind"]),
+            line=None if row["line"] is None else int(row["line"]),
+            col=None if row["col"] is None else int(row["col"]),
+            metadata=None if row["metadata"] is None else str(row["metadata"]),
+            provenance=None if row["provenance"] is None else str(row["provenance"]),
+        )
+
+    def _adjacency_sql(self, direction: str, kinds: tuple[str, ...] | None) -> str:
+        """The prepared-statement SQL for one adjacency shape (cached, bounded).
+
+        Column and ordering mirror codegraph's adjacency pair: outgoing orders
+        by ``kind, target``, incoming by ``kind, source``, both then by the
+        IFNULL-folded position so NULL and -1 sort identically to the unique
+        edge identity.
+        """
+        key = (direction, kinds or ())
+        sql = self._adjacency_sql_cache.get(key)
+        if sql is not None:
+            return sql
+        if direction == "outgoing":
+            where_column, order_column = "source", "target"
+        else:
+            where_column, order_column = "target", "source"
+        sql = (
+            "SELECT edge_id, source, target, kind, line, col, metadata, provenance FROM graph_edges "
+            f"WHERE {where_column} = ?"
+        )
+        if kinds:
+            placeholders = ", ".join("?" for _ in kinds)
+            sql += f" AND kind IN ({placeholders})"
+        sql += f" ORDER BY kind, {order_column}, IFNULL(line, -1), IFNULL(col, -1), edge_id"
+        if len(self._adjacency_sql_cache) >= _ADJACENCY_SQL_CACHE_LIMIT:
+            self._adjacency_sql_cache.clear()
+        self._adjacency_sql_cache[key] = sql
+        return sql
+
+    def _adjacency(self, endpoint: str, direction: str, kinds: tuple[str, ...] | None) -> list[GraphEdgeRow]:
+        sql = self._adjacency_sql(direction, kinds)
+        parameters: tuple[Any, ...] = (endpoint, *(kinds or ()))
+        with self.read() as conn:
+            rows = conn.execute(sql, parameters).fetchall()
+        return [self._graph_edge_row(row) for row in rows]
+
+    def outgoing_edges(self, source: str, *, kinds: Sequence[str] | None = None) -> list[GraphEdgeRow]:
+        """All edges leaving ``source``, deterministic order, optional kind filter."""
+        return self._adjacency(source, "outgoing", tuple(kinds) if kinds else None)
+
+    def incoming_edges(self, target: str, *, kinds: Sequence[str] | None = None) -> list[GraphEdgeRow]:
+        """All edges arriving at ``target``, deterministic order, optional kind filter."""
+        return self._adjacency(target, "incoming", tuple(kinds) if kinds else None)
+
+    def subtree(
+        self,
+        root: str,
+        *,
+        max_depth: int,
+        kinds: Sequence[str] = ("contains",),
+    ) -> list[tuple[str, int]]:
+        """BFS over outgoing edges from ``root``, bounded at ``max_depth``.
+
+        Returns ``(node_id, depth)`` pairs in deterministic visit order (level
+        by level, adjacency order within a level). Cycles are cut by a visited
+        set; depth is computed here — never stored (hierarchy-is-edges rule).
+        """
+        if max_depth < 0:
+            raise ValueError(f"max_depth must be >= 0, got {max_depth}")
+        result: list[tuple[str, int]] = [(root, 0)]
+        visited = {root}
+        frontier = [root]
+        depth = 0
+        while frontier and depth < max_depth:
+            next_frontier: list[str] = []
+            for node in frontier:
+                for edge in self.outgoing_edges(node, kinds=tuple(kinds)):
+                    if edge.target in visited:
+                        continue
+                    visited.add(edge.target)
+                    result.append((edge.target, depth + 1))
+                    next_frontier.append(edge.target)
+            frontier = next_frontier
+            depth += 1
+        return result
+
+    # ------------------------------------------------- v3: unresolved refs
+
+    def insert_unresolved_ref(
+        self,
+        *,
+        source_node_id: str,
+        target_name: str,
+        kind: str,
+        name_tail: str | None = None,
+        first_seen: str | None = None,
+    ) -> int:
+        """Park one cross-file reference as ``pending``; returns its ref_id.
+
+        ``name_tail`` defaults to the last dot segment of ``target_name`` —
+        the retry lookup key when a candidate file lands later.
+        """
+        for label, value in (("target_name", target_name), ("name_tail", name_tail)):
+            if value is None:
+                continue
+            try:
+                value.encode("utf-8")
+            except UnicodeEncodeError as error:
+                raise UnresolvedRefError(
+                    f"{label} {value!r} is not UTF-8 encodable; refusing to park an unresolvable reference"
+                ) from error
+        tail = target_name.rsplit(".", 1)[-1] if name_tail is None else name_tail
+        with self.transaction() as conn:
+            cursor = conn.execute(
+                "INSERT INTO unresolved_refs (source_node_id, target_name, name_tail, kind, status, "
+                "first_seen, attempts) VALUES (?, ?, ?, ?, 'pending', ?, 0)",
+                (source_node_id, target_name, tail, kind, first_seen or _now_iso()),
+            )
+        ref_id = cursor.lastrowid
+        assert ref_id is not None  # AUTOINCREMENT table: SQLite always assigns one
+        return int(ref_id)
+
+    @staticmethod
+    def _unresolved_ref_row(row: sqlite3.Row) -> UnresolvedRefRow:
+        return UnresolvedRefRow(
+            ref_id=int(row["ref_id"]),
+            source_node_id=str(row["source_node_id"]),
+            target_name=str(row["target_name"]),
+            name_tail=str(row["name_tail"]),
+            kind=str(row["kind"]),
+            status=str(row["status"]),
+            first_seen=str(row["first_seen"]),
+            attempts=int(row["attempts"]),
+        )
+
+    def unresolved_ref(self, ref_id: int) -> UnresolvedRefRow | None:
+        with self.read() as conn:
+            row = conn.execute("SELECT * FROM unresolved_refs WHERE ref_id = ?", (int(ref_id),)).fetchone()
+        return None if row is None else self._unresolved_ref_row(row)
+
+    def pending_unresolved_refs(self, *, limit: int | None = None) -> list[UnresolvedRefRow]:
+        """The pending retry queue, oldest first (seeks ``idx_unresolved_pending``)."""
+        sql = "SELECT * FROM unresolved_refs WHERE status = 'pending' ORDER BY first_seen, ref_id"
+        parameters: tuple[Any, ...] = ()
+        if limit is not None:
+            sql += " LIMIT ?"
+            parameters = (int(limit),)
+        with self.read() as conn:
+            rows = conn.execute(sql, parameters).fetchall()
+        return [self._unresolved_ref_row(row) for row in rows]
+
+    def failed_unresolved_refs(self, *, name_tail: str | None = None) -> list[UnresolvedRefRow]:
+        """Failed refs, optionally narrowed to one tail (``idx_unresolved_failed_tail``)."""
+        with self.read() as conn:
+            if name_tail is None:
+                rows = conn.execute(
+                    "SELECT * FROM unresolved_refs WHERE status = 'failed' ORDER BY name_tail, ref_id"
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM unresolved_refs WHERE status = 'failed' AND name_tail = ? ORDER BY ref_id",
+                    (name_tail,),
+                ).fetchall()
+        return [self._unresolved_ref_row(row) for row in rows]
+
+    def record_resolution_attempt(self, ref_id: int, *, outcome: str) -> UnresolvedRefRow:
+        """Record one resolution attempt on a pending ref: ``resolved`` or ``failed``.
+
+        Fail-closed: unknown refs, non-pending sources and unknown outcomes
+        raise :class:`UnresolvedRefError` — a resolved ref is terminal, a
+        failed ref must go through :meth:`retry_failed_ref` first.
+        """
+        if outcome not in ("resolved", "failed"):
+            raise UnresolvedRefError(f"resolution outcome must be 'resolved' or 'failed', got {outcome!r}")
+        with self.transaction() as conn:
+            row = conn.execute("SELECT * FROM unresolved_refs WHERE ref_id = ?", (int(ref_id),)).fetchone()
+            if row is None:
+                raise UnresolvedRefError(f"unresolved ref {ref_id} does not exist")
+            status = str(row["status"])
+            if status != "pending":
+                raise UnresolvedRefError(
+                    f"unresolved ref {ref_id} is {status!r}, not 'pending'; refusing to record an attempt"
+                )
+            conn.execute(
+                "UPDATE unresolved_refs SET status = ?, attempts = attempts + 1 WHERE ref_id = ?",
+                (outcome, int(ref_id)),
+            )
+            updated = conn.execute("SELECT * FROM unresolved_refs WHERE ref_id = ?", (int(ref_id),)).fetchone()
+        assert updated is not None  # same transaction, same row
+        return self._unresolved_ref_row(updated)
+
+    def retry_failed_ref(self, ref_id: int) -> UnresolvedRefRow:
+        """Move a failed ref back to pending so the next resolve pass retries it.
+
+        ``attempts`` is preserved — it counts resolution attempts, not queue
+        re-entries.
+        """
+        with self.transaction() as conn:
+            row = conn.execute("SELECT * FROM unresolved_refs WHERE ref_id = ?", (int(ref_id),)).fetchone()
+            if row is None:
+                raise UnresolvedRefError(f"unresolved ref {ref_id} does not exist")
+            if str(row["status"]) != "failed":
+                raise UnresolvedRefError(
+                    f"unresolved ref {ref_id} is {str(row['status'])!r}, not 'failed'; refusing to retry"
+                )
+            conn.execute("UPDATE unresolved_refs SET status = 'pending' WHERE ref_id = ?", (int(ref_id),))
+            updated = conn.execute("SELECT * FROM unresolved_refs WHERE ref_id = ?", (int(ref_id),)).fetchone()
+        assert updated is not None  # same transaction, same row
+        return self._unresolved_ref_row(updated)

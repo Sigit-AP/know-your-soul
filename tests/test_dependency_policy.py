@@ -498,3 +498,37 @@ def test_graphify_mcp_console_script_is_rejected_by_the_entry_point_policy() -> 
         runtime_guard.assert_no_forbidden_entry_points([distribution])
     assert offenders[0] in runtime_guard.DORMANT_PINNED_ENTRY_POINTS
     assert runtime_guard.blocking_forbidden_entry_points([distribution]) == []
+
+
+# -------------------------------------- parser-category policy (contract v3)
+
+# The ingestion addendum (docs/contracts/ingestion-contract-v3.md) sanctions
+# exactly these parser-category distribution names for deterministic,
+# model-free extraction (tree-sitter grammars, PDF text layer). This set is a
+# review checkpoint — it admits the two new W2/W3 dependencies *explicitly*
+# and loosens nothing else: any other name joining the dependency surface
+# still fails the forbidden-distribution checks above, and a parser dependency
+# that lands in pyproject.toml must arrive as an exact == pin with no extras.
+APPROVED_PARSER_DEPENDENCIES = frozenset({"pypdf", "tree-sitter", "tree-sitter-language-pack"})
+
+
+def test_parser_allowlist_matches_the_runtime_guard_exactly() -> None:
+    """One source of truth: the packaging test and the guard must not drift."""
+    assert runtime_guard.ALLOWED_PARSER_DISTRIBUTIONS == APPROVED_PARSER_DEPENDENCIES
+    assert not (APPROVED_PARSER_DEPENDENCIES & runtime_guard.FORBIDDEN_DISTRIBUTIONS)
+
+
+def test_approved_parser_names_are_not_forbidden() -> None:
+    for name in APPROVED_PARSER_DEPENDENCIES:
+        assert not _is_forbidden_distribution(name), name
+
+
+def test_parser_dependencies_when_declared_are_exactly_pinned(pyproject: dict) -> None:
+    """A parser dependency in pyproject.toml is an exact == pin, extra-free."""
+    for item in pyproject["project"]["dependencies"]:
+        requirement = Requirement(item)
+        if canonicalize_name(requirement.name) not in APPROVED_PARSER_DEPENDENCIES:
+            continue
+        specifiers = [str(spec) for spec in requirement.specifier]
+        assert len(specifiers) == 1 and specifiers[0].startswith("=="), item
+        assert requirement.extras == set(), item

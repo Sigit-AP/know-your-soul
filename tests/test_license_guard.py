@@ -28,6 +28,12 @@ NOTICE_OK = (
     "Graphify (https://github.com/Graphlet-AI/graphify), Copyright 2026\n"
     "Safi Shamsi, licensed under Apache-2.0 OR MIT. The observed dependency\n"
     "is pinned as graphifyy==0.9.95 (see pyproject.toml and uv.lock).\n"
+    "\n"
+    "This product's ingestion pipeline (contract v3 addendum) uses the\n"
+    "parser-category dependencies tree-sitter and tree-sitter-language-pack\n"
+    "(https://github.com/tree-sitter/tree-sitter), Copyright the tree-sitter\n"
+    "contributors, licensed under MIT; and pypdf (https://github.com/py-pdf/pypdf),\n"
+    "Copyright the pypdf contributors, licensed under BSD-3-Clause.\n"
 )
 
 PYPROJECT_OK = (

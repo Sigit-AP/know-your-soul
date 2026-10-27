@@ -16,6 +16,12 @@ Design rules:
 * :func:`verify_runtime` is the single entry point used by later tasks and by
   the release gate. It returns a JSON-serializable report and never silently
   degrades.
+* Contract v3 (``docs/contracts/ingestion-contract-v3.md``) adds a sanctioned
+  **parser category** (:data:`ALLOWED_PARSER_DISTRIBUTIONS` /
+  :data:`ALLOWED_PARSER_IMPORT_ROOTS`: tree-sitter and pypdf for
+  deterministic, model-free extraction). The category is an allowlist that
+  sits next to — never inside — the forbidden surface; an overlap fails
+  closed via :func:`assert_parser_category_disjoint`.
 """
 
 from __future__ import annotations
@@ -34,6 +40,8 @@ from typing import Any
 
 __all__ = [
     "ALLOWED_MCP_CAPABILITIES",
+    "ALLOWED_PARSER_DISTRIBUTIONS",
+    "ALLOWED_PARSER_IMPORT_ROOTS",
     "CapabilityViolation",
     "DORMANT_PINNED_ENTRY_POINTS",
     "FORBIDDEN_DISTRIBUTIONS",
@@ -61,6 +69,7 @@ __all__ = [
     "assert_no_model_asset_env",
     "assert_no_provider_credentials",
     "assert_no_sampling_handler",
+    "assert_parser_category_disjoint",
     "assert_supported_python",
     "blocking_forbidden_entry_points",
     "cli_scraping_violations",
@@ -73,10 +82,12 @@ __all__ = [
     "install_import_guard",
     "install_socket_guard",
     "installed_distributions",
+    "is_allowed_parser_distribution",
     "is_forbidden_distribution",
     "is_forbidden_module",
     "model_asset_env",
     "observed_mcp_capabilities",
+    "parser_category_violations",
     "provider_credentials",
     "removed_credential_names",
     "scrubbed_env",
@@ -197,16 +208,47 @@ FORBIDDEN_DISTRIBUTIONS: frozenset[str] = frozenset(
         "jieba-py",
         # Document/media/site tooling that pulls model assets or writes files the
         # deterministic runtime must not touch. Kept in one shared set so the
-        # runtime guard and the packaging tests cannot drift apart.
+        # runtime guard and the packaging tests cannot drift apart. (``pypdf``
+        # left this set with contract v3: it is a sanctioned parser-category
+        # dependency now — see ALLOWED_PARSER_DISTRIBUTIONS.)
         "google-cloud-aiplatform",
         "watchdog",
-        "pypdf",
         "markdownify",
         "python-docx",
         "openpyxl",
         "pillow",
         "matplotlib",
         "robotframework",
+    }
+)
+
+# ---------------------------------------------------------------------------
+# Parser-category allowlist (contract v3 ingestion addendum)
+# ---------------------------------------------------------------------------
+
+# Deterministic, model-free parsing tooling sanctioned by the ingestion
+# contract addendum (``docs/contracts/ingestion-contract-v3.md``): tree-sitter
+# grammars (compiled C via the official Python binding) for AST extraction and
+# pypdf (pure Python) for the PDF text layer. This is an *allowlist*, not a
+# relaxation: the provider/model/embedding/vector sets above stay fail-closed,
+# and any addition to this category requires a new contract version plus an
+# operator ruling.
+ALLOWED_PARSER_DISTRIBUTIONS: frozenset[str] = frozenset(
+    {
+        "pypdf",
+        "tree-sitter",
+        "tree-sitter-language-pack",
+    }
+)
+
+# Import roots for the same category (distribution names use dashes; import
+# roots use underscores). Kept separate from the distribution names so the
+# import guard and the distribution policy each match in their own spelling.
+ALLOWED_PARSER_IMPORT_ROOTS: frozenset[str] = frozenset(
+    {
+        "pypdf",
+        "tree_sitter",
+        "tree_sitter_language_pack",
     }
 )
 
@@ -451,6 +493,39 @@ def is_forbidden_module(fullname: str) -> bool:
         if fullname == root or fullname.startswith(root + "."):
             return True
     return False
+
+
+def is_allowed_parser_distribution(name: str) -> bool:
+    """True when *name* is a sanctioned parser-category distribution.
+
+    Matching is **exact** after canonicalization — deliberately stricter than
+    :func:`is_forbidden_distribution` (which also catches separator-bounded
+    variants): an allowlist must never auto-admit a lookalike or a suffix
+    variant (``pypdf2``, ``tree-sitter-cli``) the contract did not name.
+    """
+    return _canonical(name) in ALLOWED_PARSER_DISTRIBUTIONS
+
+
+def parser_category_violations() -> list[str]:
+    """Invariant probe: the parser allowlist must stay disjoint from the
+    forbidden surface. Returns sorted violation messages (empty = OK)."""
+    violations: list[str] = []
+    for name in sorted(ALLOWED_PARSER_DISTRIBUTIONS):
+        if is_forbidden_distribution(name):
+            violations.append(f"parser-category distribution {name!r} is also in FORBIDDEN_DISTRIBUTIONS")
+    for root in sorted(ALLOWED_PARSER_IMPORT_ROOTS):
+        if is_forbidden_module(root):
+            violations.append(f"parser-category import root {root!r} is also in FORBIDDEN_IMPORT_ROOTS")
+    return violations
+
+
+def assert_parser_category_disjoint() -> None:
+    """Fail closed when the parser allowlist collides with the forbidden sets."""
+    violations = parser_category_violations()
+    if violations:
+        raise ForbiddenDependencyError(
+            "parser-category allowlist collides with the forbidden surface: " + "; ".join(violations)
+        )
 
 
 # Console-script names the product must never expose. ``graphify-mcp`` targets
@@ -1183,6 +1258,9 @@ def verify_runtime(
 
     installed = installed_distributions() if dirty_distributions is None else dict(dirty_distributions)
     assert_no_forbidden_distributions(installed)
+    # The parser-category allowlist (contract v3) must stay disjoint from the
+    # forbidden surface; a collision is a guard bug, so it fails closed here.
+    assert_parser_category_disjoint()
     # The pinned wheel ships `graphify-mcp = graphify.serve:_main`; the entry-point
     # policy rejects it, and this boundary is reported explicitly below instead of
     # being silently dropped (ADR 0001 §3, feature matrix §5).
@@ -1245,4 +1323,5 @@ def verify_runtime(
         "mcp_capabilities": sorted(observed_capabilities),
         "mcp_capability_evidence": capability_evidence,
         "forbidden_import_roots": sorted(FORBIDDEN_IMPORT_ROOTS),
+        "allowed_parser_distributions": sorted(ALLOWED_PARSER_DISTRIBUTIONS),
     }
