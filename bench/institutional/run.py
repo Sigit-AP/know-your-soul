@@ -826,9 +826,10 @@ def _kernel_cdlp(datasets: list[Dataset], *, repeats: int, quick: bool, max_n: i
         notes=[
             "LPA partitions are only well-defined on unambiguous structure; ambiguous datasets are scored "
             "on the exact-cover property only (Graphalytics itself validates CDLP exactly on fixed inputs).",
-            "known divergence: our canonical synchronous LPA merges two_triangles_bridge into one community "
-            "while networkx asyn_lpa splits at the bridge (mega-wave-2 Louvain pins the split as intended) "
-            "— reported as FAIL there, not hidden.",
+            "CDLP variant: canonical-order asynchronous LPA with hop attenuation (delta=0.25, HANP-style) "
+            "+ self-vote + leaf-follow rule, fully deterministic. The previous plain LPA merged "
+            "two_triangles_bridge into one community; the attenuated variant splits at the bridge, matching "
+            "networkx asyn_lpa(seed=0) and the Louvain-pinned partition (Q=5/14).",
         ],
     )
 

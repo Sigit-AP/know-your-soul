@@ -7,6 +7,21 @@ Pure-Python label propagation over the ``graph.json`` read model:
   the lexicographically smallest label. The algorithm iterates only sorted
   lists — never sets — so the result is independent of ``PYTHONHASHSEED``
   and of the caller's input ordering.
+* **Hop attenuation + self-vote (HANP-style, Leung et al. 2009).** Each
+  label carries a hop count: a neighbour's vote for its label is attenuated
+  by ``(1 - hop_attenuation * hop)``, and the node's own label votes for
+  itself (weight 1 at its own hop). Attenuation stops a just-adopted label
+  from immediately outcompeting a node's own fresh label — the mechanism
+  that keeps bridge-linked clusters (e.g. two triangles joined by one edge)
+  from merging into a single mega-community — while the self-vote anchors
+  nodes so asynchronous updates converge instead of oscillating or
+  rotating labels around cycles. A leaf (exactly one neighbour) follows its
+  sole neighbour directly: it has no community choice to weigh, and the
+  self-vote would otherwise freeze pendant chains as singletons. Adopting a
+  label sets the hop to the minimum contributing hop + 1; keeping a label
+  preserves the hop. With ``hop_attenuation=0`` attenuation is disabled and
+  bridge graphs merge again (pinned by tests as the documented load-bearing
+  mechanism).
 * **Iteration cap.** Propagation runs at most ``max_iterations`` rounds;
   whether the cap was hit is reported honestly (``converged``) instead of
   being hidden.
@@ -33,6 +48,10 @@ never writes artifacts, and never consults the clock or ambient state.
 
 origin: idea from Graphify ``cluster.py`` (label propagation contract,
 membership signatures, cohesion, remap semantics); implementation original.
+Bridge-fix variant follows HANP (Leung, Hui, Liò, Crowcroft 2009, "Towards
+real-time community detection in large networks") restricted to its
+deterministic core: hop attenuation with uniform node preference, plus an
+explicit self-vote for asynchronous convergence.
 """
 
 from __future__ import annotations
@@ -45,6 +64,7 @@ from typing import Any
 from know_your_soul.domain import quantize_score
 
 __all__ = [
+    "DEFAULT_HOP_ATTENUATION",
     "DEFAULT_MAX_ITERATIONS",
     "SCHEMA_VERSION",
     "detect_communities",
@@ -55,6 +75,10 @@ __all__ = [
 
 SCHEMA_VERSION = 1
 DEFAULT_MAX_ITERATIONS = 64
+# Midpoint of the stable region (0, 0.5): strictly positive so a just-adopted
+# cross-bridge label cannot tie a node's own fresh label, strictly below 0.5
+# so two attenuated in-community votes still outvote one fresh outside vote.
+DEFAULT_HOP_ATTENUATION = 0.25
 
 _ZERO = Decimal(0)
 _ONE = Decimal(1)
@@ -115,35 +139,58 @@ def _weighted_adjacency(node_ids: list[str], links: Iterable[Mapping[str, Any]])
 
 
 def _propagate(
-    node_ids: list[str], adjacency: dict[str, dict[str, float]], max_iterations: int
+    node_ids: list[str],
+    adjacency: dict[str, dict[str, float]],
+    max_iterations: int,
+    hop_attenuation: float,
 ) -> tuple[dict[str, str], int, bool]:
-    """Canonical-order asynchronous label propagation.
+    """Canonical-order asynchronous label propagation with hop attenuation.
 
     Each round walks nodes in sorted-id order and immediately applies the
-    majority neighbour label (weight-sum; ties break to the smallest label).
-    Stops when a full round changes nothing or the iteration cap is reached.
+    highest-scoring neighbour label. A neighbour's vote for its label weighs
+    ``weight * (1 - hop_attenuation * hop)`` where ``hop`` counts how many
+    adoptions the label has travelled; the node's own label votes for itself
+    with weight 1 at its own hop. Ties break to the smallest label. Adopting
+    a label sets the node's hop to the minimum contributing hop + 1; keeping
+    the label preserves the hop. A leaf (exactly one neighbour) has no
+    community choice to weigh, so it follows its sole neighbour directly —
+    this keeps pendant chains attached (matching the reference LPA) instead
+    of freezing them as singletons behind the self-vote. Stops when a full
+    round changes nothing or the iteration cap is reached.
     """
     labels = {node_id: node_id for node_id in node_ids}
+    hops = {node_id: 0 for node_id in node_ids}
     iterations_used = 0
     converged = False
     for _round in range(max_iterations):
         iterations_used += 1
         changed = False
         for node_id in node_ids:  # already sorted by the caller
-            tally: dict[str, float] = {}
+            own_label = labels[node_id]
+            if len(adjacency[node_id]) == 1:
+                neighbour_id = next(iter(adjacency[node_id]))
+                if labels[neighbour_id] != own_label:
+                    labels[node_id] = labels[neighbour_id]
+                    hops[node_id] = hops[neighbour_id] + 1
+                    changed = True
+                continue
+            tally: dict[str, float] = {own_label: 1.0 - hop_attenuation * hops[node_id]}
+            min_hop: dict[str, int] = {own_label: hops[node_id]}
             for neighbour_id in sorted(adjacency[node_id]):
                 neighbour_label = labels[neighbour_id]
-                tally[neighbour_label] = tally.get(neighbour_label, 0.0) + adjacency[node_id][neighbour_id]
-            if not tally:
-                continue
+                contribution = adjacency[node_id][neighbour_id] * (1.0 - hop_attenuation * hops[neighbour_id])
+                tally[neighbour_label] = tally.get(neighbour_label, 0.0) + contribution
+                if neighbour_label not in min_hop or hops[neighbour_id] < min_hop[neighbour_label]:
+                    min_hop[neighbour_label] = hops[neighbour_id]
             best_label = min(tally)  # tie-break: smallest label
-            best_weight = tally[best_label]
+            best_score = tally[best_label]
             for label in sorted(tally):
-                if tally[label] > best_weight:
+                if tally[label] > best_score:
                     best_label = label
-                    best_weight = tally[label]
-            if best_label != labels[node_id]:
+                    best_score = tally[label]
+            if best_label != own_label:
                 labels[node_id] = best_label
+                hops[node_id] = min_hop[best_label] + 1
                 changed = True
         if not changed:
             converged = True
@@ -173,15 +220,23 @@ def detect_communities(
     links: Iterable[Mapping[str, Any]],
     *,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
+    hop_attenuation: float = DEFAULT_HOP_ATTENUATION,
 ) -> dict[str, Any]:
     """Partition the graph into communities; output is canonical and artifact-ready.
 
     ``nodes``/``links`` follow the ``graph.json`` shapes (node ``id``,
     optional ``label``; link ``source``/``target``/optional ``weight``).
     The result sorts identically regardless of input ordering.
+
+    ``hop_attenuation`` (must lie in [0, 1]) is the per-hop label score
+    penalty; the default keeps bridge-linked clusters apart. ``0`` disables
+    attenuation (plain LPA with self-vote — bridge graphs merge), values
+    >= 0.5 weaken in-community consolidation.
     """
     if max_iterations < 1:
         raise ValueError("max_iterations must be >= 1")
+    if not 0.0 <= hop_attenuation <= 1.0:
+        raise ValueError("hop_attenuation must be in [0, 1]")
 
     node_list = list(nodes)
     link_list = list(links)
@@ -189,7 +244,7 @@ def detect_communities(
     labels_by_id = {str(node["id"]): node.get("label") for node in node_list}
 
     adjacency = _weighted_adjacency(node_ids, link_list)
-    labels, iterations_used, converged = _propagate(node_ids, adjacency, max_iterations)
+    labels, iterations_used, converged = _propagate(node_ids, adjacency, max_iterations, hop_attenuation)
     degrees = _undirected_degrees(node_ids, link_list)
 
     groups: dict[str, list[str]] = {}
@@ -219,6 +274,7 @@ def detect_communities(
         "schema_version": SCHEMA_VERSION,
         "algorithm": "canonical-label-propagation",
         "max_iterations": max_iterations,
+        "hop_attenuation": hop_attenuation,
         "iterations_used": iterations_used,
         "converged": converged,
         "community_count": len(communities),

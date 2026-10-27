@@ -20,6 +20,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from know_your_soul.analytics.communities import (
+    DEFAULT_HOP_ATTENUATION,
     DEFAULT_MAX_ITERATIONS,
     detect_communities,
     label_still_applies,
@@ -192,6 +193,78 @@ class TestDetectCommunities:
         result = detect_communities(nodes, links)
         member_sets = {tuple(c["members"]) for c in result["communities"]}
         assert member_sets == {("a", "b"), ("c", "d")}
+
+
+_TWO_TRIANGLES_BRIDGE_LINKS = [
+    _link("a", "b"),
+    _link("b", "c"),
+    _link("a", "c"),
+    _link("d", "e"),
+    _link("e", "f"),
+    _link("d", "f"),
+    _link("c", "d"),
+]
+
+
+class TestHopAttenuation:
+    """SUB-79: hop attenuation + self-vote keep bridge-linked clusters apart.
+
+    Reproduces the institutional benchmark CDLP failure: plain LPA merges
+    ``two_triangles_bridge`` into one community while the reference
+    (networkx asyn_lpa(seed=0)) and Louvain (Q=5/14) split at the bridge.
+    """
+
+    def test_two_triangles_bridge_splits_at_bridge(self) -> None:
+        nodes = [_node(c) for c in "abcdef"]
+        result = detect_communities(nodes, _TWO_TRIANGLES_BRIDGE_LINKS)
+        member_sets = {tuple(c["members"]) for c in result["communities"]}
+        assert member_sets == {("a", "b", "c"), ("d", "e", "f")}
+        assert result["converged"] is True
+
+    def test_two_cliques_joined_by_single_bridge_split(self) -> None:
+        # Two K4s joined by one bridge edge; the partition is unambiguous.
+        clique_a = ["a", "b", "c", "d"]
+        clique_b = ["e", "f", "g", "h"]
+        nodes = [_node(c) for c in clique_a + clique_b]
+        links = [_link(x, y) for clique in (clique_a, clique_b) for i, x in enumerate(clique) for y in clique[i + 1 :]]
+        links.append(_link("d", "e"))
+        result = detect_communities(nodes, links)
+        member_sets = {tuple(c["members"]) for c in result["communities"]}
+        assert member_sets == {tuple(clique_a), tuple(clique_b)}
+        assert result["converged"] is True
+
+    def test_zero_attenuation_merges_bridge(self) -> None:
+        # Pins that attenuation is load-bearing: with hop_attenuation=0 the
+        # self-vote alone cannot keep a just-adopted cross-bridge label from
+        # outcompeting a node's own fresh label, and the graph merges.
+        nodes = [_node(c) for c in "abcdef"]
+        result = detect_communities(nodes, _TWO_TRIANGLES_BRIDGE_LINKS, hop_attenuation=0.0)
+        assert result["community_count"] == 1
+
+    def test_hop_attenuation_reported_and_defaults(self) -> None:
+        nodes = [_node("a"), _node("b")]
+        result = detect_communities(nodes, [_link("a", "b")])
+        assert result["hop_attenuation"] == DEFAULT_HOP_ATTENUATION
+        explicit = detect_communities(nodes, [_link("a", "b")], hop_attenuation=0.1)
+        assert explicit["hop_attenuation"] == 0.1
+
+    def test_hop_attenuation_must_be_unit_interval(self) -> None:
+        nodes = [_node("a"), _node("b")]
+        links = [_link("a", "b")]
+        with pytest.raises(ValueError, match="hop_attenuation"):
+            detect_communities(nodes, links, hop_attenuation=-0.01)
+        with pytest.raises(ValueError, match="hop_attenuation"):
+            detect_communities(nodes, links, hop_attenuation=1.5)
+
+    def test_cycle_converges_with_honest_flag(self) -> None:
+        # Even cycles are the classic LPA oscillation case; the self-vote
+        # must anchor nodes so the run converges instead of hitting the cap.
+        ring = "abcdef"
+        nodes = [_node(c) for c in ring]
+        links = [_link(ring[i], ring[(i + 1) % len(ring)]) for i in range(len(ring))]
+        result = detect_communities(nodes, links)
+        assert result["converged"] is True
+        assert result["iterations_used"] < DEFAULT_MAX_ITERATIONS
 
 
 # ------------------------------------------------------------------- labels
@@ -387,6 +460,24 @@ def test_detection_permutation_invariant(
         for p in link_order
     ]
     assert _canonical(detect_communities(permuted_nodes, permuted_links)) == base
+
+
+@settings(derandomize=True, max_examples=60)
+@given(
+    n=st.integers(min_value=0, max_value=8),
+    edge_indexes=st.lists(
+        st.tuples(st.integers(min_value=0, max_value=7), st.integers(min_value=0, max_value=7)),
+        max_size=14,
+    ),
+)
+def test_detection_is_exact_cover(n: int, edge_indexes: list[tuple[int, int]]) -> None:
+    ids = [f"n{i}" for i in range(n)]
+    nodes = [_node(i) for i in ids]
+    links = [_link(ids[a], ids[b]) for a, b in edge_indexes if a < n and b < n and a != b]
+    result = detect_communities(nodes, links)
+    flat = sorted(member for community in result["communities"] for member in community["members"])
+    assert flat == ids
+    assert result["community_count"] == len(result["communities"])
 
 
 @settings(derandomize=True, max_examples=40)
