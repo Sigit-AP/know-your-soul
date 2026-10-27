@@ -402,7 +402,13 @@ def hit_any(topk: list[str], sample_id: str, evidence: list[str]) -> bool:
 
 
 def hit_all(topk: list[str], sample_id: str, evidence: list[str]) -> bool:
-    got = {dia for node_id in topk if node_id.startswith("t_") for sid, dia in [parse_node_id(node_id)] if sid == sample_id}
+    got = {
+        dia
+        for node_id in topk
+        if node_id.startswith("t_")
+        for sid, dia in [parse_node_id(node_id)]
+        if sid == sample_id
+    }
     return bool(evidence) and set(evidence) <= got
 
 
@@ -553,15 +559,25 @@ def run_locomo(*, skip_sanity: bool = False) -> int:
             "unit": "one candidate = one dialog turn (dia_id), the granularity of LOCOMO evidence",
             "hit_at_k": "any top-k node id maps to a dia_id in the question's evidence list",
             "k": TOP_K,
-            "sample": f"deterministic random.Random({SAMPLE_SEED}).sample of {SAMPLE_N} from the {len(qas)} evaluable QA pairs",
-            "graphify_harness": "memory/runner.py referenced by Graphify BENCHMARKS.md but not published in Graphify-Labs/graphify@v8 (verified 2026-10-27); criteria reconstructed as documented here",
+            "sample": (
+                f"deterministic random.Random({SAMPLE_SEED}).sample of {SAMPLE_N} "
+                f"from the {len(qas)} evaluable QA pairs"
+            ),
+            "graphify_harness": (
+                "memory/runner.py referenced by Graphify BENCHMARKS.md but not published in "
+                "Graphify-Labs/graphify@v8 (verified 2026-10-27); criteria reconstructed as documented here"
+            ),
         },
         "product_topology": {
             "shard_size_turns": SHARD_SIZE,
             "shard_count": manifest["shard_count"],
             "max_graph_json_bytes": manifest["max_graph_bytes"],
             "artifact_cap_bytes": 65536,
-            "note": "the product's 64 KiB per-artifact cap bounds one store to ~40 turns; sharding into independent product stores is the supported scale-out topology; cross-shard IDF is per-shard (federation artifact)",
+            "note": (
+                "the product's 64 KiB per-artifact cap bounds one store to ~40 turns; "
+                "sharding into independent product stores is the supported scale-out topology; "
+                "cross-shard IDF is per-shard (federation artifact)"
+            ),
         },
         "results": results,
         "graphify_published_locomo_recall_at_10": GRAPHIFY_LOCOMO,
@@ -576,7 +592,10 @@ def run_locomo(*, skip_sanity: bool = False) -> int:
     print(f"ledger: {out}")
     for name in systems:
         r = results[name]
-        print(f"{name:24s} recall@10 full={r['recall_at_10_full']:.4f} (n={r['n_full']})  sample300={r['recall_at_10_sample300']:.4f}")
+        print(
+            f"{name:24s} recall@10 full={r['recall_at_10_full']:.4f} "
+            f"(n={r['n_full']})  sample300={r['recall_at_10_sample300']:.4f}"
+        )
     if sanity:
         print(f"sanity service.query vs index.rank: {sanity['matched']}/{sanity['total']} exact top-10 match")
     return 0
@@ -623,7 +642,10 @@ def run_keyfact() -> int:
     ledger = {
         "ledger": "kys-keyfact-coverage/1.0.0",
         "generated_at": utc_now_iso(),
-        "construct": "key-fact (rubric term) coverage of the product's query responses over the frozen SOUL benchmark corpus (bench/cases.json, 24 cases)",
+        "construct": (
+            "key-fact (rubric term) coverage of the product's query responses over the "
+            "frozen SOUL benchmark corpus (bench/cases.json, 24 cases)"
+        ),
         "equivalence_note": (
             "Graphify's ERPNext cross-tool row (82.0% vs grep/read 70.8%) is NOT replicable: the crosstool "
             "harness, the n=6 graded questions and the key-fact gold sets are unpublished, and the harness "
