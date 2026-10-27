@@ -1,0 +1,1664 @@
+{
+  "config": {
+    "max_n": 512,
+    "quick": false,
+    "repeats": 3
+  },
+  "datasets": [
+    {
+      "m": 2,
+      "n": 3,
+      "name": "path3",
+      "note": "3-node path; WCC=1, LCC=0, no cycles.",
+      "tags": [
+        "known",
+        "small"
+      ]
+    },
+    {
+      "m": 4,
+      "n": 4,
+      "name": "diamond",
+      "note": "Diamond; hand-verified LCC avg=7/12, transitivity=3/5, triangles=1.",
+      "tags": [
+        "known",
+        "small"
+      ]
+    },
+    {
+      "m": 7,
+      "n": 6,
+      "name": "two_triangles_bridge",
+      "note": "Two triangles + bridge; pinned Louvain Q=5/14, partition {a,b,c}|{d,e,f}.",
+      "tags": [
+        "known",
+        "small",
+        "unambiguous-partition"
+      ]
+    },
+    {
+      "m": 16,
+      "n": 9,
+      "name": "star9_bidir",
+      "note": "Bidirectional 8-leaf star; hand-verified normalized BC hub=1.0, leaves=0.",
+      "tags": [
+        "known",
+        "small"
+      ]
+    },
+    {
+      "m": 6,
+      "n": 6,
+      "name": "directed_cycle6",
+      "note": "Directed 6-ring; exactly one simple cycle.",
+      "tags": [
+        "known",
+        "small"
+      ]
+    },
+    {
+      "m": 6,
+      "n": 5,
+      "name": "two_cycles_shared_node",
+      "note": "Two directed triangles sharing node c; exactly two simple cycles.",
+      "tags": [
+        "known",
+        "small"
+      ]
+    },
+    {
+      "m": 3,
+      "n": 6,
+      "name": "disconnected3",
+      "note": "Three weak components incl. one isolated node; WCC=3.",
+      "tags": [
+        "known",
+        "small"
+      ]
+    },
+    {
+      "m": 80,
+      "n": 20,
+      "name": "cliques_4x5",
+      "note": "Four disjoint bidirectional K5; any correct community detection must return the 4 cliques.",
+      "tags": [
+        "known",
+        "small",
+        "unambiguous-partition"
+      ]
+    },
+    {
+      "m": 192,
+      "n": 64,
+      "name": "erdos_n64_m192_s11",
+      "note": "Seeded synthetic n=64 m=192 (random.Random(11)).",
+      "tags": [
+        "seeded"
+      ]
+    },
+    {
+      "m": 1024,
+      "n": 256,
+      "name": "erdos_n256_m1024_s12",
+      "note": "Seeded synthetic n=256 m=1024 (random.Random(12)).",
+      "tags": [
+        "seeded"
+      ]
+    },
+    {
+      "m": 2048,
+      "n": 512,
+      "name": "erdos_n512_m2048_s13",
+      "note": "Seeded synthetic n=512 m=2048 (random.Random(13)); scaling point.",
+      "tags": [
+        "seeded"
+      ]
+    }
+  ],
+  "kernels": [
+    {
+      "datasets": [
+        {
+          "correctness": "pass",
+          "dataset": "path3",
+          "detail": {
+            "max_abs_err": 3.9729330936211227e-13,
+            "max_rel_err": 8.821075120346228e-13,
+            "worst_node": "c"
+          },
+          "deterministic": true,
+          "m": 2,
+          "n": 3,
+          "ours_kernel_ms": 0.7927019614726305,
+          "ours_public_ms": 2.3502440308220685,
+          "ratio_kernel": 0.5591019335416468,
+          "ratio_public": 1.6576545105126517,
+          "reference_ms": 1.4178129495121539
+        },
+        {
+          "correctness": "pass",
+          "dataset": "diamond",
+          "detail": {
+            "max_abs_err": 4.004019338310627e-13,
+            "max_rel_err": 1.8535489521309204e-12,
+            "worst_node": "b"
+          },
+          "deterministic": true,
+          "m": 4,
+          "n": 4,
+          "ours_kernel_ms": 0.5916989757679403,
+          "ours_public_ms": 1.5172630082815886,
+          "ratio_kernel": 1.5866475015709904,
+          "ratio_public": 4.068557932167549,
+          "reference_ms": 0.3729240270331502
+        },
+        {
+          "correctness": "pass",
+          "dataset": "two_triangles_bridge",
+          "detail": {
+            "max_abs_err": 4.007766341018737e-13,
+            "max_rel_err": 4.240497090745307e-12,
+            "worst_node": "b"
+          },
+          "deterministic": true,
+          "m": 7,
+          "n": 6,
+          "ours_kernel_ms": 1.3653599889948964,
+          "ours_public_ms": 2.412609988823533,
+          "ratio_kernel": 1.4176411598658383,
+          "ratio_public": 2.5049915410055896,
+          "reference_ms": 0.9631210123188794
+        },
+        {
+          "correctness": "pass",
+          "dataset": "star9_bidir",
+          "detail": {
+            "max_abs_err": 1.0862104490971802e-05,
+            "max_rel_err": 2.3186415355727156e-05,
+            "worst_node": "hub"
+          },
+          "deterministic": true,
+          "m": 16,
+          "n": 9,
+          "ours_kernel_ms": 1.6187679721042514,
+          "ours_public_ms": 5.123933020513505,
+          "ratio_kernel": 0.4755554643554274,
+          "ratio_public": 1.5052894478316743,
+          "reference_ms": 3.4039519960060716
+        },
+        {
+          "correctness": "pass",
+          "dataset": "directed_cycle6",
+          "detail": {
+            "max_abs_err": 3.3334446314370325e-13,
+            "max_rel_err": 2.0000667788622195e-12,
+            "worst_node": "c0"
+          },
+          "deterministic": true,
+          "m": 6,
+          "n": 6,
+          "ours_kernel_ms": 1.0149439913220704,
+          "ours_public_ms": 2.21543904626742,
+          "ratio_kernel": 14.036399509918358,
+          "ratio_public": 30.6389197917958,
+          "reference_ms": 0.07230800110846758
+        },
+        {
+          "correctness": "pass",
+          "dataset": "two_cycles_shared_node",
+          "detail": {
+            "max_abs_err": 1.8580031775350392e-06,
+            "max_rel_err": 1.1128552210031903e-05,
+            "worst_node": "a"
+          },
+          "deterministic": true,
+          "m": 6,
+          "n": 5,
+          "ours_kernel_ms": 0.7036740425974131,
+          "ours_public_ms": 2.415275026578456,
+          "ratio_kernel": 0.24678246546564103,
+          "ratio_public": 0.8470506083135919,
+          "reference_ms": 2.8513940051198006
+        },
+        {
+          "correctness": "pass",
+          "dataset": "disconnected3",
+          "detail": {
+            "max_abs_err": 3.9671044227418406e-13,
+            "max_rel_err": 1.9883770681012264e-12,
+            "worst_node": "x2"
+          },
+          "deterministic": true,
+          "m": 3,
+          "n": 6,
+          "ours_kernel_ms": 1.529768982436508,
+          "ours_public_ms": 2.696505980566144,
+          "ratio_kernel": 1.6310367409192186,
+          "ratio_public": 2.875009479801847,
+          "reference_ms": 0.9379120310768485
+        },
+        {
+          "correctness": "pass",
+          "dataset": "cliques_4x5",
+          "detail": {
+            "max_abs_err": 0.0,
+            "max_rel_err": 0.0,
+            "worst_node": ""
+          },
+          "deterministic": true,
+          "m": 80,
+          "n": 20,
+          "ours_kernel_ms": 4.991049005184323,
+          "ours_public_ms": 17.549364012666047,
+          "ratio_kernel": 39.732598076240485,
+          "ratio_public": 139.70646773546315,
+          "reference_ms": 0.12561597395688295
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n64_m192_s11",
+          "detail": {
+            "max_abs_err": 4.884044557673661e-13,
+            "max_rel_err": 1.087184043616346e-10,
+            "worst_node": "e64n0032"
+          },
+          "deterministic": true,
+          "m": 192,
+          "n": 64,
+          "ours_kernel_ms": 20.321863004937768,
+          "ours_public_ms": 95.64191097160801,
+          "ratio_kernel": 12.17896838809196,
+          "ratio_public": 57.31855440698985,
+          "reference_ms": 1.6686029848642647
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n256_m1024_s12",
+          "detail": {
+            "max_abs_err": 4.969358258222201e-13,
+            "max_rel_err": 5.660107062500839e-10,
+            "worst_node": "e256n0131"
+          },
+          "deterministic": true,
+          "m": 1024,
+          "n": 256,
+          "ours_kernel_ms": 76.92685903748497,
+          "ours_public_ms": 515.5618679709733,
+          "ratio_kernel": 14.444028458856952,
+          "ratio_public": 96.80351422700765,
+          "reference_ms": 5.3258590050973
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n512_m2048_s13",
+          "detail": {
+            "max_abs_err": 4.99932994307839e-13,
+            "max_rel_err": 7.723126087184437e-10,
+            "worst_node": "e512n0028"
+          },
+          "deterministic": true,
+          "m": 2048,
+          "n": 512,
+          "ours_kernel_ms": 146.68746601091698,
+          "ours_public_ms": 1238.762171997223,
+          "ratio_kernel": 14.455819578958547,
+          "ratio_public": 122.07806806273379,
+          "reference_ms": 10.147295019123703
+        }
+      ],
+      "kernel": "pagerank",
+      "matcher": "epsilon rel<=0.001 abs<=0.0001 vs self-validated numpy reference (L1 residual < 1e-10)",
+      "notes": [
+        "ours runs a fixed 64 iterations (no convergence stop); public entrypoint computes the full centrality suite, so ratio_public overstates per-kernel cost \u2014 ratio_kernel isolates PageRank.",
+        "fixed-iteration float clone cross-check OK (max_abs_err=1.11e-16, tol=1e-9)"
+      ],
+      "reason": "",
+      "status": "pass",
+      "suites": [
+        "LDBC Graphalytics: PR",
+        "GAPBS: PR"
+      ]
+    },
+    {
+      "datasets": [
+        {
+          "correctness": "pass",
+          "dataset": "path3",
+          "detail": {
+            "ours_components": 1,
+            "reference_components": 1
+          },
+          "deterministic": true,
+          "m": 2,
+          "n": 3,
+          "ours_kernel_ms": 0.015046971384435892,
+          "ours_public_ms": 0.07424899376928806,
+          "ratio_kernel": 0.44387608799050793,
+          "ratio_public": 2.190298103818634,
+          "reference_ms": 0.03389903577044606
+        },
+        {
+          "correctness": "pass",
+          "dataset": "diamond",
+          "detail": {
+            "ours_components": 1,
+            "reference_components": 1
+          },
+          "deterministic": true,
+          "m": 4,
+          "n": 4,
+          "ours_kernel_ms": 0.0157069880515337,
+          "ours_public_ms": 0.05708500975742936,
+          "ratio_kernel": 0.6944772581628951,
+          "ratio_public": 2.5239874715936144,
+          "reference_ms": 0.022616994101554155
+        },
+        {
+          "correctness": "pass",
+          "dataset": "two_triangles_bridge",
+          "detail": {
+            "ours_components": 1,
+            "reference_components": 1
+          },
+          "deterministic": true,
+          "m": 7,
+          "n": 6,
+          "ours_kernel_ms": 0.021772983018308878,
+          "ours_public_ms": 0.07035798626020551,
+          "ratio_kernel": 0.858691085895049,
+          "ratio_public": 2.7748047005025103,
+          "reference_ms": 0.025356013793498278
+        },
+        {
+          "correctness": "pass",
+          "dataset": "star9_bidir",
+          "detail": {
+            "ours_components": 1,
+            "reference_components": 1
+          },
+          "deterministic": true,
+          "m": 16,
+          "n": 9,
+          "ours_kernel_ms": 0.03279000520706177,
+          "ours_public_ms": 0.10275503154844046,
+          "ratio_kernel": 0.8826617989235602,
+          "ratio_public": 2.76602398878121,
+          "reference_ms": 0.0371490023098886
+        },
+        {
+          "correctness": "pass",
+          "dataset": "directed_cycle6",
+          "detail": {
+            "ours_components": 1,
+            "reference_components": 1
+          },
+          "deterministic": true,
+          "m": 6,
+          "n": 6,
+          "ours_kernel_ms": 0.02152303932234645,
+          "ours_public_ms": 0.07135496707633138,
+          "ratio_kernel": 0.8780966810418527,
+          "ratio_public": 2.9111390276801488,
+          "reference_ms": 0.02451101318001747
+        },
+        {
+          "correctness": "pass",
+          "dataset": "two_cycles_shared_node",
+          "detail": {
+            "ours_components": 1,
+            "reference_components": 1
+          },
+          "deterministic": true,
+          "m": 6,
+          "n": 5,
+          "ours_kernel_ms": 0.01889502163976431,
+          "ours_public_ms": 0.059254991356283426,
+          "ratio_kernel": 0.885841608745603,
+          "ratio_public": 2.778008825287149,
+          "reference_ms": 0.02133002271875739
+        },
+        {
+          "correctness": "pass",
+          "dataset": "disconnected3",
+          "detail": {
+            "ours_components": 3,
+            "reference_components": 3
+          },
+          "deterministic": true,
+          "m": 3,
+          "n": 6,
+          "ours_kernel_ms": 0.01938099740073085,
+          "ours_public_ms": 0.07050798740237951,
+          "ratio_kernel": 0.8441924262707395,
+          "ratio_public": 3.0711685124335726,
+          "reference_ms": 0.02295803278684616
+        },
+        {
+          "correctness": "pass",
+          "dataset": "cliques_4x5",
+          "detail": {
+            "ours_components": 4,
+            "reference_components": 4
+          },
+          "deterministic": true,
+          "m": 80,
+          "n": 20,
+          "ours_kernel_ms": 0.1071019796654582,
+          "ours_public_ms": 0.2998979762196541,
+          "ratio_kernel": 0.8995482209703496,
+          "ratio_public": 2.5188394446457023,
+          "reference_ms": 0.11906196596100926
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n64_m192_s11",
+          "detail": {
+            "ours_components": 1,
+            "reference_components": 1
+          },
+          "deterministic": true,
+          "m": 192,
+          "n": 64,
+          "ours_kernel_ms": 0.27849298203364015,
+          "ours_public_ms": 0.9208099800162017,
+          "ratio_kernel": 1.171555992832275,
+          "ratio_public": 3.8736360337347344,
+          "reference_ms": 0.23771205451339483
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n256_m1024_s12",
+          "detail": {
+            "ours_components": 1,
+            "reference_components": 1
+          },
+          "deterministic": true,
+          "m": 1024,
+          "n": 256,
+          "ours_kernel_ms": 1.620646973606199,
+          "ours_public_ms": 5.549974972382188,
+          "ratio_kernel": 0.8638239980317505,
+          "ratio_public": 2.9582022782861026,
+          "reference_ms": 1.8761309911496937
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n512_m2048_s13",
+          "detail": {
+            "ours_components": 1,
+            "reference_components": 1
+          },
+          "deterministic": true,
+          "m": 2048,
+          "n": 512,
+          "ours_kernel_ms": 3.3970799995586276,
+          "ours_public_ms": 12.500591983553022,
+          "ratio_kernel": 1.2713736987628017,
+          "ratio_public": 4.67840729948054,
+          "reference_ms": 2.6719759916886687
+        }
+      ],
+      "kernel": "wcc",
+      "matcher": "equivalence (same weak components as networkx)",
+      "notes": [
+        "public entrypoint computes the full connectivity suite (weak+strong+articulation+k-core); ratio_kernel isolates the WCC pass."
+      ],
+      "reason": "",
+      "status": "pass",
+      "suites": [
+        "LDBC Graphalytics: WCC",
+        "GAPBS: CC"
+      ]
+    },
+    {
+      "datasets": [
+        {
+          "correctness": "pass",
+          "dataset": "path3",
+          "detail": {
+            "max_abs_err": 0.0,
+            "max_rel_err": 0.0,
+            "worst_node": ""
+          },
+          "deterministic": true,
+          "m": 2,
+          "n": 3,
+          "ours_kernel_ms": 0.05825096741318703,
+          "ours_public_ms": 1.1138790287077427,
+          "ratio_kernel": 0.907349598478962,
+          "ratio_public": 17.350401793040543,
+          "reference_ms": 0.06419903365895152
+        },
+        {
+          "correctness": "pass",
+          "dataset": "diamond",
+          "detail": {
+            "max_abs_err": 0.0,
+            "max_rel_err": 0.0,
+            "worst_node": ""
+          },
+          "deterministic": true,
+          "m": 4,
+          "n": 4,
+          "ours_kernel_ms": 0.06151397246867418,
+          "ours_public_ms": 1.5732889878563583,
+          "ratio_kernel": 1.0623987164381965,
+          "ratio_public": 27.172041313640257,
+          "reference_ms": 0.05790102295577526
+        },
+        {
+          "correctness": "pass",
+          "dataset": "two_triangles_bridge",
+          "detail": {
+            "max_abs_err": 5.551115123125783e-17,
+            "max_rel_err": 1.850371707708594e-16,
+            "worst_node": "c"
+          },
+          "deterministic": true,
+          "m": 7,
+          "n": 6,
+          "ours_kernel_ms": 0.1057980116456747,
+          "ours_public_ms": 2.391038986388594,
+          "ratio_kernel": 1.2565979140539336,
+          "ratio_public": 28.39915945471716,
+          "reference_ms": 0.08419400546699762
+        },
+        {
+          "correctness": "pass",
+          "dataset": "star9_bidir",
+          "detail": {
+            "max_abs_err": 0.0,
+            "max_rel_err": 0.0,
+            "worst_node": ""
+          },
+          "deterministic": true,
+          "m": 16,
+          "n": 9,
+          "ours_kernel_ms": 0.2739999908953905,
+          "ours_public_ms": 3.8093000184744596,
+          "ratio_kernel": 1.328587923534175,
+          "ratio_public": 18.470767043185393,
+          "reference_ms": 0.2062339917756617
+        },
+        {
+          "correctness": "pass",
+          "dataset": "directed_cycle6",
+          "detail": {
+            "max_abs_err": 0.0,
+            "max_rel_err": 0.0,
+            "worst_node": ""
+          },
+          "deterministic": true,
+          "m": 6,
+          "n": 6,
+          "ours_kernel_ms": 0.13964698882773519,
+          "ours_public_ms": 2.1251069847494364,
+          "ratio_kernel": 0.8662266781917217,
+          "ratio_public": 13.18198394146774,
+          "reference_ms": 0.16121298540383577
+        },
+        {
+          "correctness": "pass",
+          "dataset": "two_cycles_shared_node",
+          "detail": {
+            "max_abs_err": 1.1102230246251565e-16,
+            "max_rel_err": 1.332267629550188e-16,
+            "worst_node": "c"
+          },
+          "deterministic": true,
+          "m": 6,
+          "n": 5,
+          "ours_kernel_ms": 0.12403097935020924,
+          "ours_public_ms": 1.9744369783438742,
+          "ratio_kernel": 1.4460875265860342,
+          "ratio_public": 23.020125305561248,
+          "reference_ms": 0.08577003609389067
+        },
+        {
+          "correctness": "pass",
+          "dataset": "disconnected3",
+          "detail": {
+            "max_abs_err": 0.0,
+            "max_rel_err": 0.0,
+            "worst_node": ""
+          },
+          "deterministic": true,
+          "m": 3,
+          "n": 6,
+          "ours_kernel_ms": 0.1487619592808187,
+          "ours_public_ms": 1.9145449623465538,
+          "ratio_kernel": 0.7885271140840203,
+          "ratio_public": 10.148230241398036,
+          "reference_ms": 0.18865801393985748
+        },
+        {
+          "correctness": "pass",
+          "dataset": "cliques_4x5",
+          "detail": {
+            "max_abs_err": 0.0,
+            "max_rel_err": 0.0,
+            "worst_node": ""
+          },
+          "deterministic": true,
+          "m": 80,
+          "n": 20,
+          "ours_kernel_ms": 0.7179130334407091,
+          "ours_public_ms": 12.230769963935018,
+          "ratio_kernel": 1.5353965957651288,
+          "ratio_public": 26.157879424768982,
+          "reference_ms": 0.4675749805755913
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n64_m192_s11",
+          "detail": {
+            "max_abs_err": 4.163336342344337e-17,
+            "max_rel_err": 5.274173063258382e-16,
+            "worst_node": "e64n0060"
+          },
+          "deterministic": true,
+          "m": 192,
+          "n": 64,
+          "ours_kernel_ms": 12.90175097528845,
+          "ours_public_ms": 71.13941403804347,
+          "ratio_kernel": 1.7004988279582962,
+          "ratio_public": 9.376439711558472,
+          "reference_ms": 7.5870390282943845
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n256_m1024_s12",
+          "detail": {
+            "max_abs_err": 2.7755575615628914e-17,
+            "max_rel_err": 1.2658003855935684e-15,
+            "worst_node": "e256n0143"
+          },
+          "deterministic": true,
+          "m": 1024,
+          "n": 256,
+          "ours_kernel_ms": 241.4127830415964,
+          "ours_public_ms": 890.1403429917991,
+          "ratio_kernel": 1.7201248729590612,
+          "ratio_public": 6.342466729032654,
+          "reference_ms": 140.3460800065659
+        }
+      ],
+      "kernel": "bc",
+      "matcher": "epsilon rel<=1e-06 abs<=1e-09 vs networkx Brandes (normalized, directed)",
+      "notes": [
+        "correctness runs with betweenness_samples >= n, forcing exact Brandes (default 32 samples is an estimator); ratio_kernel compares exact Brandes vs exact Brandes."
+      ],
+      "reason": "",
+      "status": "pass",
+      "suites": [
+        "GAPBS: BC"
+      ]
+    },
+    {
+      "datasets": [
+        {
+          "correctness": "pass",
+          "dataset": "path3",
+          "detail": {
+            "communities": 1,
+            "exact_cover": true,
+            "mode": "property-only (partition is ambiguous on this dataset)"
+          },
+          "deterministic": true,
+          "m": 2,
+          "n": 3,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.09276298806071281,
+          "ratio_kernel": null,
+          "ratio_public": null,
+          "reference_ms": null
+        },
+        {
+          "correctness": "pass",
+          "dataset": "diamond",
+          "detail": {
+            "communities": 1,
+            "exact_cover": true,
+            "mode": "property-only (partition is ambiguous on this dataset)"
+          },
+          "deterministic": true,
+          "m": 4,
+          "n": 4,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.04028301918879151,
+          "ratio_kernel": null,
+          "ratio_public": null,
+          "reference_ms": null
+        },
+        {
+          "correctness": "fail",
+          "dataset": "two_triangles_bridge",
+          "detail": {
+            "communities": 1,
+            "equivalent_to_reference": false,
+            "exact_cover": true,
+            "reference_communities": 2
+          },
+          "deterministic": true,
+          "m": 7,
+          "n": 6,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.049758004024624825,
+          "ratio_kernel": null,
+          "ratio_public": 0.4085993442992802,
+          "reference_ms": 0.12177700409665704
+        },
+        {
+          "correctness": "pass",
+          "dataset": "star9_bidir",
+          "detail": {
+            "communities": 1,
+            "exact_cover": true,
+            "mode": "property-only (partition is ambiguous on this dataset)"
+          },
+          "deterministic": true,
+          "m": 16,
+          "n": 9,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.07390300743281841,
+          "ratio_kernel": null,
+          "ratio_public": null,
+          "reference_ms": null
+        },
+        {
+          "correctness": "pass",
+          "dataset": "directed_cycle6",
+          "detail": {
+            "communities": 1,
+            "exact_cover": true,
+            "mode": "property-only (partition is ambiguous on this dataset)"
+          },
+          "deterministic": true,
+          "m": 6,
+          "n": 6,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.06675999611616135,
+          "ratio_kernel": null,
+          "ratio_public": null,
+          "reference_ms": null
+        },
+        {
+          "correctness": "pass",
+          "dataset": "two_cycles_shared_node",
+          "detail": {
+            "communities": 1,
+            "exact_cover": true,
+            "mode": "property-only (partition is ambiguous on this dataset)"
+          },
+          "deterministic": true,
+          "m": 6,
+          "n": 5,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.09774399222806096,
+          "ratio_kernel": null,
+          "ratio_public": null,
+          "reference_ms": null
+        },
+        {
+          "correctness": "pass",
+          "dataset": "disconnected3",
+          "detail": {
+            "communities": 3,
+            "exact_cover": true,
+            "mode": "property-only (partition is ambiguous on this dataset)"
+          },
+          "deterministic": true,
+          "m": 3,
+          "n": 6,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.060540041886270046,
+          "ratio_kernel": null,
+          "ratio_public": null,
+          "reference_ms": null
+        },
+        {
+          "correctness": "pass",
+          "dataset": "cliques_4x5",
+          "detail": {
+            "communities": 4,
+            "equivalent_to_reference": true,
+            "exact_cover": true,
+            "reference_communities": 4
+          },
+          "deterministic": true,
+          "m": 80,
+          "n": 20,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.24981499882414937,
+          "ratio_kernel": null,
+          "ratio_public": 0.8380663694496121,
+          "reference_ms": 0.2980849822051823
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n64_m192_s11",
+          "detail": {
+            "communities": 1,
+            "exact_cover": true,
+            "mode": "property-only (partition is ambiguous on this dataset)"
+          },
+          "deterministic": true,
+          "m": 192,
+          "n": 64,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 1.0138379875570536,
+          "ratio_kernel": null,
+          "ratio_public": null,
+          "reference_ms": null
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n256_m1024_s12",
+          "detail": {
+            "communities": 1,
+            "exact_cover": true,
+            "mode": "property-only (partition is ambiguous on this dataset)"
+          },
+          "deterministic": true,
+          "m": 1024,
+          "n": 256,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 5.498054961208254,
+          "ratio_kernel": null,
+          "ratio_public": null,
+          "reference_ms": null
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n512_m2048_s13",
+          "detail": {
+            "communities": 1,
+            "exact_cover": true,
+            "mode": "property-only (partition is ambiguous on this dataset)"
+          },
+          "deterministic": true,
+          "m": 2048,
+          "n": 512,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 10.771349014248699,
+          "ratio_kernel": null,
+          "ratio_public": null,
+          "reference_ms": null
+        }
+      ],
+      "kernel": "cdlp",
+      "matcher": "exact-cover everywhere + equivalence vs networkx asyn_lpa(seed=0) on unambiguous datasets",
+      "notes": [
+        "LPA partitions are only well-defined on unambiguous structure; ambiguous datasets are scored on the exact-cover property only (Graphalytics itself validates CDLP exactly on fixed inputs).",
+        "known divergence: our canonical synchronous LPA merges two_triangles_bridge into one community while networkx asyn_lpa splits at the bridge (mega-wave-2 Louvain pins the split as intended) \u2014 reported as FAIL there, not hidden."
+      ],
+      "reason": "",
+      "status": "fail",
+      "suites": [
+        "LDBC Graphalytics: CDLP"
+      ]
+    },
+    {
+      "datasets": [
+        {
+          "correctness": "pass",
+          "dataset": "path3",
+          "detail": {
+            "max_abs_err": 0.0,
+            "max_rel_err": 0.0,
+            "worst_node": ""
+          },
+          "deterministic": true,
+          "m": 2,
+          "n": 3,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.041095016058534384,
+          "ratio_kernel": null,
+          "ratio_public": 0.6799309674666851,
+          "reference_ms": 0.060439982917159796
+        },
+        {
+          "correctness": "pass",
+          "dataset": "diamond",
+          "detail": {
+            "max_abs_err": 3.33288951992472e-13,
+            "max_rel_err": 9.99866855977416e-13,
+            "worst_node": "a"
+          },
+          "deterministic": true,
+          "m": 4,
+          "n": 4,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.04484801320359111,
+          "ratio_kernel": null,
+          "ratio_public": 0.7757027034917963,
+          "reference_ms": 0.057815981563180685
+        },
+        {
+          "correctness": "pass",
+          "dataset": "two_triangles_bridge",
+          "detail": {
+            "max_abs_err": 3.33288951992472e-13,
+            "max_rel_err": 9.99866855977416e-13,
+            "worst_node": "c"
+          },
+          "deterministic": true,
+          "m": 7,
+          "n": 6,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.10237499373033643,
+          "ratio_kernel": null,
+          "ratio_public": 1.3377456092112439,
+          "reference_ms": 0.07652799831703305
+        },
+        {
+          "correctness": "pass",
+          "dataset": "star9_bidir",
+          "detail": {
+            "max_abs_err": 0.0,
+            "max_rel_err": 0.0,
+            "worst_node": ""
+          },
+          "deterministic": true,
+          "m": 16,
+          "n": 9,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.11314597213640809,
+          "ratio_kernel": null,
+          "ratio_public": 0.4297406522272604,
+          "reference_ms": 0.2632889663800597
+        },
+        {
+          "correctness": "pass",
+          "dataset": "directed_cycle6",
+          "detail": {
+            "max_abs_err": 0.0,
+            "max_rel_err": 0.0,
+            "worst_node": ""
+          },
+          "deterministic": true,
+          "m": 6,
+          "n": 6,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.05445996066555381,
+          "ratio_kernel": null,
+          "ratio_public": 0.6364230009216966,
+          "reference_ms": 0.08557195542380214
+        },
+        {
+          "correctness": "pass",
+          "dataset": "two_cycles_shared_node",
+          "detail": {
+            "max_abs_err": 3.33288951992472e-13,
+            "max_rel_err": 9.99866855977416e-13,
+            "worst_node": "c"
+          },
+          "deterministic": true,
+          "m": 6,
+          "n": 5,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.11094496585428715,
+          "ratio_kernel": null,
+          "ratio_public": 0.7689133142034872,
+          "reference_ms": 0.14428800204768777
+        },
+        {
+          "correctness": "pass",
+          "dataset": "disconnected3",
+          "detail": {
+            "max_abs_err": 0.0,
+            "max_rel_err": 0.0,
+            "worst_node": ""
+          },
+          "deterministic": true,
+          "m": 3,
+          "n": 6,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.0945479841902852,
+          "ratio_kernel": null,
+          "ratio_public": 1.1457170385982138,
+          "reference_ms": 0.0825229799374938
+        },
+        {
+          "correctness": "pass",
+          "dataset": "cliques_4x5",
+          "detail": {
+            "max_abs_err": 0.0,
+            "max_rel_err": 0.0,
+            "worst_node": ""
+          },
+          "deterministic": true,
+          "m": 80,
+          "n": 20,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.26554701616987586,
+          "ratio_kernel": null,
+          "ratio_public": 0.8815423957680366,
+          "reference_ms": 0.30123000033199787
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n64_m192_s11",
+          "detail": {
+            "max_abs_err": 4.444500323330658e-13,
+            "max_rel_err": 1.000009103302446e-11,
+            "worst_node": "e64n0049"
+          },
+          "deterministic": true,
+          "m": 192,
+          "n": 64,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.6893759709782898,
+          "ratio_kernel": null,
+          "ratio_public": 0.5184887959884303,
+          "reference_ms": 1.3295870157890022
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n256_m1024_s12",
+          "detail": {
+            "max_abs_err": 4.871797409933265e-13,
+            "max_rel_err": 6.39999650497991e-11,
+            "worst_node": "e256n0102"
+          },
+          "deterministic": true,
+          "m": 1024,
+          "n": 256,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 3.6673970171250403,
+          "ratio_kernel": null,
+          "ratio_public": 0.582772187241417,
+          "reference_ms": 6.293019978329539
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n512_m2048_s13",
+          "detail": {
+            "max_abs_err": 4.871797409933265e-13,
+            "max_rel_err": 6.39999650497991e-11,
+            "worst_node": "e512n0133"
+          },
+          "deterministic": true,
+          "m": 2048,
+          "n": 512,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 7.344209996517748,
+          "ratio_kernel": null,
+          "ratio_public": 0.5430836234100014,
+          "reference_ms": 13.523166009690613
+        }
+      ],
+      "kernel": "lcc",
+      "matcher": "epsilon rel<=1e-06 abs<=1e-09 vs networkx.clustering (undirected)",
+      "notes": [],
+      "reason": "",
+      "status": "pass",
+      "suites": [
+        "LDBC Graphalytics: LCC"
+      ]
+    },
+    {
+      "datasets": [
+        {
+          "correctness": "pass",
+          "dataset": "path3",
+          "detail": {
+            "ours_triangles": 0,
+            "reference_triangles": 0
+          },
+          "deterministic": true,
+          "m": 2,
+          "n": 3,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.0358990509994328,
+          "ratio_kernel": null,
+          "ratio_public": 0.832017106008688,
+          "reference_ms": 0.04314701072871685
+        },
+        {
+          "correctness": "pass",
+          "dataset": "diamond",
+          "detail": {
+            "ours_triangles": 1,
+            "reference_triangles": 1
+          },
+          "deterministic": true,
+          "m": 4,
+          "n": 4,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.0409139902330935,
+          "ratio_kernel": null,
+          "ratio_public": 1.2133809089779177,
+          "reference_ms": 0.03371899947524071
+        },
+        {
+          "correctness": "pass",
+          "dataset": "two_triangles_bridge",
+          "detail": {
+            "ours_triangles": 2,
+            "reference_triangles": 2
+          },
+          "deterministic": true,
+          "m": 7,
+          "n": 6,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.05464197602123022,
+          "ratio_kernel": null,
+          "ratio_public": 1.180630823813794,
+          "reference_ms": 0.04628201713785529
+        },
+        {
+          "correctness": "pass",
+          "dataset": "star9_bidir",
+          "detail": {
+            "ours_triangles": 0,
+            "reference_triangles": 0
+          },
+          "deterministic": true,
+          "m": 16,
+          "n": 9,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.06730703171342611,
+          "ratio_kernel": null,
+          "ratio_public": 1.3325228285770916,
+          "reference_ms": 0.05051097832620144
+        },
+        {
+          "correctness": "pass",
+          "dataset": "directed_cycle6",
+          "detail": {
+            "ours_triangles": 0,
+            "reference_triangles": 0
+          },
+          "deterministic": true,
+          "m": 6,
+          "n": 6,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.07604900747537613,
+          "ratio_kernel": null,
+          "ratio_public": 2.0562654533264295,
+          "reference_ms": 0.036984041798859835
+        },
+        {
+          "correctness": "pass",
+          "dataset": "two_cycles_shared_node",
+          "detail": {
+            "ours_triangles": 2,
+            "reference_triangles": 2
+          },
+          "deterministic": true,
+          "m": 6,
+          "n": 5,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.04835601430386305,
+          "ratio_kernel": null,
+          "ratio_public": 1.3893023302484104,
+          "reference_ms": 0.0348059693351388
+        },
+        {
+          "correctness": "pass",
+          "dataset": "disconnected3",
+          "detail": {
+            "ours_triangles": 0,
+            "reference_triangles": 0
+          },
+          "deterministic": true,
+          "m": 3,
+          "n": 6,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.0422400189563632,
+          "ratio_kernel": null,
+          "ratio_public": 1.400390199094167,
+          "reference_ms": 0.03016303526237607
+        },
+        {
+          "correctness": "pass",
+          "dataset": "cliques_4x5",
+          "detail": {
+            "ours_triangles": 40,
+            "reference_triangles": 40
+          },
+          "deterministic": true,
+          "m": 80,
+          "n": 20,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.2087049651890993,
+          "ratio_kernel": null,
+          "ratio_public": 1.1230357185924045,
+          "reference_ms": 0.18584000645205379
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n64_m192_s11",
+          "detail": {
+            "ours_triangles": 21,
+            "reference_triangles": 21
+          },
+          "deterministic": true,
+          "m": 192,
+          "n": 64,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.6117019802331924,
+          "ratio_kernel": null,
+          "ratio_public": 1.2720391086033094,
+          "reference_ms": 0.4808829980902374
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n256_m1024_s12",
+          "detail": {
+            "ours_triangles": 82,
+            "reference_triangles": 82
+          },
+          "deterministic": true,
+          "m": 1024,
+          "n": 256,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 3.4801249857991934,
+          "ratio_kernel": null,
+          "ratio_public": 1.3596091859574244,
+          "reference_ms": 2.559650980401784
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n512_m2048_s13",
+          "detail": {
+            "ours_triangles": 71,
+            "reference_triangles": 71
+          },
+          "deterministic": true,
+          "m": 2048,
+          "n": 512,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 6.932846968993545,
+          "ratio_kernel": null,
+          "ratio_public": 0.7258976057143577,
+          "reference_ms": 9.55072301439941
+        }
+      ],
+      "kernel": "tc",
+      "matcher": "exact integer equality vs networkx.triangles sum/3",
+      "notes": [],
+      "reason": "",
+      "status": "pass",
+      "suites": [
+        "GAPBS: TC"
+      ]
+    },
+    {
+      "datasets": [
+        {
+          "correctness": "pass",
+          "dataset": "path3",
+          "detail": {
+            "communities": 1,
+            "exact_cover": true,
+            "mode": "property-only (partition is ambiguous on this dataset)",
+            "modularity_abs_err": 0.0
+          },
+          "deterministic": true,
+          "m": 2,
+          "n": 3,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.07776200072839856,
+          "ratio_kernel": null,
+          "ratio_public": null,
+          "reference_ms": null
+        },
+        {
+          "correctness": "pass",
+          "dataset": "diamond",
+          "detail": {
+            "communities": 2,
+            "exact_cover": true,
+            "mode": "property-only (partition is ambiguous on this dataset)",
+            "modularity_abs_err": 0.0
+          },
+          "deterministic": true,
+          "m": 4,
+          "n": 4,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.13037299504503608,
+          "ratio_kernel": null,
+          "ratio_public": null,
+          "reference_ms": null
+        },
+        {
+          "correctness": "pass",
+          "dataset": "two_triangles_bridge",
+          "detail": {
+            "communities": 2,
+            "equivalent_to_reference": true,
+            "exact_cover": true,
+            "modularity_abs_err": 1.428301921180264e-13,
+            "reference_communities": 2
+          },
+          "deterministic": true,
+          "m": 7,
+          "n": 6,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.15947897918522358,
+          "ratio_kernel": null,
+          "ratio_public": 0.35337686332549795,
+          "reference_ms": 0.451300002168864
+        },
+        {
+          "correctness": "pass",
+          "dataset": "star9_bidir",
+          "detail": {
+            "communities": 1,
+            "exact_cover": true,
+            "mode": "property-only (partition is ambiguous on this dataset)",
+            "modularity_abs_err": 0.0
+          },
+          "deterministic": true,
+          "m": 16,
+          "n": 9,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.13296998804435134,
+          "ratio_kernel": null,
+          "ratio_public": null,
+          "reference_ms": null
+        },
+        {
+          "correctness": "pass",
+          "dataset": "directed_cycle6",
+          "detail": {
+            "communities": 3,
+            "exact_cover": true,
+            "mode": "property-only (partition is ambiguous on this dataset)",
+            "modularity_abs_err": 3.3334446314370325e-13
+          },
+          "deterministic": true,
+          "m": 6,
+          "n": 6,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.17837696941569448,
+          "ratio_kernel": null,
+          "ratio_public": null,
+          "reference_ms": null
+        },
+        {
+          "correctness": "pass",
+          "dataset": "two_cycles_shared_node",
+          "detail": {
+            "communities": 2,
+            "exact_cover": true,
+            "mode": "property-only (partition is ambiguous on this dataset)",
+            "modularity_abs_err": 1.1113332476497817e-13
+          },
+          "deterministic": true,
+          "m": 6,
+          "n": 5,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.15183299547061324,
+          "ratio_kernel": null,
+          "ratio_public": null,
+          "reference_ms": null
+        },
+        {
+          "correctness": "pass",
+          "dataset": "disconnected3",
+          "detail": {
+            "communities": 3,
+            "exact_cover": true,
+            "mode": "property-only (partition is ambiguous on this dataset)",
+            "modularity_abs_err": 4.4442227675745016e-13
+          },
+          "deterministic": true,
+          "m": 3,
+          "n": 6,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.1352539984509349,
+          "ratio_kernel": null,
+          "ratio_public": null,
+          "reference_ms": null
+        },
+        {
+          "correctness": "pass",
+          "dataset": "cliques_4x5",
+          "detail": {
+            "communities": 4,
+            "equivalent_to_reference": true,
+            "exact_cover": true,
+            "modularity_abs_err": 0.0,
+            "reference_communities": 4
+          },
+          "deterministic": true,
+          "m": 80,
+          "n": 20,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.4641890409402549,
+          "ratio_kernel": null,
+          "ratio_public": 0.3088127157290968,
+          "reference_ms": 1.5031409566290677
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n64_m192_s11",
+          "detail": {
+            "communities": 6,
+            "exact_cover": true,
+            "mode": "property-only (partition is ambiguous on this dataset)",
+            "modularity_abs_err": 4.3604009292153023e-13
+          },
+          "deterministic": true,
+          "m": 192,
+          "n": 64,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 6.19212695164606,
+          "ratio_kernel": null,
+          "ratio_public": null,
+          "reference_ms": null
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n256_m1024_s12",
+          "detail": {
+            "communities": 11,
+            "exact_cover": true,
+            "mode": "property-only (partition is ambiguous on this dataset)",
+            "modularity_abs_err": 1.6825429938194247e-13
+          },
+          "deterministic": true,
+          "m": 1024,
+          "n": 256,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 50.710238981992006,
+          "ratio_kernel": null,
+          "ratio_public": null,
+          "reference_ms": null
+        },
+        {
+          "correctness": "pass",
+          "dataset": "erdos_n512_m2048_s13",
+          "detail": {
+            "communities": 13,
+            "exact_cover": true,
+            "mode": "property-only (partition is ambiguous on this dataset)",
+            "modularity_abs_err": 2.343125693471393e-13
+          },
+          "deterministic": true,
+          "m": 2048,
+          "n": 512,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 138.4821279789321,
+          "ratio_kernel": null,
+          "ratio_public": null,
+          "reference_ms": null
+        }
+      ],
+      "kernel": "louvain",
+      "matcher": "exact-cover + modularity cross-check vs networkx + equivalence on unambiguous datasets",
+      "notes": [
+        "modularity of OUR partition is recomputed with networkx.community.modularity and compared to ours (12-decimal) at abs<=1e-9."
+      ],
+      "reason": "",
+      "status": "pass",
+      "suites": [
+        "project-local (GAPBS-adjacent)"
+      ]
+    },
+    {
+      "datasets": [
+        {
+          "correctness": "pass",
+          "dataset": "path3",
+          "detail": {
+            "ours_cycles": 0,
+            "reference_cycles": 0
+          },
+          "deterministic": true,
+          "m": 2,
+          "n": 3,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.030470022466033697,
+          "ratio_kernel": null,
+          "ratio_public": 0.2688989685214104,
+          "reference_ms": 0.11331401765346527
+        },
+        {
+          "correctness": "pass",
+          "dataset": "diamond",
+          "detail": {
+            "ours_cycles": 0,
+            "reference_cycles": 0
+          },
+          "deterministic": true,
+          "m": 4,
+          "n": 4,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.03036600537598133,
+          "ratio_kernel": null,
+          "ratio_public": 0.40344387843879365,
+          "reference_ms": 0.0752669875510037
+        },
+        {
+          "correctness": "pass",
+          "dataset": "two_triangles_bridge",
+          "detail": {
+            "ours_cycles": 0,
+            "reference_cycles": 0
+          },
+          "deterministic": true,
+          "m": 7,
+          "n": 6,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.045900000259280205,
+          "ratio_kernel": null,
+          "ratio_public": 0.5655707017168891,
+          "reference_ms": 0.08115696255117655
+        },
+        {
+          "correctness": "pass",
+          "dataset": "star9_bidir",
+          "detail": {
+            "ours_cycles": 8,
+            "reference_cycles": 8
+          },
+          "deterministic": true,
+          "m": 16,
+          "n": 9,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.0794560182839632,
+          "ratio_kernel": null,
+          "ratio_public": 0.07699972704053558,
+          "reference_ms": 1.0318999993614852
+        },
+        {
+          "correctness": "pass",
+          "dataset": "directed_cycle6",
+          "detail": {
+            "ours_cycles": 1,
+            "reference_cycles": 1
+          },
+          "deterministic": true,
+          "m": 6,
+          "n": 6,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.06937695434316993,
+          "ratio_kernel": null,
+          "ratio_public": 0.21464647237758452,
+          "reference_ms": 0.3232149756513536
+        },
+        {
+          "correctness": "pass",
+          "dataset": "two_cycles_shared_node",
+          "detail": {
+            "ours_cycles": 2,
+            "reference_cycles": 2
+          },
+          "deterministic": true,
+          "m": 6,
+          "n": 5,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.06105500506237149,
+          "ratio_kernel": null,
+          "ratio_public": 0.1641329923561802,
+          "reference_ms": 0.3719849628396332
+        },
+        {
+          "correctness": "pass",
+          "dataset": "disconnected3",
+          "detail": {
+            "ours_cycles": 0,
+            "reference_cycles": 0
+          },
+          "deterministic": true,
+          "m": 3,
+          "n": 6,
+          "ours_kernel_ms": null,
+          "ours_public_ms": 0.03592297434806824,
+          "ratio_kernel": null,
+          "ratio_public": 0.3487160015007481,
+          "reference_ms": 0.10301498696208
+        }
+      ],
+      "kernel": "cycles",
+      "matcher": "exact set match vs networkx.simple_cycles (canonical rotation)",
+      "notes": [
+        "bounded to small datasets (n<=12): simple-cycle counts explode combinatorially."
+      ],
+      "reason": "",
+      "status": "pass",
+      "suites": [
+        "project-local (no LDBC/GAPBS counterpart)"
+      ]
+    },
+    {
+      "datasets": [],
+      "kernel": "bfs",
+      "matcher": "",
+      "notes": [],
+      "reason": "kernel belum tersedia: tidak ada entrypoint BFS publik (hanya analytics.centrality._bfs_distances privat)",
+      "status": "skipped",
+      "suites": [
+        "LDBC Graphalytics: BFS",
+        "GAPBS: BFS"
+      ]
+    },
+    {
+      "datasets": [],
+      "kernel": "sssp",
+      "matcher": "",
+      "notes": [],
+      "reason": "kernel belum tersedia: graph read-model tidak membawa bobot edge; tidak ada SSSP publik",
+      "status": "skipped",
+      "suites": [
+        "LDBC Graphalytics: SSSP",
+        "GAPBS: SSSP"
+      ]
+    }
+  ],
+  "kind": "bench.institutional",
+  "reference": "networkx 3.7 (+ self-validated numpy PageRank reference; networkx.pagerank requires scipy which is intentionally not a dependency)",
+  "schema_version": 1,
+  "summary": {
+    "kernels_available": 8,
+    "kernels_failed": 1,
+    "kernels_passed": 7,
+    "kernels_skipped": 2,
+    "kernels_total": 10,
+    "score": "7/8 available kernels PASS correctness"
+  }
+}
