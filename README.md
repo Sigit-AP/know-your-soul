@@ -110,10 +110,21 @@ Full setup: [docs/integration/hermes.md](docs/integration/hermes.md).
 
 ## The graph viewer
 
-`know-your-soul export --format all` writes a self-contained `graph.html` (no
-CDN, no JavaScript dependencies, works offline) plus DOT, Mermaid, CSV,
-GraphML, SVG, and a per-domain markdown book. Every artifact is hashed into the
-generation manifest and round-trip validated.
+`know-your-soul export --formats all` writes a self-contained `graph.html` (no
+CDN, no JavaScript dependencies, works offline) plus twelve more interchange
+formats: DOT, Mermaid, CSV (nodes + edges), GraphML, SVG, GEXF, Cytoscape.js,
+D3-force, an adjacency matrix + edge list, TGF, and a per-domain markdown book.
+Every artifact is hashed into the generation manifest and round-trip validated.
+
+`know-your-soul analytics --modules all` adds the deep graph suite over the same
+read model: centrality, components, communities, cycles, bridges, HITS,
+eigenvector and Katz prestige, clustering, deterministic Louvain, all-pairs
+reachability, a 16-class triad census, degree assortativity, a k-shortest-paths
+probe, per-domain score aggregates, and proposal-only near-duplicate candidates.
+Day-2 operation is covered by three read-only commands: `config describe` /
+`config effective` (layered configuration with provenance), `metrics`
+(store/latency/capacity/health), and `diagnose` (11 fail-closed self-checks;
+exit 1 when anything is broken, so CI can gate on it).
 
 Clicking a node shows its scores, version, and provenance:
 
@@ -192,7 +203,7 @@ pre-apply hashes and scores.
 
 ```bash
 uv sync --frozen
-uv run pytest -q                 # 2,025 tests
+uv run pytest -q                 # 3,165 tests
 uv run pytest -q --cov=src/know_your_soul
 uv run pyright                   # 0 errors
 uv run ruff check

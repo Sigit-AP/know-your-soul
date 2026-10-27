@@ -62,6 +62,13 @@ EXPECTED_FORMAT_ARTIFACTS = {
     "book/P5.md",
     "book/P6.md",
     "book/P7.md",
+    # Mega-wave 2 formats (SUB-75, wired by SUB-80).
+    "exports/graph.gexf",
+    "exports/cytoscape.json",
+    "exports/d3-force.json",
+    "exports/adjacency.csv",
+    "exports/edges.txt",
+    "exports/graph.tgf",
 }
 
 EXPECTED_ANALYTICS_ARTIFACTS = {
@@ -79,6 +86,19 @@ EXPECTED_ANALYTICS_ARTIFACTS = {
     "analytics/DIFF.md",
     "analytics/timeline.json",
     "analytics/TIMELINE.md",
+    # Mega-wave 2 analytics (SUB-74/75/76, wired by SUB-80).
+    "analytics/graph-summary.json",
+    "analytics/hits.json",
+    "analytics/eigenvector.json",
+    "analytics/katz.json",
+    "analytics/clustering.json",
+    "analytics/louvain.json",
+    "analytics/reachability.json",
+    "analytics/motifs.json",
+    "analytics/assortativity.json",
+    "analytics/paths.json",
+    "analytics/aggregates.json",
+    "analytics/near-duplicates.json",
 }
 
 

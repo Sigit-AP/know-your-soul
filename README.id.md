@@ -112,10 +112,21 @@ Setup lengkap: [docs/integration/hermes.md](docs/integration/hermes.md).
 
 ## Graph viewer
 
-`know-your-soul export --format all` menulis `graph.html` mandiri (tanpa CDN,
-tanpa dependensi JavaScript, jalan offline) plus DOT, Mermaid, CSV, GraphML,
-SVG, dan buku markdown per domain. Setiap artifact ter-hash ke dalam manifest
-generasi dan tervalidasi round-trip.
+`know-your-soul export --formats all` menulis `graph.html` mandiri (tanpa CDN,
+tanpa dependensi JavaScript, jalan offline) plus dua belas format interchange
+lain: DOT, Mermaid, CSV (node + edge), GraphML, SVG, GEXF, Cytoscape.js,
+D3-force, matriks adjacency + edge list, TGF, dan buku markdown per domain.
+Setiap artifact ter-hash ke dalam manifest generasi dan tervalidasi round-trip.
+
+`know-your-soul analytics --modules all` menambahkan suite graph dalam di atas
+read model yang sama: centrality, components, communities, cycles, bridges,
+HITS, eigenvector dan Katz prestige, clustering, Louvain deterministik,
+reachability all-pairs, triad census 16 kelas, assortativity degree, probe
+k-shortest-paths, agregat skor per domain, dan kandidat near-duplicate yang
+proposal-only. Operasi harian dicakup tiga perintah read-only: `config
+describe` / `config effective` (konfigurasi berlapis dengan provenance),
+`metrics` (store/latensi/kapasitas/kesehatan), dan `diagnose` (11 self-check
+fail-closed; exit 1 bila ada yang rusak, jadi CI bisa gate langsung).
 
 Klik sebuah node untuk melihat skor, versi, dan provenance-nya:
 
@@ -194,7 +205,7 @@ hash dan skor persis seperti sebelum apply.
 
 ```bash
 uv sync --frozen
-uv run pytest -q                 # 2.025 test
+uv run pytest -q                 # 3.165 test
 uv run pytest -q --cov=src/know_your_soul
 uv run pyright                   # 0 error
 uv run ruff check

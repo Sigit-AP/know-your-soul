@@ -12,9 +12,13 @@ review-signals, report-v2, book) are fed by
 :func:`know_your_soul.exporters.builtin.gather_context`, which reads the
 store with strictly read-only ``SELECT`` statements. Selections accept full
 artifact names, short aliases (``dot``, ``mermaid``, ``tabular``, ``graphml``,
-``svg``, ``html``, ``book``, ``centrality``, ``components``, ``cycles``,
+``svg``, ``html``, ``book``, ``gexf``, ``cytoscape``, ``d3force``,
+``adjacency``, ``tgf``, ``centrality``, ``components``, ``cycles``,
 ``communities``, ``bridges``, ``review-signals``, ``health``, ``report-v2``,
-``generation-diff``, ``timeline``) or ``all``.
+``generation-diff``, ``timeline``, ``graph-summary``, ``hits``,
+``eigenvector``, ``katz``, ``clustering``, ``louvain``, ``reachability``,
+``motifs``, ``assortativity``, ``paths``, ``aggregates``,
+``near-duplicates``) or ``all``.
 
 Argument validation is strict: unknown names/aliases and empty selections are
 usage errors (exit 2), and every output path resolves through

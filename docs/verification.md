@@ -51,6 +51,25 @@ were landing in the working tree; the tree is transiently red mid-wave
 half-landed files). The numbers above are real dated outputs from green
 windows; the coordinator's final gate run supersedes them.
 
+**Update 2026-10-27 ~09:1x UTC (SUB-80, ATM mega-wave 2 integration, HEAD
+`afbf8ad` + uncommitted wave-2 files)**: the wave-2 modules are wired into the
+production paths. The built-in registry now produces **48 artifacts (22 format
++ 26 analytics)** — new formats GEXF/Cytoscape.js/D3-force/adjacency matrix +
+edge list/TGF, new analytics hits/eigenvector/katz/clustering/louvain/
+reachability/motifs/assortativity/paths-probe/aggregates/near-duplicates/
+graph-summary — and three OPS subcommands land: `config describe|effective|
+dump` (layered config with provenance, secrets redacted), `metrics`
+(json|markdown), `diagnose` (exit code = report: 1 iff any error finding).
+End-to-end on a real store rebuilt from `bench/corpus`: `export --formats all`
+and `analytics --modules all` produced all 48 artifacts, every on-disk byte
+re-hashed to the reported sha256 (48/48 match); `diagnose` exit **0** on the
+healthy store and exit **1** with `ARTIFACT_HASH_MISMATCH` after a one-byte
+tamper of `graph.json` (restored afterwards). Fresh gates: full suite **3165
+passed, 0 failed** (334.58s), `ruff check` + `ruff format --check` clean,
+pyright **0/0/0**, `uv lock --check` OK, `bench/run.py check` **OK**,
+`scripts/license_guard.py` **OK**. Frozen contract untouched: still 14
+knowledge operations; the new commands are OPS surface only.
+
 Gate order (plan Task 10): full `pytest -q`, type checking, lint, dependency
 audit, `uv run python bench/run.py`, then the Graphify coverage calculation.
 

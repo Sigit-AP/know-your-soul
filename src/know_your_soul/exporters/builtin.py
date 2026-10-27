@@ -1,14 +1,20 @@
-"""The built-in ATM export registry (wave integration, SUB-70).
+"""The built-in ATM export registry (wave integration, SUB-70; mega-wave 2, SUB-80).
 
-Wires every ATM wave A/B/C module into the F-B8 orchestrator as capped,
-round-trip-validated, manifest-ready artifacts:
+Wires every ATM wave A/B/C and mega-wave 2 module into the F-B8 orchestrator
+as capped, round-trip-validated, manifest-ready artifacts:
 
 * analytics — centrality, components, cycles, communities, bridges,
   review-signals, health, report-v2 (+ markdown), generation-diff (+ DIFF.md),
-  timeline (+ TIMELINE.md), and the baseline domain-rollup;
+  timeline (+ TIMELINE.md), and the baseline domain-rollup; plus the
+  mega-wave 2 suite: hits, eigenvector, katz, clustering, louvain,
+  reachability, motifs, assortativity, a deterministic k-shortest-paths
+  probe, the graph summary, domain score aggregates, and the proposal-only
+  near-duplicate candidates;
 * formats — node-index, DOT, Mermaid, tabular CSV (nodes + edges), GraphML,
-  SVG, the self-contained HTML viewer, and the book (fixed page set:
-  ``index.md`` + one page per primary domain P1..P7).
+  SVG, the self-contained HTML viewer, the book (fixed page set: ``index.md``
+  + one page per primary domain P1..P7), and the mega-wave 2 formats: GEXF,
+  Cytoscape.js elements JSON, D3-force node-link JSON, adjacency matrix CSV +
+  edge list, and TGF.
 
 Context-dependent modules never open the store themselves. The caller builds
 an :class:`ExportContext` once — :func:`gather_context` does it with strictly
@@ -30,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 from know_your_soul.analytics import (
+    algorithms,
     bridges,
     centrality,
     communities,
@@ -37,12 +44,26 @@ from know_your_soul.analytics import (
     cycles,
     generation_diff,
     health,
+    paths,
+    query_tools,
     review_signals,
     timeline,
 )
 from know_your_soul.domain import PrimaryDomain
+from know_your_soul.exporters import (
+    adjacency,
+    cytoscape,
+    d3force,
+    dot,
+    gexf,
+    graphml_svg,
+    html_view,
+    mermaid,
+    summary,
+    tabular,
+    tgf,
+)
 from know_your_soul.exporters import book as book_exporter
-from know_your_soul.exporters import dot, graphml_svg, html_view, mermaid, tabular
 from know_your_soul.exporters.orchestrator import (
     ExportError,
     ExportFormat,
@@ -100,6 +121,12 @@ FORMAT_ALIASES: dict[str, tuple[str, ...]] = {
     "svg": ("exports/graph.svg",),
     "html": ("exports/graph.html",),
     "book": BOOK_PAGES,
+    # Mega-wave 2 formats (SUB-75, wired by SUB-80).
+    "gexf": ("exports/graph.gexf",),
+    "cytoscape": ("exports/cytoscape.json",),
+    "d3force": ("exports/d3-force.json",),
+    "adjacency": ("exports/adjacency.csv", "exports/edges.txt"),
+    "tgf": ("exports/graph.tgf",),
 }
 
 #: Short CLI aliases for the analytics artifacts (``know-your-soul analytics``).
@@ -115,6 +142,19 @@ ANALYTICS_ALIASES: dict[str, tuple[str, ...]] = {
     "report-v2": ("analytics/report-v2.json", "analytics/graph-report-v2.md"),
     "generation-diff": ("analytics/generation-diff.json", "analytics/DIFF.md"),
     "timeline": ("analytics/timeline.json", "analytics/TIMELINE.md"),
+    # Mega-wave 2 analytics (SUB-74/SUB-75/SUB-76, wired by SUB-80).
+    "graph-summary": ("analytics/graph-summary.json",),
+    "hits": ("analytics/hits.json",),
+    "eigenvector": ("analytics/eigenvector.json",),
+    "katz": ("analytics/katz.json",),
+    "clustering": ("analytics/clustering.json",),
+    "louvain": ("analytics/louvain.json",),
+    "reachability": ("analytics/reachability.json",),
+    "motifs": ("analytics/motifs.json",),
+    "assortativity": ("analytics/assortativity.json",),
+    "paths": ("analytics/paths.json",),
+    "aggregates": ("analytics/aggregates.json",),
+    "near-duplicates": ("analytics/near-duplicates.json",),
 }
 
 
@@ -325,6 +365,37 @@ def _timeline(context: ExportContext) -> dict[str, Any]:
     return timeline.build_timeline(context.timeline_records)
 
 
+def _paths_probe(read_model: Mapping[str, Any]) -> dict[str, Any]:
+    """A deterministic Yen k-shortest-paths probe over the read model.
+
+    ``find_k_shortest_paths`` needs explicit endpoints; a context-free
+    artifact picks them deterministically — the lexicographically smallest
+    and largest node ids of the published graph. A graph with fewer than two
+    addressable nodes reports ``insufficient_nodes`` honestly instead of
+    raising (the probe is a report, not a query).
+    """
+    node_ids = sorted(
+        str(node["id"]) for node in _nodes(read_model) if isinstance(node.get("id"), str) and node.get("id")
+    )
+    if len(node_ids) < 2:
+        return {
+            "schema_version": 1,
+            "kind": "analytics.paths.k_shortest",
+            "status": "insufficient_nodes",
+            "parameters": {
+                "source": node_ids[0] if node_ids else None,
+                "target": None,
+                "k": paths.DEFAULT_K,
+                "max_expansions": paths.DEFAULT_MAX_EXPANSIONS,
+            },
+            "node_count": len(node_ids),
+            "path_count": 0,
+            "paths": [],
+            "guards": [],
+        }
+    return paths.find_k_shortest_paths(read_model, source=node_ids[0], target=node_ids[-1])
+
+
 def _html_producer(read_model: Mapping[str, Any]) -> bytes:
     """The HTML viewer positioned by the deterministic layout engine (F-B7)."""
     positions = layout(read_model, width=1000.0, height=1000.0).positions
@@ -452,6 +523,15 @@ def build_registry(context: ExportContext | None = None) -> ExportRegistry:
             )
         )
 
+    # Mega-wave 2 formats (SUB-75): self-registering with their own caps and
+    # round-trips — gexf, cytoscape, d3force, adjacency (matrix + edge list),
+    # tgf.
+    gexf.register_gexf(registry)
+    cytoscape.register_cytoscape(registry)
+    d3force.register_d3force(registry)
+    adjacency.register_adjacency(registry)
+    tgf.register_tgf(registry)
+
     # ---------------------------------------------------------- analytics
     registry.register_json(
         "analytics/centrality.json", centrality.compute_centrality, kind="analytics", max_bytes=_JSON_LARGE
@@ -534,5 +614,40 @@ def build_registry(context: ExportContext | None = None) -> ExportRegistry:
             producer=lambda read_model: (timeline.render_timeline_markdown(_timeline(ctx)) + "\n").encode("utf-8"),
             roundtrip=_markdown_roundtrip("analytics/TIMELINE.md", _TIMELINE_HEADER, ("scoring contract:",)),
         )
+    )
+
+    # Mega-wave 2 analytics (SUB-74/SUB-75/SUB-76). All producers are pure
+    # functions of the read model; caps are explicit and fail-closed.
+    summary.register_summary(registry)  # analytics/graph-summary.json
+    registry.register_json("analytics/hits.json", algorithms.compute_hits, kind="analytics", max_bytes=_JSON_LARGE)
+    registry.register_json(
+        "analytics/eigenvector.json", algorithms.compute_eigenvector, kind="analytics", max_bytes=_JSON_LARGE
+    )
+    registry.register_json("analytics/katz.json", algorithms.compute_katz, kind="analytics", max_bytes=_JSON_LARGE)
+    registry.register_json(
+        "analytics/clustering.json", algorithms.compute_clustering, kind="analytics", max_bytes=_JSON_SMALL
+    )
+    registry.register_json(
+        "analytics/louvain.json", algorithms.compute_louvain, kind="analytics", max_bytes=_JSON_LARGE
+    )
+    registry.register_json(
+        "analytics/reachability.json", algorithms.compute_reachability, kind="analytics", max_bytes=_JSON_LARGE
+    )
+    registry.register_json("analytics/motifs.json", algorithms.count_motifs, kind="analytics", max_bytes=_JSON_LARGE)
+    registry.register_json(
+        "analytics/assortativity.json", algorithms.compute_assortativity, kind="analytics", max_bytes=_JSON_SMALL
+    )
+    registry.register_json("analytics/paths.json", _paths_probe, kind="analytics", max_bytes=_JSON_SMALL)
+    registry.register_json(
+        "analytics/aggregates.json",
+        lambda read_model: query_tools.aggregate_nodes(read_model, group_by="domain"),
+        kind="analytics",
+        max_bytes=_JSON_SMALL,
+    )
+    registry.register_json(
+        "analytics/near-duplicates.json",
+        query_tools.find_near_duplicates,
+        kind="analytics",
+        max_bytes=_JSON_LARGE,
     )
     return registry

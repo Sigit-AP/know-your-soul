@@ -148,26 +148,47 @@ know-your-soul --store soul.sqlite3 --output-root graph export --formats all
 know-your-soul --store bench.sqlite3 --output-root graph analytics --modules all
 ```
 
-- `export` produces the **format** artifacts (16): `exports/node-index.json`,
+- `export` produces the **format** artifacts (22): `exports/node-index.json`,
   `exports/graph.dot` (Graphviz), `exports/graph.mmd` (Mermaid),
   `exports/nodes.csv` + `exports/edges.csv` (RFC 4180),
   `exports/graph.graphml`, `exports/graph.svg`, `exports/graph.html`
   (self-contained viewer, positions from the deterministic layout engine),
-  and the book `book/index.md` + `book/P1.md`..`book/P7.md` (one page per
-  primary domain, fixed page set — empty domains get an explicit empty page).
-- `analytics` produces the **analytics** artifacts (14):
+  the book `book/index.md` + `book/P1.md`..`book/P7.md` (one page per
+  primary domain, fixed page set — empty domains get an explicit empty page),
+  and the mega-wave 2 formats: `exports/graph.gexf` (GEXF 1.2draft, for
+  Gephi), `exports/cytoscape.json` (Cytoscape.js elements),
+  `exports/d3-force.json` (D3-force node-link with integer indices),
+  `exports/adjacency.csv` (adjacency matrix) + `exports/edges.txt`
+  (tab-separated edge list), and `exports/graph.tgf` (Trivial Graph Format).
+- `analytics` produces the **analytics** artifacts (26):
   `analytics/domain-rollup.json`, `analytics/centrality.json`,
   `analytics/components.json`, `analytics/cycles.json`,
   `analytics/communities.json`, `analytics/bridges.json`,
   `analytics/review-signals.json`, `analytics/health.json`,
   `analytics/report-v2.json` + `analytics/graph-report-v2.md`,
   `analytics/generation-diff.json` + `analytics/DIFF.md`,
-  `analytics/timeline.json` + `analytics/TIMELINE.md`.
+  `analytics/timeline.json` + `analytics/TIMELINE.md`, and the mega-wave 2
+  suite: `analytics/graph-summary.json` (counts, degree histogram, per-domain
+  breakdown), `analytics/hits.json` (HITS hubs/authorities),
+  `analytics/eigenvector.json`, `analytics/katz.json` (truncated Katz
+  prestige), `analytics/clustering.json` (local coefficient + transitivity),
+  `analytics/louvain.json` (deterministic Louvain communities),
+  `analytics/reachability.json` (all-pairs reachability summary),
+  `analytics/motifs.json` (triangles + 16-class triad census),
+  `analytics/assortativity.json` (degree assortativity),
+  `analytics/paths.json` (a deterministic Yen k-shortest-paths probe between
+  the lexicographically smallest and largest node ids),
+  `analytics/aggregates.json` (per-domain P/M/E min/max/mean + frozen 10-bin
+  histograms), and `analytics/near-duplicates.json` (proposal-only
+  near-duplicate candidates — `auto_merge: false` is data, not policy text).
 - `--formats` / `--modules` accept full artifact names, short aliases (`dot`,
-  `mermaid`, `tabular`, `graphml`, `svg`, `html`, `book`, `centrality`,
-  `components`, `cycles`, `communities`, `bridges`, `review-signals`,
-  `health`, `report-v2`, `generation-diff`, `timeline`), or `all` (every
-  artifact of the command's kind). Unknown selections are usage errors
+  `mermaid`, `tabular`, `graphml`, `svg`, `html`, `book`, `gexf`,
+  `cytoscape`, `d3force`, `adjacency`, `tgf`, `centrality`, `components`,
+  `cycles`, `communities`, `bridges`, `review-signals`, `health`,
+  `report-v2`, `generation-diff`, `timeline`, `graph-summary`, `hits`,
+  `eigenvector`, `katz`, `clustering`, `louvain`, `reachability`, `motifs`,
+  `assortativity`, `paths`, `aggregates`, `near-duplicates`), or `all`
+  (every artifact of the command's kind). Unknown selections are usage errors
   (exit 2); an example with a real artifact name:
   `know-your-soul ... export --formats exports/graph.dot`.
 - Every artifact is produced fail-closed through the export registry
@@ -189,6 +210,44 @@ know-your-soul --store bench.sqlite3 --output-root graph analytics --modules all
 - **timeline** replays the store's domain event log (`event_log WHERE
   kind='domain' ORDER BY event_seq`, read-only) into per-node/per-domain P/M/E
   learning series with the frozen scoring contract.
+
+## Ops tooling: config, metrics, diagnose (mega-wave 2)
+
+Three more OPS-only commands (`src/know_your_soul/ops/{config,metrics,diagnose}.py`,
+wired in `cli.py`). All are strictly read-only against the store — the store
+file is byte-identical before and after (pinned by
+`tests/test_wave2_integration.py::test_cli_ops_commands_never_touch_the_store`).
+
+```bash
+know-your-soul config describe               # markdown: resolved value + provenance per key
+know-your-soul config effective              # canonical JSON: flat key=value (secrets redacted)
+know-your-soul config dump                   # canonical JSON: {key: {value, source}}
+know-your-soul config --config ops.toml describe   # extra TOML layer
+know-your-soul metrics                       # canonical JSON operational metrics
+know-your-soul metrics --format markdown     # human report
+know-your-soul diagnose                      # self-check; exit 0 = no errors, 1 = any error
+know-your-soul diagnose --format markdown --no-permissions
+```
+
+- **Configuration** (`ops/config.py`) resolves 20 declared keys through four
+  layers: defaults < TOML file (`--config`) < environment (`KNOW_YOUR_SOUL_*`)
+  < CLI flags. Every key is typed and fail-closed (`ConfigError` with a code:
+  `UNKNOWN_KEY`, `TYPE_MISMATCH`, `OUT_OF_RANGE`, ...); a bad file is a usage
+  error (exit 2). Secrets (`serve.api_key`) render as `<redacted>` on every
+  surface.
+- **Metrics** (`ops/metrics.py`) collects store counts (events, journals
+  complete/in-progress/stale, watermarks), per-operation latency summaries
+  from the audit journal (integer p50/p95, nearest-rank), publish-capacity
+  utilization, active-projection sizes, and a weighted health score. The JSON
+  is canonical and float-free.
+- **Diagnose** (`ops/diagnose.py`) runs 11 fail-closed checks: store select,
+  hash chain, migrations drift, stale journals, projection pointer, manifest
+  load, manifest-vs-disk (re-hashes every artifact), watermark consistency,
+  read-model validation, publish capacity, and file permissions
+  (`--no-permissions` skips the last). A crashed check becomes a
+  `CHECK_CRASHED` finding instead of an exception. The process exit code is
+  the report's: 1 iff any `error`-severity finding exists — so CI can gate on
+  `know-your-soul diagnose` directly.
 
 ## Generation retention (ATM wave D)
 
