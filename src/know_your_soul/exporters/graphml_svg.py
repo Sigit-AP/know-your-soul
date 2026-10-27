@@ -73,8 +73,7 @@ _MAX_LEGEND_ROWS = 12
 
 _ELISION = "…"
 
-# Our own light-document palette (chosen for this project; dark-theme asset
-# colors in tools/generate_visual_assets.py are a separate surface). Unknown
+# Our own light-document palette (chosen for this project). Unknown
 # domains cycle deterministically through the fallback ramp in sorted order.
 _DOMAIN_PALETTE: dict[str, str] = {
     "P1": "#0969da",

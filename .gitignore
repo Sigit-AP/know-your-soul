@@ -6,6 +6,7 @@ __pycache__/
 .superpowers/
 graphify-out/
 .hermes-knowledge/
+know-your-soul-projection/
 *.sqlite3-wal
 *.sqlite3-shm
 bench/results/*

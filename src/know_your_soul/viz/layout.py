@@ -4,9 +4,7 @@ Origin: the *idea* of a force-directed placement pass and of a radial tree
 for hub-dominated graphs is public-domain graph-drawing practice
 (Fruchterman-Reingold style springs plus a tidy radial tree); the
 implementation here is original and shares no code with any other project.
-It replaces the one-off radial placer in ``tools/generate_visual_assets.py``
-with a general engine: that script keeps its pinned asset layout, while this
-module serves the exporter family.
+It is a general engine serving the exporter family.
 
 Determinism contract (plan section 5, item 2):
 
