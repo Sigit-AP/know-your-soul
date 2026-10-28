@@ -61,8 +61,20 @@ class TestParserShape:
         """The 14 frozen ops are still dispatched via payload, not flags."""
         parser = build_parser()
         for op in (
-            "query", "get-node", "get-subtree", "log-event", "record-outcome", "evaluate", "review",
-            "propose-improvement", "apply-improvement", "rollback", "path", "explain", "affected", "god-nodes",
+            "query",
+            "get-node",
+            "get-subtree",
+            "log-event",
+            "record-outcome",
+            "evaluate",
+            "review",
+            "propose-improvement",
+            "apply-improvement",
+            "rollback",
+            "path",
+            "explain",
+            "affected",
+            "god-nodes",
         ):
             args = parser.parse_args([op])
             assert args.command == op

@@ -48,6 +48,7 @@ markers = []
 line-length = 120
 target-version = "py314"
 src = ["src", "tests"]
+exclude = ["tests/fixtures"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
@@ -58,3 +59,4 @@ typeCheckingMode = "basic"
 venvPath = "."
 venv = ".venv"
 include = ["src", "tests"]
+exclude = ["tests/fixtures"]

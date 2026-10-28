@@ -128,9 +128,7 @@ _PY = LanguageSpec(
     call_types=("call",),
     call_name_fields=("function",),
     identifier_types=("identifier",),
-    variable_rules=(
-        VariableRule("assignment", name_field="left", kind="variable", const_when_uppercase=True),
-    ),
+    variable_rules=(VariableRule("assignment", name_field="left", kind="variable", const_when_uppercase=True),),
 )
 
 _JS_DECLARATIONS = (
@@ -202,12 +200,8 @@ _GO = LanguageSpec(
         ("const_spec", "constant"),
         ("var_spec", "variable"),
     ),
-    conditional_kinds=(
-        ("type_spec", (("interface_type", "interface"),), "type"),
-    ),
-    import_rules=(
-        ImportRule("import_spec", target_fields=("path",)),
-    ),
+    conditional_kinds=(("type_spec", (("interface_type", "interface"),), "type"),),
+    import_rules=(ImportRule("import_spec", target_fields=("path",)),),
     call_types=("call_expression",),
     call_name_fields=("function",),
     identifier_types=("identifier", "field_identifier", "type_identifier", "package_identifier"),
@@ -230,9 +224,7 @@ _RUST = LanguageSpec(
         ("function_signature_item", "function"),
     ),
     container_types=(("impl_item", "type"),),
-    import_rules=(
-        ImportRule("use_declaration", target_fields=("argument",)),
-    ),
+    import_rules=(ImportRule("use_declaration", target_fields=("argument",)),),
     call_types=("call_expression", "macro_invocation"),
     call_name_fields=("function", "macro", "name"),
     identifier_types=("identifier", "type_identifier", "field_identifier"),
@@ -251,9 +243,7 @@ _JAVA = LanguageSpec(
         ("constructor_declaration", "method"),
         ("package_declaration", "module"),
     ),
-    import_rules=(
-        ImportRule("import_declaration", target_regex=r"import\s+(?:static\s+)?([\w.]+)"),
-    ),
+    import_rules=(ImportRule("import_declaration", target_regex=r"import\s+(?:static\s+)?([\w.]+)"),),
     call_types=("method_invocation", "object_creation_expression"),
     call_name_fields=("name", "type", "function"),
     identifier_types=("identifier", "type_identifier"),
@@ -312,15 +302,11 @@ _CSHARP = LanguageSpec(
         ("namespace_declaration", "module"),
         ("file_scoped_namespace_declaration", "module"),
     ),
-    import_rules=(
-        ImportRule("using_directive", target_regex=r"using\s+(?:static\s+)?(?:[\w.]+\s*=\s*)?([\w.]+)\s*;"),
-    ),
+    import_rules=(ImportRule("using_directive", target_regex=r"using\s+(?:static\s+)?(?:[\w.]+\s*=\s*)?([\w.]+)\s*;"),),
     call_types=("invocation_expression",),
     call_name_fields=("function", "name"),
     identifier_types=("identifier",),
-    variable_rules=(
-        VariableRule("variable_declarator", name_field="name", kind="variable"),
-    ),
+    variable_rules=(VariableRule("variable_declarator", name_field="name", kind="variable"),),
     scoped_functions_become_methods=False,
 )
 
@@ -343,9 +329,7 @@ _RUBY = LanguageSpec(
     call_types=("call",),
     call_name_fields=("method",),
     identifier_types=("identifier", "constant"),
-    variable_rules=(
-        VariableRule("assignment", name_field="left", kind="variable", const_when_uppercase=True),
-    ),
+    variable_rules=(VariableRule("assignment", name_field="left", kind="variable", const_when_uppercase=True),),
 )
 
 _PHP = LanguageSpec(
@@ -380,12 +364,8 @@ _PHP = LanguageSpec(
 _BASH = LanguageSpec(
     name="bash",
     parser="bash",
-    declaration_kinds=(
-        ("function_definition", "function"),
-    ),
-    import_rules=(
-        ImportRule("command", target_fields=("argument",), match_text=("source", ".")),
-    ),
+    declaration_kinds=(("function_definition", "function"),),
+    import_rules=(ImportRule("command", target_fields=("argument",), match_text=("source", ".")),),
     call_types=("command",),
     call_name_fields=("name",),
     identifier_types=("word", "variable_name"),

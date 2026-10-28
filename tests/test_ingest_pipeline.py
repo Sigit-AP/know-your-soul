@@ -436,9 +436,7 @@ class TestFullIngest:
         with EventStore() as store:
             make_pipeline(store).ingest_path(tmp_path)
             with store.read() as conn:
-                domain_events = conn.execute(
-                    "SELECT COUNT(*) AS n FROM event_log WHERE kind = 'domain'"
-                ).fetchone()
+                domain_events = conn.execute("SELECT COUNT(*) AS n FROM event_log WHERE kind = 'domain'").fetchone()
                 revisions = conn.execute("SELECT COUNT(*) AS n FROM node_revision").fetchone()
             assert int(domain_events["n"]) == 0
             assert int(revisions["n"]) == 0

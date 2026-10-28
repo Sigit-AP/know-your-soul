@@ -403,11 +403,7 @@ def hit_any(topk: list[str], sample_id: str, evidence: list[str]) -> bool:
 
 def hit_all(topk: list[str], sample_id: str, evidence: list[str]) -> bool:
     got = {
-        dia
-        for node_id in topk
-        if node_id.startswith("t_")
-        for sid, dia in [parse_node_id(node_id)]
-        if sid == sample_id
+        dia for node_id in topk if node_id.startswith("t_") for sid, dia in [parse_node_id(node_id)] if sid == sample_id
     }
     return bool(evidence) and set(evidence) <= got
 

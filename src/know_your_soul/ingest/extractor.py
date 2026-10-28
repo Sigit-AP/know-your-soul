@@ -27,7 +27,7 @@ import hashlib
 import re
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from tree_sitter_language_pack import get_parser
 
@@ -175,7 +175,7 @@ class ExtractionResult:
     edges: tuple[ExtractedEdge, ...]
     unresolved_refs: tuple[UnresolvedRef, ...]
 
-    def to_artifact(self) -> dict[str, object]:
+    def to_artifact(self) -> dict[str, Any]:
         """The canonical artifact dict: sorted keys, sorted collections."""
         nodes = sorted(self.nodes, key=lambda n: (n.start_line, n.start_col, n.node_id))
         edges = sorted(self.edges, key=lambda e: (e.source, e.target, e.kind))
@@ -184,9 +184,7 @@ class ExtractionResult:
             key=lambda r: (r.source_node_id, r.target_name, r.kind, r.line, r.col),
         )
         return {
-            "edges": [
-                {"kind": edge.kind, "source": edge.source, "target": edge.target} for edge in edges
-            ],
+            "edges": [{"kind": edge.kind, "source": edge.source, "target": edge.target} for edge in edges],
             "extraction_version": self.extraction_version,
             "generated_hint": self.generated_hint,
             "language": self.language,
@@ -349,9 +347,7 @@ class _IdAllocator:
         if with_col not in self._used:
             self._used.add(with_col)
             return with_col
-        raise ExtractionError(
-            f"{path!r}: cannot allocate a unique id for {kind} {name!r} at {line}:{col}"
-        )
+        raise ExtractionError(f"{path!r}: cannot allocate a unique id for {kind} {name!r} at {line}:{col}")
 
 
 class TreeSitterExtractor:
@@ -471,13 +467,9 @@ class TreeSitterExtractor:
                 kind = CoreNodeKind.METHOD.value
         start_line = node.start_point[0] + 1
         start_col = node.start_point[1]
-        node_id = self._allocator.allocate(
-            path=self._path, kind=kind, name=name, line=start_line, col=start_col
-        )
+        node_id = self._allocator.allocate(path=self._path, kind=kind, name=name, line=start_line, col=start_col)
         parent_id = self._nearest_node_id(scopes)
-        qualified = "::".join(
-            [*(scope.name for scope in scopes[1:] if scope.name), name]
-        )
+        qualified = "::".join([*(scope.name for scope in scopes[1:] if scope.name), name])
         self._nodes.append(
             ExtractedNode(
                 node_id=node_id,
@@ -634,9 +626,7 @@ class TreeSitterExtractor:
                     node_id=node_id,
                     kind=CoreNodeKind.FUNCTION.value,
                     name=name,
-                    qualified_name="::".join(
-                        [*(scope.name for scope in scopes[1:] if scope.name), name]
-                    ),
+                    qualified_name="::".join([*(scope.name for scope in scopes[1:] if scope.name), name]),
                     path=self._path,
                     start_line=line,
                     end_line=node.end_point[0] + 1,

@@ -146,8 +146,16 @@ _LANGUAGE_BY_FILENAME: dict[str, str] = {
 #: Directories that never participate in a walk (codegraph scope-ignore).
 SKIP_DIR_NAMES: frozenset[str] = frozenset(
     {
-        ".git", ".hypothesis", ".mypy_cache", ".pytest_cache", ".venv",
-        "__pycache__", "build", "dist", "node_modules", "venv",
+        ".git",
+        ".hypothesis",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".venv",
+        "__pycache__",
+        "build",
+        "dist",
+        "node_modules",
+        "venv",
     }
 )
 
@@ -627,9 +635,7 @@ class IngestionPipeline:
             duration_ms=int((time.monotonic() - started) * 1000),
         )
 
-    def _walk(
-        self, root: Path, single: str | None, *, recursive: bool
-    ) -> list[tuple[Path, str]]:
+    def _walk(self, root: Path, single: str | None, *, recursive: bool) -> list[tuple[Path, str]]:
         """Canonical-order (absolute path, relpath) pairs, bytewise by relpath.
 
         The store's own database file (and its WAL/SHM sidecars) is never
@@ -937,7 +943,7 @@ class IngestionPipeline:
     ) -> None:
         try:
             out_nodes.append(GraphNode(node_id=file_id, kind="file", name=Path(relpath).name, path=relpath))
-        except (GraphModelError, ValueError):
+        except GraphModelError, ValueError:
             return
         known = {file_id}
         for node in nodes:
@@ -962,7 +968,7 @@ class IngestionPipeline:
                     line=line,
                     col=col,
                 )
-            except (GraphModelError, ValueError, KeyError):
+            except GraphModelError, ValueError, KeyError:
                 continue
             out_nodes.append(graph_node)
             known.add(graph_node.node_id)
@@ -974,7 +980,7 @@ class IngestionPipeline:
                 continue
             try:
                 out_edges.append(GraphEdge(source=source, target=target, kind=_HIERARCHY_KIND))
-            except (GraphModelError, ValueError):
+            except GraphModelError, ValueError:
                 continue
 
     def _primary_suggestions(
@@ -999,7 +1005,7 @@ class IngestionPipeline:
                     purpose="ingestion proposal root",
                 )
             )
-        except (GraphModelError, ValueError):
+        except GraphModelError, ValueError:
             return ()
         for node in nodes:
             try:
