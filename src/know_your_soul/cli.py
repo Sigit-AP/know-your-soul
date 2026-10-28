@@ -252,6 +252,49 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="skip the file-permission check (diagnose.check_permissions)",
     )
+
+    # Wave-2 SUB-89: universal-graph ingestion. OPS surface only — NOT a
+    # knowledge operation, never joins KNOWLEDGE_OPERATIONS / OPS_OPERATIONS,
+    # never dispatched over MCP or HTTP; the frozen fourteen are untouched.
+    ingest_parser = subparsers.add_parser(
+        "ingest",
+        help="ops: ingest a file or directory into the v3 ingestion tables (proposal-only, not a knowledge op)",
+    )
+    ingest_parser.add_argument("path", help="file or directory to ingest (the ingestion root)")
+    ingest_parser.add_argument(
+        "--incremental",
+        dest="incremental",
+        action="store_true",
+        default=True,
+        help="skip unchanged files via the (size, mtime) pre-filter + sha256 confirm (default)",
+    )
+    ingest_parser.add_argument(
+        "--no-incremental",
+        dest="incremental",
+        action="store_false",
+        help="force a full re-ingest of every file",
+    )
+    ingest_parser.add_argument(
+        "--recursive",
+        dest="recursive",
+        action="store_true",
+        default=True,
+        help="walk subdirectories (default)",
+    )
+    ingest_parser.add_argument("--no-recursive", dest="recursive", action="store_false", help="only the top level")
+    ingest_parser.add_argument(
+        "--no-resolve",
+        action="store_true",
+        help="park cross-file references without running the resolve pass",
+    )
+    ingest_parser.add_argument("--max-files", type=int, default=1024, help="walk cap, [1, 65536] (default 1024)")
+    ingest_parser.add_argument("--max-nodes", type=int, default=65536, help="fail-closed total node cap")
+    ingest_parser.add_argument("--max-edges", type=int, default=131072, help="fail-closed total edge cap")
+    ingest_parser.add_argument("--max-refs", type=int, default=65536, help="fail-closed total unresolved-ref cap")
+    ingest_parser.add_argument(
+        "--max-file-bytes", type=int, default=4 * 1024 * 1024, help="per-file size cap (default 4 MiB)"
+    )
+    ingest_parser.add_argument("--json", action="store_true", help="print the canonical JSON report")
     return parser
 
 
@@ -409,6 +452,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _metrics_command(args)
     if command == "diagnose":
         return _diagnose_command(args)
+    if command == "ingest":
+        from know_your_soul.ops.ingest_cli import run_ingest_command
+
+        return run_ingest_command(args)
 
     payload_text: str = args.payload if args.payload is not None else "{}"
     if payload_text == "-":
