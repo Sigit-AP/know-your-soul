@@ -24,6 +24,7 @@ No model, provider, clock or randomness anywhere in this module.
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -534,8 +535,15 @@ class TreeSitterExtractor:
         target: str | None = None
         for field in rule.target_fields:
             child = node.child_by_field_name(field)
-            if child is not None:
-                target = self._text(child)
+            if child is None:
+                continue
+            candidate = self._text(child).strip().strip(rule.strip_chars).strip()
+            # A field carrying no module name must not win over later fields:
+            # Python `from . import x` yields module_name "." (dots only), whose
+            # name tail is empty — an instant NodeIdError in the id allocator
+            # (F-SUB94-1). Fall through to the next field (the imported name).
+            if candidate and _has_name_tail(candidate):
+                target = candidate
                 break
         if target is None and rule.target_regex:
             match = re.search(rule.target_regex, self._text(node))
@@ -544,7 +552,7 @@ class TreeSitterExtractor:
         if target is None:
             return
         target = target.strip().strip(rule.strip_chars).strip()
-        if not target:
+        if not target or not _has_name_tail(target):
             return
         line = node.start_point[0] + 1
         col = node.start_point[1]
@@ -720,7 +728,19 @@ def _name_tail(target: str) -> str:
     return target.rsplit(".", 1)[-1].rsplit("::", 1)[-1]
 
 
+def _has_name_tail(target: str) -> bool:
+    """True when *target* yields a non-empty name tail.
+
+    Dot-only relative import paths (Python ``from . import x`` → ``.``,
+    ``from .. import y`` → ``..``) have none; feeding them to the id
+    allocator is an instant ``NodeIdError`` (F-SUB94-1).
+    """
+    return bool(_name_tail(target))
+
+
 # ---------------------------------------------------------------- public API
+
+_logger = logging.getLogger(__name__)
 
 
 def extract_source(
@@ -730,13 +750,32 @@ def extract_source(
     language: str | None = None,
     generated_hint: bool = False,
 ) -> ExtractionResult:
-    """Extract one in-memory source string under the contract path *path*."""
+    """Extract one in-memory source string under the contract path *path*.
+
+    Routing (MASTER-PLAN multi-language decision): when the optional Rust
+    kernel is built it handles the parse+walk hot path; any kernel failure
+    falls back to the pure-Python walker below with a logged reason. Both
+    engines are proven byte-identical by ``tests/test_kernel_rust.py``.
+    """
     resolved = language if language is not None else language_for_path(path)
     if resolved is None:
         raise UnsupportedMediaTypeError(path)
     encoded = source.encode("utf-8")
     if len(encoded) > MAX_SOURCE_FILE_SIZE_BYTES:
         raise FileTooLargeError(path, size=len(encoded), limit=MAX_SOURCE_FILE_SIZE_BYTES)
+    # Lazy import: kernel_bridge imports this module, so a top-level import
+    # would be circular.
+    from know_your_soul.ingest import kernel_bridge
+
+    if kernel_bridge.kernel_available():
+        try:
+            return kernel_bridge.extract_source_via_kernel(
+                path, source, language=resolved, generated_hint=generated_hint
+            )
+        except IngestError:
+            raise  # deterministic contract errors propagate unchanged
+        except Exception as error:
+            _logger.warning("rust kernel failed on %r (%s); falling back to the python walker", path, error)
     return TreeSitterExtractor(get_spec(resolved)).extract(path, source, generated_hint=generated_hint)
 
 

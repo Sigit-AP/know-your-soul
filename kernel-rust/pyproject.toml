@@ -1,0 +1,18 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+# The kernel wheel is built separately from the main package (hatchling owns
+# the top-level pyproject.toml). Build steps are documented in
+# docs/recovery/w5-rust-kernel.md; CI wiring lands in a later wave.
+
+[project]
+name = "know-your-soul-kernel"
+version = "0.1.0"
+description = "Rust extraction kernel for know-your-soul (tree-sitter, byte-identical to the Python reference)"
+requires-python = ">=3.14"
+license = "Apache-2.0"
+
+[tool.maturin]
+module-name = "know_your_soul_kernel"
+features = ["pyo3"]

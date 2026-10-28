@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "verified": "2026-10-28",
+  "note": "Manually verified against the pinned sources. fixture/ expectations were checked by reading the fixture code (every expected edge is a true call/import in the source) AND by probing the product pipeline; real-repo lookups were verified by grep against the pinned trees (see docs/recovery/w5-codebase-bench.md). 'expect: null' = negative query, must return zero hits.",
+  "targets": {
+    "fixture": {
+      "lookups": [
+        {"query": "Worker", "expect": {"name": "Worker", "kind": "class", "path": "pylib/core.py"}, "top": 1},
+        {"query": "base_helper", "expect": {"name": "base_helper", "kind": "function", "path": "pylib/core.py"}, "top": 1},
+        {"query": "handle", "expect": {"name": "handle", "kind": "function", "path": "pylib/api.py"}, "top": 1},
+        {"query": "shout", "expect": {"name": "shout", "kind": "function", "path": "jslib/util.js"}, "top": 1},
+        {"query": "formatName", "expect": {"name": "formatName", "kind": "function", "path": "jslib/util.js"}, "top": 1},
+        {"query": "zzz_no_such_symbol", "expect": null}
+      ],
+      "hierarchy": [
+        {
+          "symbol": "base_helper", "file": "pylib/core.py", "direction": "callers", "depth": 1,
+          "expect": [
+            {"name": "direct", "kind": "function", "path": "pylib/api.py"},
+            {"name": "run", "kind": "method", "path": "pylib/core.py"}
+          ]
+        },
+        {
+          "symbol": "handle", "file": "pylib/api.py", "direction": "callees", "depth": 1,
+          "expect": [
+            {"name": "Worker", "kind": "class", "path": "pylib/core.py"},
+            {"name": "run", "kind": "method", "path": "pylib/core.py"}
+          ]
+        },
+        {
+          "symbol": "direct", "file": "pylib/api.py", "direction": "callees", "depth": 1,
+          "expect": [
+            {"name": "base_helper", "kind": "function", "path": "pylib/core.py"}
+          ]
+        },
+        {
+          "symbol": "shout", "file": "jslib/util.js", "direction": "callers", "depth": 1,
+          "expect": [
+            {"name": "main", "kind": "function", "path": "jslib/main.js"}
+          ]
+        },
+        {
+          "symbol": "shout", "file": "jslib/util.js", "direction": "callees", "depth": 1,
+          "expect": [
+            {"name": "formatName", "kind": "function", "path": "jslib/util.js"}
+          ]
+        },
+        {
+          "symbol": "main", "file": "jslib/main.js", "direction": "callers", "depth": 1,
+          "expect": []
+        }
+      ]
+    },
+    "requests": {
+      "lookups": [
+        {"query": "Session", "expect": {"name": "Session", "path": "src/requests/sessions.py"}},
+        {"query": "session", "expect": {"name": "session", "path": "src/requests/sessions.py"}},
+        {"query": "PreparedRequest", "expect": {"name": "PreparedRequest", "path": "src/requests/models.py"}},
+        {"query": "merge_environment_settings", "expect": {"name": "merge_environment_settings", "path": "src/requests/sessions.py"}},
+        {"query": "HTTPAdapter", "expect": {"name": "HTTPAdapter", "path": "src/requests/adapters.py"}},
+        {"query": "SessionRedirectMixin", "expect": {"name": "SessionRedirectMixin", "path": "src/requests/sessions.py"}}
+      ],
+      "hierarchy": [
+        {
+          "symbol": "merge_environment_settings", "file": "src/requests/sessions.py", "direction": "callers", "depth": 1,
+          "expect": [
+            {"name": "request", "kind": "method", "path": "src/requests/sessions.py"}
+          ]
+        }
+      ]
+    },
+    "chalk": {
+      "lookups": [
+        {"query": "createChalk", "expect": {"name": "createChalk", "path": "source/index.js"}},
+        {"query": "applyOptions", "expect": {"name": "applyOptions", "path": "source/index.js"}}
+      ]
+    },
+    "tree-sitter-python": {
+      "lookups": [
+        {"query": "new_delimiter", "expect": {"name": "new_delimiter", "path": "src/scanner.c"}},
+        {"query": "_get_query", "expect": {"name": "_get_query", "path": "bindings/python/tree_sitter_python/__init__.py"}}
+      ]
+    }
+  }
+}

@@ -456,6 +456,42 @@ def test_python_from_import_uses_module_name():
     assert "pkg.mod" in targets and "os" in targets
 
 
+# -------------------------------------------------- F-SUB94-1: relative imports
+
+
+def test_python_relative_from_import_dotted_only_module():
+    """F-SUB94-1: `from . import sessions` (dot-only module_name) must produce
+    an import node for the imported module — never crash with NodeIdError."""
+    result = extract_source("pkg/mod.py", "from . import sessions\n", language="python")
+    imports = [ref for ref in result.unresolved_refs if ref.kind == "imports"]
+    assert [ref.target_name for ref in imports] == ["sessions"]
+    import_nodes = [node for node in result.nodes if node.kind == CoreNodeKind.IMPORT.value]
+    assert [node.name for node in import_nodes] == ["sessions"]
+
+
+def test_python_relative_from_import_parent_dots():
+    """`from .. import sibling` (parent-package dots) resolves to the name field."""
+    result = extract_source("pkg/sub/mod.py", "from .. import sibling\n", language="python")
+    imports = [ref for ref in result.unresolved_refs if ref.kind == "imports"]
+    assert [ref.target_name for ref in imports] == ["sibling"]
+
+
+def test_python_relative_from_import_aliased():
+    """`from . import a as b` keeps the same shape as `import a as b` today."""
+    result = extract_source("pkg/mod.py", "from . import a as b\n", language="python")
+    imports = [ref for ref in result.unresolved_refs if ref.kind == "imports"]
+    assert [ref.target_name for ref in imports] == ["a as b"]
+
+
+def test_python_relative_from_import_with_module_unchanged():
+    """`from .a import x` was never broken: the dot-path stays the target."""
+    result = extract_source("pkg/mod.py", "from .a import x\n", language="python")
+    imports = [ref for ref in result.unresolved_refs if ref.kind == "imports"]
+    assert [ref.target_name for ref in imports] == [".a"]
+    import_nodes = [node for node in result.nodes if node.kind == CoreNodeKind.IMPORT.value]
+    assert [node.name for node in import_nodes] == ["a"]
+
+
 def test_javascript_require_is_import():
     result = extract_fixture("javascript")
     targets = {ref.target_name for ref in result.unresolved_refs if ref.kind == "imports"}

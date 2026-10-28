@@ -1,0 +1,787 @@
+{
+  "baseline": null,
+  "dataset": {
+    "fetched": "2026-10-28",
+    "manifest": "8226dcd44108791f7fdb7b79e922e316a2ceb3a98f139f292d03e16738aa4dd4"
+  },
+  "gate": {
+    "correctness_ok": true,
+    "failures": [],
+    "ok": true,
+    "regression": "PASS"
+  },
+  "ground_truth": "9927254a59641f07f1c77b5355220f728b42811c834f6c7580973b1a8d454826",
+  "repeats": 20,
+  "results": [
+    {
+      "determinism": {
+        "byte_identical": true,
+        "run_a_sha256": "0b6655fc991028d5b4f20ab0bcbcd1c11912e3fcd888665f1d9a12cc40a648a9",
+        "run_b_sha256": "0b6655fc991028d5b4f20ab0bcbcd1c11912e3fcd888665f1d9a12cc40a648a9"
+      },
+      "ingest": {
+        "dump_sha256": "0b6655fc991028d5b4f20ab0bcbcd1c11912e3fcd888665f1d9a12cc40a648a9",
+        "edges": 18,
+        "extract_p50_ms": 1.5168599784374237,
+        "extract_p95_ms": 2.5861539761535823,
+        "files_per_s": 156.737,
+        "nodes": 10,
+        "ref_resolved_pct": 0.8,
+        "refs_failed": 2,
+        "refs_pending": 0,
+        "refs_resolved": 8,
+        "refs_total": 10,
+        "resolve_ms": 34.72534997854382,
+        "stats": {
+          "deleted": 0,
+          "failed": 0,
+          "proposed": 5,
+          "scanned": 5,
+          "skipped": 0
+        },
+        "tracemalloc_peak_bytes": 18411595,
+        "walk_ms": 31.900533998850733
+      },
+      "name": "fixture",
+      "queries": {
+        "hierarchy": {
+          "results": [
+            {
+              "actual": [
+                {
+                  "kind": "function",
+                  "name": "direct",
+                  "path": "pylib/api.py"
+                },
+                {
+                  "kind": "method",
+                  "name": "run",
+                  "path": "pylib/core.py"
+                }
+              ],
+              "depth": 1,
+              "direction": "callers",
+              "exact_match": true,
+              "expect": [
+                {
+                  "kind": "function",
+                  "name": "direct",
+                  "path": "pylib/api.py"
+                },
+                {
+                  "kind": "method",
+                  "name": "run",
+                  "path": "pylib/core.py"
+                }
+              ],
+              "file": "pylib/core.py",
+              "symbol": "base_helper"
+            },
+            {
+              "actual": [
+                {
+                  "kind": "class",
+                  "name": "Worker",
+                  "path": "pylib/core.py"
+                },
+                {
+                  "kind": "method",
+                  "name": "run",
+                  "path": "pylib/core.py"
+                }
+              ],
+              "depth": 1,
+              "direction": "callees",
+              "exact_match": true,
+              "expect": [
+                {
+                  "kind": "class",
+                  "name": "Worker",
+                  "path": "pylib/core.py"
+                },
+                {
+                  "kind": "method",
+                  "name": "run",
+                  "path": "pylib/core.py"
+                }
+              ],
+              "file": "pylib/api.py",
+              "symbol": "handle"
+            },
+            {
+              "actual": [
+                {
+                  "kind": "function",
+                  "name": "base_helper",
+                  "path": "pylib/core.py"
+                }
+              ],
+              "depth": 1,
+              "direction": "callees",
+              "exact_match": true,
+              "expect": [
+                {
+                  "kind": "function",
+                  "name": "base_helper",
+                  "path": "pylib/core.py"
+                }
+              ],
+              "file": "pylib/api.py",
+              "symbol": "direct"
+            },
+            {
+              "actual": [
+                {
+                  "kind": "function",
+                  "name": "main",
+                  "path": "jslib/main.js"
+                }
+              ],
+              "depth": 1,
+              "direction": "callers",
+              "exact_match": true,
+              "expect": [
+                {
+                  "kind": "function",
+                  "name": "main",
+                  "path": "jslib/main.js"
+                }
+              ],
+              "file": "jslib/util.js",
+              "symbol": "shout"
+            },
+            {
+              "actual": [
+                {
+                  "kind": "function",
+                  "name": "formatName",
+                  "path": "jslib/util.js"
+                }
+              ],
+              "depth": 1,
+              "direction": "callees",
+              "exact_match": true,
+              "expect": [
+                {
+                  "kind": "function",
+                  "name": "formatName",
+                  "path": "jslib/util.js"
+                }
+              ],
+              "file": "jslib/util.js",
+              "symbol": "shout"
+            },
+            {
+              "actual": [],
+              "depth": 1,
+              "direction": "callers",
+              "exact_match": true,
+              "expect": [],
+              "file": "jslib/main.js",
+              "symbol": "main"
+            }
+          ]
+        },
+        "lookups": {
+          "k": 10,
+          "repeats": 20,
+          "results": [
+            {
+              "expect": {
+                "kind": "class",
+                "name": "Worker",
+                "path": "pylib/core.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "class",
+                  "line": 9,
+                  "name": "Worker",
+                  "path": "pylib/core.py",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 1.3053769944235682,
+              "p95_ms": 2.2801170125603676,
+              "query": "Worker",
+              "top1_ok": true
+            },
+            {
+              "expect": {
+                "kind": "function",
+                "name": "base_helper",
+                "path": "pylib/core.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "function",
+                  "line": 4,
+                  "name": "base_helper",
+                  "path": "pylib/core.py",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 1.431807002518326,
+              "p95_ms": 1.9157039932906628,
+              "query": "base_helper",
+              "top1_ok": true
+            },
+            {
+              "expect": {
+                "kind": "function",
+                "name": "handle",
+                "path": "pylib/api.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "function",
+                  "line": 6,
+                  "name": "handle",
+                  "path": "pylib/api.py",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 1.1704020434990525,
+              "p95_ms": 2.1777679794467986,
+              "query": "handle",
+              "top1_ok": true
+            },
+            {
+              "expect": {
+                "kind": "function",
+                "name": "shout",
+                "path": "jslib/util.js"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "function",
+                  "line": 6,
+                  "name": "shout",
+                  "path": "jslib/util.js",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 1.4389620046131313,
+              "p95_ms": 1.8042390001937747,
+              "query": "shout",
+              "top1_ok": true
+            },
+            {
+              "expect": {
+                "kind": "function",
+                "name": "formatName",
+                "path": "jslib/util.js"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "function",
+                  "line": 2,
+                  "name": "formatName",
+                  "path": "jslib/util.js",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 1.5371240442618728,
+              "p95_ms": 2.0814750459976494,
+              "query": "formatName",
+              "top1_ok": true
+            },
+            {
+              "expect": null,
+              "hit_at_k": true,
+              "hits": [],
+              "p50_ms": 1.1726890224963427,
+              "p95_ms": 1.6916110180318356,
+              "query": "zzz_no_such_symbol",
+              "top1_ok": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "determinism": {
+        "byte_identical": true,
+        "run_a_sha256": "8585eb0e6a4219c6e36776af3d8567715b8d35a5195a1af759103b70676b6a4d",
+        "run_b_sha256": "8585eb0e6a4219c6e36776af3d8567715b8d35a5195a1af759103b70676b6a4d"
+      },
+      "ingest": {
+        "dump_sha256": "8585eb0e6a4219c6e36776af3d8567715b8d35a5195a1af759103b70676b6a4d",
+        "edges": 1720,
+        "extract_p50_ms": 8.400860999245197,
+        "extract_p95_ms": 109.78767898632213,
+        "files_per_s": 8.628,
+        "nodes": 1345,
+        "ref_resolved_pct": 0.300654,
+        "refs_failed": 963,
+        "refs_pending": 0,
+        "refs_resolved": 414,
+        "refs_total": 1377,
+        "resolve_ms": 642.4476070096716,
+        "stats": {
+          "deleted": 0,
+          "failed": 84,
+          "proposed": 45,
+          "scanned": 129,
+          "skipped": 0
+        },
+        "tracemalloc_peak_bytes": 7502998,
+        "walk_ms": 5215.385735966265
+      },
+      "name": "requests",
+      "queries": {
+        "hierarchy": {
+          "results": [
+            {
+              "actual": [
+                {
+                  "kind": "method",
+                  "name": "request",
+                  "path": "src/requests/sessions.py"
+                }
+              ],
+              "depth": 1,
+              "direction": "callers",
+              "exact_match": true,
+              "expect": [
+                {
+                  "kind": "method",
+                  "name": "request",
+                  "path": "src/requests/sessions.py"
+                }
+              ],
+              "file": "src/requests/sessions.py",
+              "symbol": "merge_environment_settings"
+            }
+          ]
+        },
+        "lookups": {
+          "k": 10,
+          "repeats": 20,
+          "results": [
+            {
+              "expect": {
+                "name": "Session",
+                "path": "src/requests/sessions.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "class",
+                  "line": 356,
+                  "name": "Session",
+                  "path": "src/requests/sessions.py",
+                  "source": "exact"
+                },
+                {
+                  "kind": "function",
+                  "line": 819,
+                  "name": "session",
+                  "path": "src/requests/sessions.py",
+                  "source": "exact"
+                },
+                {
+                  "kind": "class",
+                  "line": 106,
+                  "name": "SessionRedirectMixin",
+                  "path": "src/requests/sessions.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 390,
+                  "name": "__init__",
+                  "path": "src/requests/sessions.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 451,
+                  "name": "__enter__",
+                  "path": "src/requests/sessions.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 454,
+                  "name": "__exit__",
+                  "path": "src/requests/sessions.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 500,
+                  "name": "request",
+                  "path": "src/requests/sessions.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 593,
+                  "name": "get",
+                  "path": "src/requests/sessions.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 604,
+                  "name": "options",
+                  "path": "src/requests/sessions.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 615,
+                  "name": "head",
+                  "path": "src/requests/sessions.py",
+                  "source": "fts"
+                }
+              ],
+              "p50_ms": 4.601566994097084,
+              "p95_ms": 7.735083985608071,
+              "query": "Session",
+              "top1_ok": null
+            },
+            {
+              "expect": {
+                "name": "session",
+                "path": "src/requests/sessions.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "class",
+                  "line": 356,
+                  "name": "Session",
+                  "path": "src/requests/sessions.py",
+                  "source": "exact"
+                },
+                {
+                  "kind": "function",
+                  "line": 819,
+                  "name": "session",
+                  "path": "src/requests/sessions.py",
+                  "source": "exact"
+                },
+                {
+                  "kind": "class",
+                  "line": 106,
+                  "name": "SessionRedirectMixin",
+                  "path": "src/requests/sessions.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 390,
+                  "name": "__init__",
+                  "path": "src/requests/sessions.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 451,
+                  "name": "__enter__",
+                  "path": "src/requests/sessions.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 454,
+                  "name": "__exit__",
+                  "path": "src/requests/sessions.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 500,
+                  "name": "request",
+                  "path": "src/requests/sessions.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 593,
+                  "name": "get",
+                  "path": "src/requests/sessions.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 604,
+                  "name": "options",
+                  "path": "src/requests/sessions.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 615,
+                  "name": "head",
+                  "path": "src/requests/sessions.py",
+                  "source": "fts"
+                }
+              ],
+              "p50_ms": 4.317298007663339,
+              "p95_ms": 6.238823989406228,
+              "query": "session",
+              "top1_ok": null
+            },
+            {
+              "expect": {
+                "name": "PreparedRequest",
+                "path": "src/requests/models.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "class",
+                  "line": 313,
+                  "name": "PreparedRequest",
+                  "path": "src/requests/models.py",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 1.5165960066951811,
+              "p95_ms": 1.6762070008553565,
+              "query": "PreparedRequest",
+              "top1_ok": null
+            },
+            {
+              "expect": {
+                "name": "merge_environment_settings",
+                "path": "src/requests/sessions.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "method",
+                  "line": 750,
+                  "name": "merge_environment_settings",
+                  "path": "src/requests/sessions.py",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 1.6300450079143047,
+              "p95_ms": 1.8825950101017952,
+              "query": "merge_environment_settings",
+              "top1_ok": null
+            },
+            {
+              "expect": {
+                "name": "HTTPAdapter",
+                "path": "src/requests/adapters.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "class",
+                  "line": 167,
+                  "name": "HTTPAdapter",
+                  "path": "src/requests/adapters.py",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 1.6479409532621503,
+              "p95_ms": 2.573594974819571,
+              "query": "HTTPAdapter",
+              "top1_ok": null
+            },
+            {
+              "expect": {
+                "name": "SessionRedirectMixin",
+                "path": "src/requests/sessions.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "class",
+                  "line": 106,
+                  "name": "SessionRedirectMixin",
+                  "path": "src/requests/sessions.py",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 1.942556002177298,
+              "p95_ms": 2.626714005600661,
+              "query": "SessionRedirectMixin",
+              "top1_ok": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "determinism": {
+        "byte_identical": true,
+        "run_a_sha256": "fac1c75160527a22b164659ce126ce7159718f16b4bf22728bc312a0fee94c41",
+        "run_b_sha256": "fac1c75160527a22b164659ce126ce7159718f16b4bf22728bc312a0fee94c41"
+      },
+      "ingest": {
+        "dump_sha256": "fac1c75160527a22b164659ce126ce7159718f16b4bf22728bc312a0fee94c41",
+        "edges": 321,
+        "extract_p50_ms": 6.883701018523425,
+        "extract_p95_ms": 30.643725011032075,
+        "files_per_s": 43.069,
+        "nodes": 252,
+        "ref_resolved_pct": 0.144695,
+        "refs_failed": 532,
+        "refs_pending": 0,
+        "refs_resolved": 90,
+        "refs_total": 622,
+        "resolve_ms": 310.43898803181946,
+        "stats": {
+          "deleted": 0,
+          "failed": 11,
+          "proposed": 23,
+          "scanned": 34,
+          "skipped": 0
+        },
+        "tracemalloc_peak_bytes": 1270058,
+        "walk_ms": 534.0319669921882
+      },
+      "name": "chalk",
+      "queries": {
+        "lookups": {
+          "k": 10,
+          "repeats": 20,
+          "results": [
+            {
+              "expect": {
+                "name": "createChalk",
+                "path": "source/index.js"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "function",
+                  "line": 50,
+                  "name": "createChalk",
+                  "path": "source/index.js",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 1.1959009571000934,
+              "p95_ms": 1.9451880361884832,
+              "query": "createChalk",
+              "top1_ok": null
+            },
+            {
+              "expect": {
+                "name": "applyOptions",
+                "path": "source/index.js"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "function",
+                  "line": 24,
+                  "name": "applyOptions",
+                  "path": "source/index.js",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 1.074100029654801,
+              "p95_ms": 1.249317021574825,
+              "query": "applyOptions",
+              "top1_ok": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "determinism": {
+        "byte_identical": true,
+        "run_a_sha256": "c5c2e2bbcca05436aa0bc79204144924cbdbb8d865a02d89168c4d5019c19483",
+        "run_b_sha256": "c5c2e2bbcca05436aa0bc79204144924cbdbb8d865a02d89168c4d5019c19483"
+      },
+      "ingest": {
+        "dump_sha256": "c5c2e2bbcca05436aa0bc79204144924cbdbb8d865a02d89168c4d5019c19483",
+        "edges": 1534,
+        "extract_p50_ms": 2.907785994466394,
+        "extract_p95_ms": 185.63815898960456,
+        "files_per_s": 5.868,
+        "nodes": 1433,
+        "ref_resolved_pct": 0.105322,
+        "refs_failed": 2387,
+        "refs_pending": 0,
+        "refs_resolved": 281,
+        "refs_total": 2668,
+        "resolve_ms": 1393.3732690056786,
+        "stats": {
+          "deleted": 0,
+          "failed": 33,
+          "proposed": 42,
+          "scanned": 75,
+          "skipped": 0
+        },
+        "tracemalloc_peak_bytes": 12797822,
+        "walk_ms": 7156.998609018046
+      },
+      "name": "tree-sitter-python",
+      "queries": {
+        "lookups": {
+          "k": 10,
+          "repeats": 20,
+          "results": [
+            {
+              "expect": {
+                "name": "new_delimiter",
+                "path": "src/scanner.c"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "function",
+                  "line": 38,
+                  "name": "new_delimiter",
+                  "path": "src/scanner.c",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 1.6271209460683167,
+              "p95_ms": 9.0545320417732,
+              "query": "new_delimiter",
+              "top1_ok": null
+            },
+            {
+              "expect": {
+                "name": "_get_query",
+                "path": "bindings/python/tree_sitter_python/__init__.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "function",
+                  "line": 8,
+                  "name": "_get_query",
+                  "path": "bindings/python/tree_sitter_python/__init__.py",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 2.134121023118496,
+              "p95_ms": 3.0112580279819667,
+              "query": "_get_query",
+              "top1_ok": null
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "stamp": "20261028T031226Z",
+  "suite": "codebase",
+  "summary": {
+    "determinism_ok": true,
+    "hierarchy_exact": 7,
+    "hierarchy_total": 7,
+    "lookup_hit_at_k": 15,
+    "lookup_top1_ok": 15,
+    "lookup_total": 15,
+    "negative_ok": true
+  }
+}
