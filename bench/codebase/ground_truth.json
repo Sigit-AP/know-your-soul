@@ -64,7 +64,8 @@
         {
           "symbol": "merge_environment_settings", "file": "src/requests/sessions.py", "direction": "callers", "depth": 1,
           "expect": [
-            {"name": "request", "kind": "method", "path": "src/requests/sessions.py"}
+            {"name": "request", "kind": "method", "path": "src/requests/sessions.py"},
+            {"name": "test_env_cert_bundles", "kind": "method", "path": "tests/test_requests.py"}
           ]
         }
       ]

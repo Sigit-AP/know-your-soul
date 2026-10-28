@@ -277,6 +277,46 @@ requirement. Dependency installs differ by surface, deliberately:
 The `know-your-soul` entrypoint (console script, `cli.py`) is installed by
 the build stage.
 
+## Rust extraction kernel (optional, wave W5)
+
+The code-ingestion hot path (`src/know_your_soul/ingest/extractor.py`) routes
+through an optional Rust kernel (`kernel-rust/`, crate `kys-kernel`) when it
+is built; **the pure-Python tree-sitter walker is the automatic fallback**, so
+every install works with or without a Rust toolchain — nothing in CI or in
+the Python package depends on the kernel being present. Kill switch:
+`KYS_DISABLE_RUST_KERNEL=<any value>` forces the Python path.
+
+Prerequisites: Rust toolchain (`~/.cargo/bin`, e.g. via rustup) and a C
+toolchain (`build-essential` on Debian/Ubuntu — the tree-sitter grammars are
+C). Then, from the repo root with the project venv active:
+
+```bash
+cd kernel-rust
+cargo build --release                    # standalone CLI: target/release/kys-kernel
+cargo test                               # kernel unit tests
+../.venv/bin/maturin develop --release   # Python module into .venv
+# or: ../.venv/bin/maturin build --release   # wheel → target/wheels/*.whl
+```
+
+`maturin` is a pinned dev-group dependency (`maturin==1.15.0`), so
+`uv sync --locked` already provides it in `.venv/bin/maturin`; it needs
+`VIRTUAL_ENV` set (active venv) for `develop`. The bridge
+(`ingest/kernel_bridge.py`) finds the kernel via (1) an installed
+`know_your_soul_kernel` module (`maturin develop` / wheel install), or (2) the
+repo-local `kernel-rust/target/{release,debug}/libknow_your_soul_kernel.so`.
+
+Gotcha: a plain `cargo build` also writes a cdylib to
+`target/*/libknow_your_soul_kernel.so` that lacks the PyO3 module — always
+refresh with `maturin build`/`develop` after plain cargo builds (the bridge
+detects the stale artifact and falls back).
+
+CI note: the workflow intentionally does **not** build the kernel — the test
+suite passes on the pure-Python path by design, and kernel parity is covered
+locally by `tests/test_kernel_rust*.py` when the kernel is built. A runner
+that builds the kernel before `pytest` (Ubuntu: rustup + build-essential +
+`maturin develop --release`; macOS best-effort) exercises the same suite
+through the kernel hot path; both paths must stay green.
+
 ## Store path resolution
 
 The CLI resolves the default `--store` path in this order:

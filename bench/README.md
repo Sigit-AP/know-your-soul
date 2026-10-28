@@ -1,6 +1,6 @@
 # bench/ — deterministic benchmark suites
 
-Three reproducible, no-AI benchmark suites ship with the product. Anyone can
+Four reproducible, no-AI benchmark suites ship with the product. Anyone can
 run them against the system as-is and reproduce the published numbers:
 
 | Suite | What it measures | How to run |
@@ -8,6 +8,7 @@ run them against the system as-is and reproduce the published numbers:
 | `bench/run.py` | Token saving, latency, retrieval quality vs the frozen SOUL corpus (24 cases) | `uv run python bench/run.py run` |
 | `bench/memory/` | recall@10 on the real LOCOMO conversational-memory dataset | `uv run python bench/memory/run.py run` |
 | `bench/institutional/` | Graph-algorithm correctness + performance, GAPBS/LDBC-Graphalytics style | `uv run python bench/institutional/run.py` |
+| `bench/codebase/` | Code ingestion + retrieval on pinned real OSS codebases (requests, chalk, tree-sitter-python) | `uv run python bench/codebase/run.py run` |
 
 Everything is deterministic: corpora and datasets are pinned by sha256,
 questions are frozen, no model is involved anywhere, and `--strict` exits 1 on
