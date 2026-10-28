@@ -16,6 +16,11 @@ auditable graph — scored, versioned, and impossible to change without your
 approval. No model, no embeddings, no provider calls inside. The AI stays on
 the agent side; this is the part that never guesses.
 
+New in 0.2.0: the graph is no longer limited to curated knowledge. Point it at
+any folder and it ingests source code in twelve languages (through a Rust
+tree-sitter kernel, byte-identical to the Python reference), PDFs, markdown,
+and plain text into one queryable graph with symbol search and call hierarchy.
+
 > Agents re-read the same documents every session and pay full token price for
 > it. Know Your Soul answers from the graph instead: **94.2% fewer tokens**,
 > every answer carrying its provenance and an audit id.
@@ -52,7 +57,18 @@ know-your-soul export --format all        # graph.html + DOT/Mermaid/CSV/GraphML
 know-your-soul analytics --modules all    # centrality, communities, cycles, health, timeline
 know-your-soul serve --socket demo.sock   # persistent local API
 know-your-soul diagnose                   # full self-check, exit code reflects health
+
+# ingest any codebase or document folder (0.2.0+)
+know-your-soul ingest-file src/main.py           # one file
+know-your-soul ingest-directory ./my-project     # whole tree, incremental on re-run
+know-your-soul watch ./my-project --interval 2   # keep the graph in sync as files change
 ```
+
+Ingestion is proposal-only: it writes to the code graph and reports a summary
+plus one audit event. Merging into the scored knowledge graph still goes
+through the operator-gated proposal flow. The ingested graph supports FTS5
+symbol search with `kind:/lang:/path:` filters and callers/callees hierarchy
+through the `know_your_soul.retrieval_v2` Python API.
 
 Hermes registers it as an MCP server; setup:
 [docs/integration/hermes.md](docs/integration/hermes.md).
@@ -92,6 +108,13 @@ Corpus changes produce a relearn offer and wait for you.
 **Graph analytics** — PageRank, HITS, Katz, communities, Louvain, cycles,
 bridges, health checks. Deterministic: same input, same bytes, every run.
 
+**Universal ingestion (0.2.0)** — source code in twelve languages (Python,
+JavaScript, TypeScript, Go, Rust, Java, C, C++, C#, Ruby, PHP, Bash) parsed by
+a Rust tree-sitter kernel (with an automatic, byte-identical Python fallback),
+plus PDFs, structure-aware markdown, and plain text. Incremental re-ingestion,
+a two-phase cross-file reference resolver, and a stdlib polling watcher keep
+the graph current.
+
 **Twelve export formats** — DOT, Mermaid, CSV, GraphML, GEXF, Cytoscape, D3,
 SVG, TGF, adjacency, plus a per-domain markdown book.
 
@@ -112,8 +135,18 @@ Memory benchmark on the real LOCOMO dataset (5,882 turns, 1,982 questions):
 |---|---|
 | recall@10 (product, as-is) | 0.5433 |
 
-Run both yourself: `uv run python bench/run.py run` and
-`uv run python bench/memory/run.py run`. Evidence:
+Real-codebase benchmark (psf/requests, chalk, tree-sitter-python — pinned):
+
+| Metric | Result |
+|---|---|
+| Symbol lookup hit@10 (ground truth) | 15/15, all top-1 |
+| Call hierarchy exact match | 7/7 |
+| Extraction failures | 0 files |
+| Cross-engine determinism (Rust vs Python) | byte-identical store |
+
+Run them yourself: `uv run python bench/run.py run`,
+`uv run python bench/memory/run.py run`, `uv run python bench/codebase/run.py
+run`, `uv run python bench/institutional/run.py --strict`. Evidence:
 [docs/verification.md](docs/verification.md).
 
 ## The fourteen operations
@@ -139,11 +172,15 @@ contained paths.
 
 ```bash
 uv sync --frozen
-uv run pytest -q                 # 3,165 tests
+uv run pytest -q                 # 5,445 tests
 uv run pyright
 uv run ruff check
 uv run python bench/run.py run   # 24/24 accepted
 ```
+
+The optional Rust kernel builds with [maturin](https://maturin.rs):
+`maturin build --release -m kernel-rust/Cargo.toml`. Without it, everything
+falls back to the byte-identical Python extractor.
 
 CI runs the same gates on Ubuntu and macOS, plus bandit, pip-audit, and a
 license-attribution guard.

@@ -16,6 +16,12 @@ satu graph lokal yang teraudit — dinilai, berversi, dan mustahil berubah tanpa
 persetujuanmu. Tidak ada model, embedding, atau panggilan provider di dalamnya.
 AI tetap di sisi agent; ini bagian yang tidak pernah menebak.
 
+Baru di 0.2.0: graph tidak lagi terbatas pada pengetahuan terkurasi. Arahkan
+ke folder mana pun dan ia meng-ingest kode sumber dalam dua belas bahasa
+(lewat kernel tree-sitter Rust, byte-identik dengan referensi Python), PDF,
+markdown, dan teks biasa menjadi satu graph yang bisa di-query dengan symbol
+search dan call hierarchy.
+
 > Agent membaca ulang dokumen yang sama di setiap sesi dan membayar harga token
 > penuh untuk itu. Know Your Soul menjawab dari graph: **hemat token 94,2%**,
 > setiap jawaban membawa provenance dan id audit-nya.
@@ -52,7 +58,18 @@ know-your-soul export --format all        # graph.html + DOT/Mermaid/CSV/GraphML
 know-your-soul analytics --modules all    # centrality, communities, cycles, health, timeline
 know-your-soul serve --socket demo.sock   # API lokal persisten
 know-your-soul diagnose                   # self-check menyeluruh, exit code mencerminkan kesehatan
+
+# ingest codebase atau folder dokumen apa pun (0.2.0+)
+know-your-soul ingest-file src/main.py           # satu file
+know-your-soul ingest-directory ./my-project     # seluruh tree, incremental saat diulang
+know-your-soul watch ./my-project --interval 2   # graph tetap sinkron saat file berubah
 ```
+
+Ingestion bersifat proposal-only: menulis ke code graph dan melaporkan
+ringkasan plus satu event audit. Penggabungan ke graph pengetahuan ternilai
+tetap lewat alur proposal yang kamu setujui. Graph hasil ingestion mendukung
+symbol search FTS5 dengan filter `kind:/lang:/path:` dan hirarki
+callers/callees lewat API Python `know_your_soul.retrieval_v2`.
 
 Hermes mendaftarkannya sebagai MCP server; setup:
 [docs/integration/hermes.md](docs/integration/hermes.md).
@@ -92,6 +109,13 @@ Perubahan korpus menghasilkan relearn offer dan menunggumu.
 **Analitik graph** — PageRank, HITS, Katz, communities, Louvain, cycles,
 bridges, health check. Deterministik: input sama, byte sama, setiap run.
 
+**Ingestion universal (0.2.0)** — kode sumber dalam dua belas bahasa (Python,
+JavaScript, TypeScript, Go, Rust, Java, C, C++, C#, Ruby, PHP, Bash) diparse
+oleh kernel tree-sitter Rust (dengan fallback Python otomatis yang
+byte-identik), plus PDF, markdown structure-aware, dan teks biasa.
+Re-ingestion incremental, resolver referensi lintas-file dua fase, dan watcher
+polling stdlib menjaga graph tetap mutakhir.
+
 **Dua belas format ekspor** — DOT, Mermaid, CSV, GraphML, GEXF, Cytoscape, D3,
 SVG, TGF, adjacency, plus buku markdown per domain.
 
@@ -111,8 +135,18 @@ Benchmark memori pada dataset LOCOMO asli (5.882 turn, 1.982 pertanyaan):
 |---|---|
 | recall@10 (produk, apa adanya) | 0,5433 |
 
-Jalankan sendiri keduanya: `uv run python bench/run.py run` dan
-`uv run python bench/memory/run.py run`. Bukti:
+Benchmark codebase nyata (psf/requests, chalk, tree-sitter-python — ter-pin):
+
+| Metrik | Hasil |
+|---|---|
+| Symbol lookup hit@10 (ground truth) | 15/15, semua top-1 |
+| Call hierarchy cocok eksak | 7/7 |
+| Kegagalan ekstraksi | 0 file |
+| Determinisme lintas engine (Rust vs Python) | store byte-identik |
+
+Jalankan sendiri semuanya: `uv run python bench/run.py run`,
+`uv run python bench/memory/run.py run`, `uv run python bench/codebase/run.py
+run`, `uv run python bench/institutional/run.py --strict`. Bukti:
 [docs/verification.md](docs/verification.md).
 
 ## Empat belas operasi
@@ -137,11 +171,15 @@ key dalam waktu konstan, body dibatasi, secret teredaksi, path terkurung.
 
 ```bash
 uv sync --frozen
-uv run pytest -q                 # 3.165 test
+uv run pytest -q                 # 5.445 test
 uv run pyright
 uv run ruff check
 uv run python bench/run.py run   # 24/24 diterima
 ```
+
+Kernel Rust opsional dibangun dengan [maturin](https://maturin.rs):
+`maturin build --release -m kernel-rust/Cargo.toml`. Tanpa itu, semuanya
+otomatis fallback ke extractor Python yang byte-identik.
 
 CI menjalankan gate yang sama di Ubuntu dan macOS, plus bandit, pip-audit, dan
 penjaga atribusi lisensi.
