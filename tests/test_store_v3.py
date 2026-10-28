@@ -133,7 +133,7 @@ def test_v3_migration_creates_the_new_tables(store: EventStore) -> None:
 def test_v3_migration_records_schema_versions(store: EventStore) -> None:
     with store.read() as conn:
         rows = conn.execute("SELECT version, description FROM schema_versions ORDER BY version").fetchall()
-    assert [int(row["version"]) for row in rows] == [1, 2, 3]
+    assert [int(row["version"]) for row in rows] == [1, 2, 3, 4]
     assert all(str(row["description"]) for row in rows)
     # The file-based ledger is untouched and still the authority for v1/v2.
     assert store.applied_migrations() == [1, 2]
@@ -156,7 +156,7 @@ def test_v3_migration_is_idempotent_across_reopens(tmp_path: Path) -> None:
     try:
         with second.read() as conn:
             versions = [int(r["version"]) for r in conn.execute("SELECT version FROM schema_versions")]
-            assert sorted(versions) == [1, 2, 3]
+            assert sorted(versions) == [1, 2, 3, 4]
             assert conn.execute("SELECT COUNT(*) AS n FROM files").fetchone()["n"] == 1
         assert second.get_file("src/a.py") is not None
     finally:
@@ -567,3 +567,218 @@ def test_v3_writes_are_byte_deterministic_across_stores(tmp_path: Path) -> None:
     finally:
         first.close()
         second.close()
+
+
+# ------------------------------------------- v4: persisted failure reasons (F4)
+# Audit-final-v020 F4: the deterministic resolver failure vocabulary lived
+# only in the in-memory BatchReport; schema v4 adds
+# ``unresolved_refs.failure_reason`` so post-hoc audit can answer *why* a ref
+# failed from the database alone. The migration is additive (one nullable
+# column), transactional and idempotent like v3.
+
+
+def _columns(store: EventStore, table: str) -> list[str]:
+    with store.read() as conn:
+        return [str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table})")]  # noqa: S608
+
+
+def test_v4_migration_adds_the_failure_reason_column(store: EventStore) -> None:
+    assert "failure_reason" in _columns(store, "unresolved_refs")
+    with store.read() as conn:
+        row = conn.execute("SELECT description FROM schema_versions WHERE version = 4").fetchone()
+    assert row is not None and "failure_reason" in str(row["description"])
+
+
+def test_v4_migration_is_idempotent_across_reopens(tmp_path: Path) -> None:
+    path = tmp_path / "soul.sqlite3"
+    first = EventStore(path)
+    ref_id = first.insert_unresolved_ref(
+        source_node_id="function:a", target_name="pkg.missing", kind="calls", first_seen=SEEN
+    )
+    first.record_resolution_attempt(ref_id, outcome="failed", reason="no_resolution")
+    first.close()
+    second = EventStore(path)  # reopen: recorded v4 with the column is a no-op
+    try:
+        with second.read() as conn:
+            versions = sorted(int(r["version"]) for r in conn.execute("SELECT version FROM schema_versions"))
+            assert versions == [1, 2, 3, 4]
+        ref = second.unresolved_ref(ref_id)
+        assert ref is not None and ref.failure_reason == "no_resolution"
+    finally:
+        second.close()
+
+
+def test_v3_store_migrates_to_v4_without_losing_a_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A genuine v3 store (capped build) gains the column; old rows read NULL."""
+    path = tmp_path / "soul.sqlite3"
+    monkeypatch.setattr(store_module, "SCHEMA_VERSION", 3)
+    legacy = EventStore(path)
+    # A genuine v3 write: the capped build's store has no failure_reason
+    # column, so the ref row lands via raw v3-shaped SQL, not the v4-aware
+    # store API.
+    with legacy.transaction() as conn:
+        conn.execute(
+            "INSERT INTO unresolved_refs (source_node_id, target_name, name_tail, kind, status, "
+            "first_seen, attempts) VALUES ('function:a', 'pkg.old', 'old', 'calls', 'failed', ?, 1)",
+            (SEEN,),
+        )
+    before = dump_all_tables(legacy)
+    legacy.close()
+    monkeypatch.undo()
+
+    migrated = EventStore(path)
+    try:
+        assert "failure_reason" in _columns(migrated, "unresolved_refs")
+        after = dump_all_tables(migrated)
+        for name, rows in before.items():
+            if name == "unresolved_refs":
+                # One additive NULL column appended; every prior value intact.
+                assert [row[:-1] for row in after[name]] == [tuple(row) for row in rows]
+                assert all(row[-1] is None for row in after[name])
+            elif name == "schema_versions":
+                assert [tuple(row) for row in rows] == [r for r in after[name] if r[0] != 4]
+            else:
+                assert after[name] == rows, name
+        assert migrated.verify_chain().ok
+    finally:
+        migrated.close()
+
+
+def test_v4_migration_is_transactional_and_rolls_back_on_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "soul.sqlite3"
+    monkeypatch.setattr(store_module, "SCHEMA_VERSION", 3)
+    legacy = EventStore(path)
+    _populate_v2_store(legacy, 2)
+    legacy.close()
+    monkeypatch.undo()
+
+    broken = tuple(store_module._SCHEMA_V4_STATEMENTS) + ("CREATE TABLE broken (",)
+    monkeypatch.setattr(store_module, "_SCHEMA_V4_STATEMENTS", broken)
+    with pytest.raises(MigrationError):
+        EventStore(path)
+    monkeypatch.undo()
+
+    # The failed v4 attempt left no trace: no column, no version-4 row; a
+    # clean retry succeeds.
+    recovered = EventStore(path)
+    try:
+        assert "failure_reason" in _columns(recovered, "unresolved_refs")
+        assert recovered.verify_chain().ok
+    finally:
+        recovered.close()
+
+
+def test_v4_fails_closed_when_the_column_exists_without_a_version_record(tmp_path: Path) -> None:
+    path = tmp_path / "soul.sqlite3"
+    monkeypatch_store = EventStore(path)
+    monkeypatch_store.close()
+    raw = sqlite3.connect(path)
+    raw.execute("DELETE FROM schema_versions WHERE version = 4")
+    raw.commit()
+    raw.close()
+    with pytest.raises(SchemaStateError):
+        EventStore(path)
+
+
+def test_v4_fails_closed_when_the_record_exists_without_the_column(tmp_path: Path) -> None:
+    path = tmp_path / "soul.sqlite3"
+    store = EventStore(path)
+    store.close()
+    raw = sqlite3.connect(path)
+    # Hand-craft the ledger/object disagreement: v4 recorded, column gone.
+    raw.execute(
+        "CREATE TABLE unresolved_refs_new ("
+        "    ref_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "    source_node_id TEXT NOT NULL,"
+        "    target_name TEXT NOT NULL,"
+        "    name_tail TEXT NOT NULL DEFAULT '',"
+        "    kind TEXT NOT NULL,"
+        "    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'resolved', 'failed')),"
+        "    first_seen TEXT NOT NULL,"
+        "    attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0)"
+        ")"
+    )
+    raw.execute(
+        "INSERT INTO unresolved_refs_new "
+        "(ref_id, source_node_id, target_name, name_tail, kind, status, first_seen, attempts) "
+        "SELECT ref_id, source_node_id, target_name, name_tail, kind, status, first_seen, attempts "
+        "FROM unresolved_refs"
+    )
+    raw.execute("DROP TABLE unresolved_refs")
+    raw.execute("ALTER TABLE unresolved_refs_new RENAME TO unresolved_refs")
+    raw.commit()
+    raw.close()
+    with pytest.raises(SchemaStateError):
+        EventStore(path)
+
+
+# -------------------------------------------------- failure_reason semantics
+
+
+def test_failed_attempt_persists_the_reason(store: EventStore) -> None:
+    ref_id = store.insert_unresolved_ref(
+        source_node_id="function:a", target_name="pkg.missing", kind="calls", first_seen=SEEN
+    )
+    failed = store.record_resolution_attempt(ref_id, outcome="failed", reason="ambiguous_exact:2")
+    assert failed.failure_reason == "ambiguous_exact:2"
+    again = store.unresolved_ref(ref_id)
+    assert again is not None and again.failure_reason == "ambiguous_exact:2"
+    # Post-hoc audit reads the reason straight from the table.
+    with store.read() as conn:
+        raw = conn.execute("SELECT failure_reason FROM unresolved_refs WHERE ref_id = ?", (ref_id,)).fetchone()
+    assert raw is not None and raw["failure_reason"] == "ambiguous_exact:2"
+
+
+def test_a_fresh_ref_has_no_failure_reason(store: EventStore) -> None:
+    ref_id = store.insert_unresolved_ref(
+        source_node_id="function:a", target_name="pkg.m", kind="calls", first_seen=SEEN
+    )
+    ref = store.unresolved_ref(ref_id)
+    assert ref is not None and ref.failure_reason is None
+
+
+def test_resolved_attempt_clears_the_reason_and_rejects_one(store: EventStore) -> None:
+    ref_id = store.insert_unresolved_ref(
+        source_node_id="function:a", target_name="pkg.m", kind="calls", first_seen=SEEN
+    )
+    store.record_resolution_attempt(ref_id, outcome="failed", reason="no_resolution")
+    store.retry_failed_ref(ref_id)
+    resolved = store.record_resolution_attempt(ref_id, outcome="resolved")
+    assert resolved.failure_reason is None
+    ref_id2 = store.insert_unresolved_ref(
+        source_node_id="function:a", target_name="pkg.n", kind="calls", first_seen=SEEN
+    )
+    with pytest.raises(UnresolvedRefError):
+        store.record_resolution_attempt(ref_id2, outcome="resolved", reason="no_resolution")
+
+
+def test_reason_must_be_a_non_empty_string(store: EventStore) -> None:
+    ref_id = store.insert_unresolved_ref(
+        source_node_id="function:a", target_name="pkg.m", kind="calls", first_seen=SEEN
+    )
+    with pytest.raises(UnresolvedRefError):
+        store.record_resolution_attempt(ref_id, outcome="failed", reason="")
+    with pytest.raises(UnresolvedRefError):
+        store.record_resolution_attempt(ref_id, outcome="failed", reason=7)  # type: ignore[arg-type]
+
+
+def test_retry_failed_ref_preserves_the_last_reason(store: EventStore) -> None:
+    ref_id = store.insert_unresolved_ref(
+        source_node_id="function:a", target_name="pkg.m", kind="calls", first_seen=SEEN
+    )
+    store.record_resolution_attempt(ref_id, outcome="failed", reason="no_resolution")
+    retried = store.retry_failed_ref(ref_id)
+    # The last failure stays auditable while the ref is pending again.
+    assert retried.status == "pending" and retried.failure_reason == "no_resolution"
+
+
+def test_failed_refs_carry_reasons_through_the_tail_query(store: EventStore) -> None:
+    ref_id = store.insert_unresolved_ref(
+        source_node_id="function:a", target_name="pkg.m", kind="calls", first_seen=SEEN
+    )
+    store.record_resolution_attempt(ref_id, outcome="failed", reason="external_module")
+    failed = store.failed_unresolved_refs(name_tail="m")
+    assert [r.ref_id for r in failed] == [ref_id]
+    assert failed[0].failure_reason == "external_module"

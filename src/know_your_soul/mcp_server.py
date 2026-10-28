@@ -1,4 +1,4 @@
-"""The deterministic MCP adapter: fourteen knowledge operations, tools+resources only.
+"""The deterministic MCP adapter: the frozen fourteen knowledge operations plus the two contract-v3 ingestion verbs.
 
 Task 8 of ``docs/superpowers/plans/2026-10-24-superpower-knowledge-soul.md``;
 the binding adaptation contract is ``docs/research/hermes-mcp-contract.md``
@@ -7,13 +7,17 @@ section 3.1 and the deep-research adaptations X1/X2/X6/X8
 ten v1 operations plus the contract-v2 G1 retrieval verbs
 (``knowledge_path`` / ``knowledge_explain`` / ``knowledge_affected`` /
 ``knowledge_god_nodes``) — operator ruling 2026-10-26 (progress.md), addendum
-``docs/contracts/retrieval-verbs-v2.md``.
+``docs/contracts/retrieval-verbs-v2.md`` — plus the contract-v3 ingestion
+verbs ``knowledge_ingest_file`` / ``knowledge_ingest_directory`` (addendum
+``docs/contracts/ingestion-contract-v3.md``; audit-final-v020 F2).
 
 Hard rules enforced here:
 
 * One startup allowlisted graph root. No tool schema carries ``project_path``
-  (or any path), so a caller can never select a graph — the Graphify F1
-  arbitrary-root/symlink disclosure shape is structurally absent.
+  and only the two contract-v3 ingestion schemas carry a path-like property
+  (``path``, resolved against the fixed root) — the confined amendment the v3
+  addendum records; every other verb keeps the v2 no-path rule, so the
+  Graphify F1 arbitrary-root/symlink disclosure shape stays absent.
 * Strict validation before dispatch: unknown properties, missing required
   keys, wrong types (including string booleans and numeric strings), enums,
   ``depth`` in ``[1,6]`` and ``token_budget`` in ``[128, max]`` are rejected
@@ -67,8 +71,14 @@ from know_your_soul.domain import (
     storage_payload,
 )
 from know_your_soul.events import Invocation, InvocationOutcome
-from know_your_soul.http_api import DEFAULT_HOST_ALLOWLIST, BoundaryDenialRecorder, BoundaryMiddleware
+from know_your_soul.http_api import (
+    DEFAULT_HOST_ALLOWLIST,
+    BoundaryDenialRecorder,
+    BoundaryMiddleware,
+    run_ingest_verb,
+)
 from know_your_soul.improvement import ApprovalRecord, DiffOperation
+from know_your_soul.ingest.pipeline import ExtractorUnavailableError, IngestionError
 from know_your_soul.projection import GraphProjector, ProjectionError
 from know_your_soul.security import (
     DEFAULT_MAX_PAYLOAD_BYTES,
@@ -112,6 +122,13 @@ _TOOL_TO_OPERATION: dict[str, str] = {
     "knowledge_explain": "knowledge.explain",
     "knowledge_affected": "knowledge.affected",
     "knowledge_god_nodes": "knowledge.god_nodes",
+    # Contract v3 (addendum docs/contracts/ingestion-contract-v3.md; audit F2):
+    # the two ingestion verbs. They are the confined amendment of the v2
+    # no-path-like-property rule — exactly one ``path`` property each — and
+    # they run the existing IngestionPipeline against the startup-fixed
+    # graph root, never the KnowledgeService fourteen.
+    "knowledge_ingest_file": "knowledge.ingest_file",
+    "knowledge_ingest_directory": "knowledge.ingest_directory",
 }
 EXPECTED_TOOLS: tuple[str, ...] = tuple(sorted(_TOOL_TO_OPERATION))
 
@@ -139,12 +156,21 @@ _RESOURCE_URIS = (
 
 
 class ToolError(RuntimeError):
-    """A fail-closed tool failure surfaced as an ``isError: true`` result."""
+    """A fail-closed tool failure surfaced as an ``isError: true`` result.
 
-    def __init__(self, code: str, message: str, *, audit_event_id: str | None = None) -> None:
+    ``already_journaled`` marks failures whose invocation audit event was
+    written downstream (the ingestion pipeline journals its own
+    ``knowledge.ingest_*`` event): the adapter must never journal a second
+    event for one invocation (spec 7.7).
+    """
+
+    def __init__(
+        self, code: str, message: str, *, audit_event_id: str | None = None, already_journaled: bool = False
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.audit_event_id = audit_event_id
+        self.already_journaled = already_journaled
 
 
 # --------------------------------------------------------------------- schemas
@@ -324,6 +350,33 @@ def _tool_schemas(max_token_budget: int) -> dict[str, dict[str, Any]]:
                 "token_budget": budget,
             },
         },
+        # Contract v3 ingestion verbs (addendum ingestion-contract-v3.md):
+        # closed schemas, the same ranges as the service, and exactly one
+        # path-like property (``path``) each — the confined amendment of the
+        # v2 no-path rule. ``token_budget`` range failures surface as
+        # INVALID_ARGUMENTS here (the MCP surface guides callers with schema
+        # bounds; the HTTP/CLI surfaces raise the frozen BUDGET_TOO_SMALL /
+        # BUDGET_EXCEEDS_MAX — the documented D5 adapter difference).
+        "knowledge_ingest_file": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["path"],
+            "properties": {
+                "path": {"type": "string", "minLength": 1, "maxLength": 4096},
+                "token_budget": budget,
+            },
+        },
+        "knowledge_ingest_directory": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["path"],
+            "properties": {
+                "path": {"type": "string", "minLength": 1, "maxLength": 4096},
+                "recursive": {"type": "boolean"},
+                "max_files": {"type": "integer", "minimum": 1, "maximum": 65536},
+                "token_budget": budget,
+            },
+        },
     }
 
 
@@ -342,6 +395,14 @@ _DESCRIPTIONS: dict[str, str] = {
     "knowledge_explain": "Explain one node's typed relational neighborhood (in/out links, per-relation counts).",
     "knowledge_affected": "List the nodes that depend on this one (bounded reverse walk, typed).",
     "knowledge_god_nodes": "List the top hub nodes by measured graph degree (deterministic, bounded).",
+    "knowledge_ingest_file": (
+        "Ingest one file under the fixed ingestion root into a deterministic, proposal-only extraction "
+        "(contract v3; one audit event; never guesses references)."
+    ),
+    "knowledge_ingest_directory": (
+        "Walk a directory under the fixed ingestion root and propose an extraction for every ingestible file "
+        "(contract v3; bytewise order; per-file failures never abort the walk)."
+    ),
 }
 
 
@@ -430,7 +491,7 @@ def _validate_arguments(tool: str, schema: Mapping[str, Any], arguments: Any) ->
         raise ToolError(
             "INVALID_ARGUMENTS",
             f"tool {tool}: unknown properties rejected: {', '.join(unknown)}"
-            " (the graph root is fixed at startup; no path may be supplied)",
+            " (the graph root is fixed at startup; only the contract-v3 ingestion tools take a 'path')",
         )
     missing = [key for key in schema.get("required", []) if key not in arguments]
     if missing:
@@ -487,6 +548,7 @@ class _Adapter:
         self._root = graph_root
         self._audit = audit_log
         self._actor = actor
+        self._max_token_budget = max_token_budget
         self._schemas = _tool_schemas(max_token_budget)
         self._resource_max_bytes = resource_max_bytes
 
@@ -548,7 +610,7 @@ class _Adapter:
             payload = self._dispatch(name, validated)
         except ToolError as error:
             audit_event_id = error.audit_event_id
-            if audit_event_id is None:
+            if audit_event_id is None and not error.already_journaled:
                 audit_event_id = self._audit_rejection(operation, arguments, error.code, started)
             return self._error_result(error.code, str(error), audit_event_id)
         except KnowledgeError as error:
@@ -763,6 +825,39 @@ class _Adapter:
             token_budget=args.get("token_budget", 1024),
             actor=self._actor,
         ).canonical_payload()
+
+    # Contract-v3 ingestion verbs (addendum ingestion-contract-v3.md; audit
+    # F2): the same shared adapter helper as HTTP/CLI over the existing
+    # pipeline. The ingestion root is the startup-fixed graph root.
+
+    def _run_ingest_verb(self, verb: str, args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return run_ingest_verb(
+                self._service._store,  # noqa: SLF001 - same-package wiring
+                self._audit,
+                verb,
+                args,
+                actor=self._actor,
+                ingestion_root=self._root,
+                max_token_budget=self._max_token_budget,
+            )
+        except (IngestionError, ExtractorUnavailableError) as error:
+            # The pipeline journaled the invocation's single audit event
+            # itself (adapter-side path rejections carry the attached id);
+            # converting to ToolError must never journal a second event.
+            audit_event_id = getattr(error, "audit_event_id", None)
+            raise ToolError(
+                error.code,
+                str(error),
+                audit_event_id=audit_event_id,
+                already_journaled=audit_event_id is None,
+            ) from None
+
+    def _op_ingest_file(self, args: dict[str, Any]) -> dict[str, Any]:
+        return self._run_ingest_verb("ingest_file", args)
+
+    def _op_ingest_directory(self, args: dict[str, Any]) -> dict[str, Any]:
+        return self._run_ingest_verb("ingest_directory", args)
 
     # --------------------------------------------------------------- resources
 

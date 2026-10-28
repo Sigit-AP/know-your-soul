@@ -42,7 +42,9 @@ from know_your_soul.store import EventStore
 
 # The MCP tool surface (contract v2 — operator ruling 2026-10-26, progress.md;
 # addendum docs/contracts/retrieval-verbs-v2.md): the frozen ten v1 tools plus
-# the four G1 retrieval verbs.
+# the four G1 retrieval verbs; contract v3 (addendum
+# docs/contracts/ingestion-contract-v3.md, audit F2) adds the two ingestion
+# verbs.
 EXPECTED_TOOLS = tuple(
     sorted(
         (
@@ -60,6 +62,8 @@ EXPECTED_TOOLS = tuple(
             "knowledge_explain",
             "knowledge_affected",
             "knowledge_god_nodes",
+            "knowledge_ingest_file",
+            "knowledge_ingest_directory",
         )
     )
 )
@@ -194,8 +198,8 @@ def _error_payload(result: types.CallToolResult) -> dict[str, Any]:
 # ------------------------------------------------------------- discovery
 
 
-def test_exactly_fourteen_tools_with_strict_schemas(tmp_path: Path) -> None:
-    """The v1 pin was ten tools; contract v2 (operator ruling 2026-10-26) adds four."""
+def test_sixteen_tools_with_strict_schemas(tmp_path: Path) -> None:
+    """The v1 pin was ten tools; contract v2 adds four; contract v3 (audit F2) adds two."""
     _, _, server = _server(tmp_path)
 
     async def scenario() -> None:
@@ -203,7 +207,7 @@ def test_exactly_fourteen_tools_with_strict_schemas(tmp_path: Path) -> None:
             listed = await session.list_tools()
             names = tuple(sorted(tool.name for tool in listed.tools))
             assert names == EXPECTED_TOOLS
-            assert len(listed.tools) == 14
+            assert len(listed.tools) == 16
             for tool in listed.tools:
                 schema = tool.input_schema
                 assert schema.get("type") == "object", tool.name

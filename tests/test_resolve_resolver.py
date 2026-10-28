@@ -830,3 +830,60 @@ class TestModuleEntry:
             add_ref(store, "ghost", "calls")
         report = resolve_pending(store, config=ResolverConfig(batch_limit=2))
         assert report.processed == 2
+
+
+# ------------------------------------- persisted failure reasons (F4, v4)
+
+
+class TestPersistedFailureReasons:
+    """F4 (audit-final-v020): the BatchReport failure vocabulary is persisted.
+
+    ``record_resolution_attempt`` stores the deterministic reason on the
+    ``unresolved_refs`` row (schema v4) and the resolver builds each
+    ``RefOutcome.reason`` from the persisted row — the report is a read of
+    the store, not of the in-memory decision.
+    """
+
+    def test_failed_reason_is_persisted_and_the_report_reads_it_back(self, store: EventStore) -> None:
+        base_source(store)
+        ref_id = add_ref(store, "ghost", "calls")
+        report = resolve(store)
+        outcome = outcome_of(report, ref_id)
+        assert outcome.status == "failed" and outcome.reason == "no_resolution"
+        row = store.unresolved_ref(ref_id)
+        assert row is not None and row.failure_reason == "no_resolution"
+        # The report reason equals the persisted reason (read from the store).
+        assert outcome.reason == row.failure_reason
+
+    def test_ambiguity_reason_is_persisted(self, store: EventStore) -> None:
+        base_source(store)
+        for index in range(2):
+            add_symbol(store, f"function:t{index}", "helper", f"pkg/f{index}.py")
+        ref_id = add_ref(store, "helper", "calls")
+        outcome = outcome_of(resolve(store), ref_id)
+        assert outcome.reason == "ambiguous_exact:2"
+        row = store.unresolved_ref(ref_id)
+        assert row is not None and row.failure_reason == "ambiguous_exact:2"
+
+    def test_resolved_refs_persist_no_reason(self, store: EventStore) -> None:
+        base_source(store)
+        add_symbol(store, "function:tgt", "helper", "pkg/other.py")
+        ref_id = add_ref(store, "helper", "calls")
+        outcome = outcome_of(resolve(store), ref_id)
+        assert outcome.status == "resolved" and outcome.reason is None
+        row = store.unresolved_ref(ref_id)
+        assert row is not None and row.status == "resolved" and row.failure_reason is None
+
+    def test_resurrected_ref_keeps_its_last_reason_until_re_resolved(self, store: EventStore) -> None:
+        base_source(store)
+        ref_id = add_ref(store, "ghost", "calls")
+        resolve(store)
+        ReferenceResolver().resurrect_failed(store)
+        row = store.unresolved_ref(ref_id)
+        assert row is not None and row.status == "pending" and row.failure_reason == "no_resolution"
+        # When the retry resolves, the terminal row carries no reason.
+        add_symbol(store, "function:tgt", "ghost", "pkg/other.py")
+        outcome = outcome_of(resolve(store), ref_id)
+        assert outcome.status == "resolved" and outcome.reason is None
+        row = store.unresolved_ref(ref_id)
+        assert row is not None and row.failure_reason is None

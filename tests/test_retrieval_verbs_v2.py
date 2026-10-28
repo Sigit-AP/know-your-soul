@@ -442,7 +442,7 @@ def test_mcp_exposes_all_four_verbs_with_strict_schemas(tmp_path: Path) -> None:
     _, _, service = _verb_seeded(tmp_path)
     for tool in ("knowledge_path", "knowledge_explain", "knowledge_affected", "knowledge_god_nodes"):
         assert tool in EXPECTED_TOOLS
-    assert len(EXPECTED_TOOLS) == 14
+    assert len(EXPECTED_TOOLS) == 16  # 14 frozen + 2 contract-v3 ingestion verbs (audit F2)
     server = build_server(service, graph_root=tmp_path / "out")
 
     async def scenario() -> None:

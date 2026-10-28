@@ -1,7 +1,10 @@
 //! Rust-side sanity tests: every registry language parses its fixture,
 //! extraction is deterministic across runs, and ids follow the frozen format.
 
-use know_your_soul_kernel::walker::{extract_file, extract_source, make_node_id};
+use know_your_soul_kernel::walker::{
+    extract_file, extract_source, make_node_id, sort_edges_canonical, sort_nodes_canonical,
+    sort_refs_canonical,
+};
 use know_your_soul_kernel::registry;
 
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/fixtures/ingest");
@@ -29,7 +32,46 @@ fn all_fixtures_extract_deterministically() {
         assert_eq!(first.canonical_json(), second.canonical_json(), "{language} not deterministic");
         assert_eq!(first.language, language);
         assert!(first.nodes.len() > 1, "{language}: expected declarations beyond the file node");
-        assert_eq!(first.nodes[0].node_id, format!("file:{relative}"));
+        let file_id = format!("file:{relative}");
+        assert!(
+            first.nodes.iter().any(|node| node.node_id == file_id),
+            "{language}: file node missing"
+        );
+        // F1 emission-order contract: raw collections are canonically sorted.
+        let mut nodes = first.nodes.clone();
+        sort_nodes_canonical(&mut nodes);
+        assert_eq!(
+            nodes.iter().map(|n| &n.node_id).collect::<Vec<_>>(),
+            first.nodes.iter().map(|n| &n.node_id).collect::<Vec<_>>(),
+            "{language}: raw nodes not in canonical order"
+        );
+        let mut edges = first.edges.clone();
+        sort_edges_canonical(&mut edges);
+        assert_eq!(
+            edges
+                .iter()
+                .map(|e| (&e.source, &e.target, &e.kind))
+                .collect::<Vec<_>>(),
+            first
+                .edges
+                .iter()
+                .map(|e| (&e.source, &e.target, &e.kind))
+                .collect::<Vec<_>>(),
+            "{language}: raw edges not in canonical order"
+        );
+        let mut refs = first.unresolved_refs.clone();
+        sort_refs_canonical(&mut refs);
+        assert_eq!(
+            refs.iter()
+                .map(|r| (&r.source_node_id, &r.target_name, &r.kind, r.line, r.col))
+                .collect::<Vec<_>>(),
+            first
+                .unresolved_refs
+                .iter()
+                .map(|r| (&r.source_node_id, &r.target_name, &r.kind, r.line, r.col))
+                .collect::<Vec<_>>(),
+            "{language}: raw refs not in canonical order"
+        );
     }
 }
 

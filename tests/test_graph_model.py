@@ -47,9 +47,11 @@ from know_your_soul.graph_model import (
     GraphEdge,
     GraphModelError,
     GraphNode,
+    InvalidBridgeEndpointError,
     MultipleParentsError,
     NodeIdError,
     NodeKindError,
+    PrimaryContainmentError,
     PrimaryError,
     ReviewPolicy,
     SplitThresholds,
@@ -860,6 +862,75 @@ class TestBridges:
     def test_primaries_sorted(self) -> None:
         g, a, b = _two_primaries()
         assert list(g.primaries()) == sorted([a.node_id, b.node_id])
+
+
+# ------------------------------------------------- primary containment (F3)
+
+
+class TestPrimaryContainmentInvariant:
+    """F3 (audit-final-v020): a primary is never contained by another primary.
+
+    Contract v3 (``docs/contracts/ingestion-contract-v3.md``, "Primary node
+    rules"): cross-primary structure rides ``bridges`` exclusively. The
+    invariant is enforced eagerly at ``add_edge`` and re-proven by
+    ``validate()``; the bridge endpoint failure is typed
+    ``INVALID_BRIDGE_ENDPOINT``.
+    """
+
+    def test_primary_contained_by_primary_is_rejected(self) -> None:
+        g, a, b = _two_primaries()
+        with pytest.raises(PrimaryContainmentError):
+            g.add_edge(_contains(a.node_id, b.node_id))
+        assert g.edge_count == 0  # nothing was inserted
+
+    def test_rejection_is_typed_primary_contained_by_primary(self) -> None:
+        g, a, b = _two_primaries()
+        with pytest.raises(PrimaryContainmentError) as caught:
+            g.add_edge(_contains(b.node_id, a.node_id))  # reversed: still primary -> primary
+        assert caught.value.code == "PRIMARY_CONTAINED_BY_PRIMARY"
+        assert a.node_id in str(caught.value) and b.node_id in str(caught.value)
+
+    def test_validate_reproves_the_invariant(self) -> None:
+        # Eager enforcement makes an invalid graph unreachable through the
+        # public API; validate() still re-checks (defense in depth), proven by
+        # injecting the edge past the check.
+        g, a, b = _two_primaries()
+        edge = _contains(a.node_id, b.node_id)
+        g._edges[(edge.source, edge.target, edge.kind, -1, -1)] = edge  # noqa: SLF001
+        with pytest.raises(PrimaryContainmentError):
+            g.validate()
+
+    def test_primary_containing_non_primary_is_allowed(self) -> None:
+        g, a, _ = _two_primaries()
+        leaf = _leaf("child-lesson")
+        g.add_node(leaf)
+        g.add_edge(_contains(a.node_id, leaf.node_id))
+        assert g.contains_parent(leaf.node_id) == a.node_id
+        g.validate()
+
+    def test_non_primary_containing_primary_is_allowed(self) -> None:
+        # Only the primary -> primary direction is forbidden; a decomposition
+        # root may sit under a file/document root.
+        g, a, _ = _two_primaries()
+        f = _file("src/root.py")
+        g.add_node(f)
+        g.add_edge(_contains(f.node_id, a.node_id))
+        assert g.contains_parent(a.node_id) == f.node_id
+        g.validate()
+
+    def test_bridge_endpoints_failure_is_typed_invalid_bridge_endpoint(self) -> None:
+        g, a, _ = _two_primaries()
+        leaf = _leaf("plain")
+        g.add_node(leaf)
+        with pytest.raises(InvalidBridgeEndpointError) as caught:
+            g.add_bridge(a.node_id, leaf.node_id, weight=Decimal("0.5"), reason="r")
+        assert caught.value.code == "INVALID_BRIDGE_ENDPOINT"
+
+    def test_bridge_self_loop_stays_bridge_error_without_endpoint_code(self) -> None:
+        g, a, _ = _two_primaries()
+        with pytest.raises(BridgeError) as caught:
+            g.add_bridge(a.node_id, a.node_id, weight=Decimal("0.5"), reason="r")
+        assert not isinstance(caught.value, InvalidBridgeEndpointError)
 
 
 # ------------------------------------------------------------ split proposals

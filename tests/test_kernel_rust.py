@@ -5,6 +5,15 @@ produce canonical JSON artifacts that are **byte-identical** to the reference
 Python walker for every phase-1 fixture, and stable ids must match
 :func:`know_your_soul.graph_model.make_node_id` exactly.
 
+F1 (audit-final-v020, fixed W6/SUB-97): the Python side of every parity check
+below is the **pure-Python walker invoked directly**
+(``TreeSitterExtractor(get_spec(...)).extract(...)``) — never ``extract_file``
+/``extract_source``, which route through the kernel when it is available and
+would compare the kernel against itself. Parity is asserted on the **raw**
+``ExtractionResult`` (dataclass equality, emission order included): both
+engines emit nodes/edges/refs in the canonical sort order by contract, so raw
+equality is required, not just canonical-JSON equality.
+
 Tests that need the built kernel skip with a clear reason when it is absent
 (CI wiring lands in a later wave); set ``KYS_REQUIRE_RUST_KERNEL=1`` to make an
 absent kernel a hard failure instead of a skip.
@@ -12,6 +21,7 @@ absent kernel a hard failure instead of a skip.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -24,8 +34,8 @@ from hypothesis import strategies as st
 from know_your_soul.domain import canonical_json
 from know_your_soul.graph_model import make_node_id
 from know_your_soul.ingest import kernel_bridge
-from know_your_soul.ingest.extractor import extract_file
-from know_your_soul.ingest.languages import supported_languages
+from know_your_soul.ingest.extractor import TreeSitterExtractor
+from know_your_soul.ingest.languages import get_spec, supported_languages
 
 FIXTURES = Path(__file__).parent / "fixtures" / "ingest"
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -59,13 +69,30 @@ def _fixture_rel(language: str) -> str:
     return f"{language}/{fixture.name}"
 
 
+def _python_walker_reference(relative: str):
+    """The pure-Python walker, invoked directly — NO kernel routing (F1).
+
+    ``extract_file``/``extract_source`` route to the Rust kernel when it is
+    available, which made the pre-F1 parity tests compare the kernel against
+    itself. This helper is the honest reference side.
+    """
+    source = (FIXTURES / relative).read_text(encoding="utf-8")
+    return TreeSitterExtractor(get_spec(relative.split("/", 1)[0])).extract(relative, source)
+
+
 @pytest.mark.parametrize("language", ALL_LANGUAGES)
 def test_bridge_matches_python_byte_identical(language: str) -> None:
+    """Raw ``ExtractionResult`` from the kernel equals the Python walker's.
+
+    F1 fix: the Python side is the direct walker (see ``_python_walker_reference``),
+    and equality is asserted on the raw dataclass — emission order included,
+    not just the canonical form. Both engines emit in canonical sort order.
+    """
     _kernel_required()
     relative = _fixture_rel(language)
-    python_result = extract_file(FIXTURES / relative, display_path=relative)
+    python_result = _python_walker_reference(relative)
     rust_result = kernel_bridge.extract_file_via_kernel(FIXTURES / relative, display_path=relative)
-    assert rust_result == python_result, "ExtractionResult mismatch"
+    assert rust_result == python_result, "raw ExtractionResult mismatch (order or content)"
     assert rust_result.canonical_json() == python_result.canonical_json()
 
 
@@ -73,7 +100,7 @@ def test_bridge_matches_python_byte_identical(language: str) -> None:
 def test_cli_matches_python_byte_identical(language: str) -> None:
     cli = _kernel_cli()
     relative = _fixture_rel(language)
-    python_json = extract_file(FIXTURES / relative, display_path=relative).canonical_json()
+    python_json = _python_walker_reference(relative).canonical_json()
     proc = subprocess.run(
         [str(cli), str(FIXTURES / relative), "--display-path", relative],
         capture_output=True,
@@ -168,11 +195,22 @@ def test_make_node_id_property_matches_python(path: str, name: str, line: int, c
 @given(data=st.data())
 @settings(max_examples=30, deadline=None)
 def test_extract_source_property_python_parity(data: st.DataObject) -> None:
-    """Random small python-ish sources extract byte-identically in both engines."""
+    """Random small python sources extract identically (raw) in both engines.
+
+    Identifiers exclude Python keywords: a keyword used as a declaration name
+    (e.g. ``def else():``) is a syntax error, and tree-sitter *error recovery*
+    differs between the two engines' parser cores — a documented residual
+    (docs/recovery/w6-f1-parity.md), not part of the valid-source parity
+    contract this test gates.
+    """
+    import keyword
+
     _kernel_required()
     identifiers = data.draw(
         st.lists(
-            st.text(alphabet="abcdefghijklmnopqrstuvwxyz_", min_size=1, max_size=12),
+            st.text(alphabet="abcdefghijklmnopqrstuvwxyz_", min_size=1, max_size=12).filter(
+                lambda name: not keyword.iskeyword(name)
+            ),
             min_size=1,
             max_size=6,
             unique=True,
@@ -184,10 +222,9 @@ def test_extract_source_property_python_parity(data: st.DataObject) -> None:
         lines.append(f"def {name}():")
         lines.append(f"    {body}")
     source = "\n".join(lines) + "\n"
-    from know_your_soul.ingest.extractor import extract_source
-
-    python_result = extract_source("prop/sample.py", source, language="python")
+    python_result = TreeSitterExtractor(get_spec("python")).extract("prop/sample.py", source)
     rust_result = kernel_bridge.extract_source_via_kernel("prop/sample.py", source, language="python")
+    assert rust_result == python_result, "raw ExtractionResult mismatch (order or content)"
     assert rust_result.canonical_json() == python_result.canonical_json()
 
 
@@ -231,3 +268,38 @@ def test_detect_generated_matches_python(path: str, source: str) -> None:
 
     kernel = kernel_bridge.kernel_module()
     assert kernel.detect_generated(path, source) == python_detect(path, source)
+
+
+def _ingest_fixtures_dump(tmp_path: Path, name: str) -> str:
+    """Ingest the full 12-language fixture tree into a fresh store; dump it."""
+    from know_your_soul.ingest.pipeline import IngestionPipeline, canonical_ingestion_dump
+    from know_your_soul.store import EventStore
+
+    with EventStore(str(tmp_path / name)) as store:
+        IngestionPipeline(store).ingest_path(FIXTURES)
+        return canonical_ingestion_dump(store)
+
+
+def test_cross_engine_store_byte_identical(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """F1 gate: the persisted store is byte-identical across engines.
+
+    Ingest the same fixture tree from scratch twice — once routed through the
+    Rust kernel, once forced onto the pure-Python walker via the kill-switch —
+    and require the full canonical ingestion dump (rowids included) to be
+    byte-identical. Rowids/ref_ids are pure functions of emission order, and
+    both engines emit in the canonical sort order by contract.
+    """
+    _kernel_required()
+    with_kernel = _ingest_fixtures_dump(tmp_path, "with_kernel.sqlite3")
+
+    monkeypatch.setenv(kernel_bridge.KILL_SWITCH_ENV, "1")
+    kernel_bridge.reset_probe()
+    assert not kernel_bridge.kernel_available()
+    without_kernel = _ingest_fixtures_dump(tmp_path, "without_kernel.sqlite3")
+    kernel_bridge.reset_probe()
+
+    assert with_kernel == without_kernel, (
+        "cross-engine store divergence: "
+        f"with-kernel sha256={hashlib.sha256(with_kernel.encode()).hexdigest()[:16]} "
+        f"vs no-kernel sha256={hashlib.sha256(without_kernel.encode()).hexdigest()[:16]}"
+    )

@@ -55,7 +55,7 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn
 
 import uvicorn
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -68,17 +68,32 @@ from starlette.routing import Route
 from know_your_soul.audit import AuditLog
 from know_your_soul.backup import BackupError, backup_store, restore_store
 from know_your_soul.contracts import (
+    DEFAULT_MAX_TOKEN_BUDGET,
+    MINIMUM_TOKEN_BUDGET,
     ApplyImprovementRequest,
+    BudgetExceedsMax,
+    BudgetTooSmall,
     EvaluateRequest,
     KnowledgeError,
+    MetadataExceedsBudget,
     ProposeImprovementRequest,
     QueryRequest,
     ReviewRequest,
     RollbackRequest,
     TraversalMode,
+    estimated_tokens_of_payload,
 )
 from know_your_soul.domain import Evidence, Node, RelationKind, canonical_json, new_id
 from know_your_soul.events import Invocation, InvocationOutcome
+from know_your_soul.ingest.pipeline import (
+    ExtractorUnavailableError,
+    IngestionBudget,
+    IngestionError,
+    IngestionPipeline,
+    PathNotFoundError,
+    PathNotReadableError,
+    PathOutsideRootError,
+)
 from know_your_soul.observability import HealthReport, check_readiness
 from know_your_soul.projection import GraphProjector, ProjectionError
 from know_your_soul.relearn import RelearnApproval, RelearnOffer
@@ -104,6 +119,7 @@ from know_your_soul.update_pipeline import SourceWatchLoop, UpdatePipelineError
 __all__ = [
     "API_VERSION",
     "DEFAULT_HOST_ALLOWLIST",
+    "INGEST_VERBS",
     "KNOWLEDGE_OPERATIONS",
     "OPS_OPERATIONS",
     "AdapterValidationError",
@@ -116,6 +132,7 @@ __all__ = [
     "dispatch",
     "dispatch_text",
     "error_envelope",
+    "run_ingest_verb",
     "serve",
     "status_for_error",
     "to_jsonable",
@@ -578,6 +595,304 @@ _OPERATIONS: dict[str, _OpSpec] = {
     "relearn_preview": _OpSpec(_model_parse(_RelearnPreviewPayload), _call_relearn_preview),
     "relearn_apply": _OpSpec(_model_parse(_RelearnApplyPayload), _call_relearn_apply),
 }
+
+
+# ------------------------------------------------- contract-v3 ingestion verbs
+#
+# The frozen adapter mapping of ``docs/contracts/ingestion-contract-v3.md``
+# (audit-final-v020 F2): ``ingest_file`` / ``ingest_directory`` are exposed on
+# all three surfaces (CLI ``ingest-file``/``ingest-directory``, HTTP
+# ``POST /v1/knowledge/ingest/file|directory``, MCP
+# ``knowledge_ingest_file``/``knowledge_ingest_directory``) and every surface
+# runs the same :class:`IngestionPipeline` — the adapter layer adds only the
+# contract input validation, the path discipline against the startup-fixed
+# ingestion root, and the output budget shaping. The fourteen frozen
+# operations are untouched: the ingestion verbs never join
+# ``KNOWLEDGE_OPERATIONS``/``OPS_OPERATIONS``/``_OPERATIONS``.
+#
+# Audit discipline: the pipeline journals exactly one final audit event per
+# invocation (``knowledge.ingest_file`` / ``knowledge.ingest_directory``) for
+# every invocation it runs, successes and typed failures alike. Input the
+# adapter rejects *before* the pipeline runs (closed-key/type/range failures,
+# budget bounds, path discipline) is journaled by the adapter itself — one
+# failure event under the same operation name, at parity with the other
+# adapters (spec 7.7). A response that exceeds ``token_budget`` fails typed
+# with ``METADATA_EXCEEDS_BUDGET`` carrying the pipeline's audit id, so the
+# one-event rule holds there too.
+
+INGEST_VERBS: tuple[str, ...] = ("ingest_file", "ingest_directory")
+
+_INGEST_ALLOWED_KEYS: dict[str, frozenset[str]] = {
+    "ingest_file": frozenset({"path", "token_budget"}),
+    "ingest_directory": frozenset({"path", "recursive", "max_files", "token_budget"}),
+}
+
+# HTTP statuses for the pipeline's typed failure codes (the contract fixes
+# the codes; statuses follow the existing envelope conventions).
+_INGEST_STATUS_BY_CODE: dict[str, int] = {
+    "PATH_OUTSIDE_ROOT": 400,
+    "PATH_NOT_FOUND": 404,
+    "PATH_NOT_READABLE": 400,
+    "UNSUPPORTED_MEDIA_TYPE": 415,
+    "FILE_TOO_LARGE": 413,
+    "INGESTION_BUDGET_EXCEEDED": 400,
+    "EXTRACTOR_UNAVAILABLE": 501,
+    "RESOLVER_UNAVAILABLE": 501,
+}
+
+
+def _journal_ingest_rejection(audit: AuditLog, verb: str, arguments: Any, code: str, actor: str, started: float) -> str:
+    """Exactly one failure audit event for an adapter-rejected ingest call."""
+    try:
+        canonical = canonical_json(arguments) if isinstance(arguments, (dict, list)) else "null"
+    except TypeError, ValueError:  # pragma: no cover - defensive
+        canonical = "null"
+    invocation = Invocation.create(
+        f"knowledge.{verb}",
+        request_hash=hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+        actor=actor,
+    )
+    audit.begin(invocation)
+    receipt = audit.complete(
+        invocation.invocation_id,
+        InvocationOutcome(
+            status="failure",
+            error=code,
+            duration_ms=int((time.monotonic() - started) * 1000),
+            correlation_id=invocation.invocation_id,
+        ),
+    )
+    return receipt.audit_event_id
+
+
+def _ingest_reject(
+    error: KnowledgeError, *, audit: AuditLog, verb: str, arguments: Any, actor: str, started: float
+) -> NoReturn:
+    """Journal the adapter rejection and raise *error* carrying the audit id."""
+    error.audit_event_id = _journal_ingest_rejection(audit, verb, arguments, error.code, actor, started)
+    raise error
+
+
+def _reject_ingest_pipeline_style(
+    error: IngestionError, *, audit: AuditLog, verb: str, arguments: Any, actor: str, started: float
+) -> NoReturn:
+    """Journal one adapter-side rejection for a contract path-discipline error.
+
+    ``IngestionError`` carries no ``audit_event_id`` attribute; the id is
+    attached here so the MCP/HTTP surfaces can surface it (and prove the
+    single-audit rule) without a second journal entry.
+    """
+    error.audit_event_id = _journal_ingest_rejection(audit, verb, arguments, error.code, actor, started)  # type: ignore[attr-defined]
+    raise error
+
+
+def run_ingest_verb(
+    store: EventStore,
+    audit: AuditLog,
+    verb: str,
+    arguments: Mapping[str, Any],
+    *,
+    actor: str,
+    ingestion_root: str | Path,
+    max_token_budget: int = DEFAULT_MAX_TOKEN_BUDGET,
+) -> dict[str, Any]:
+    """Run one contract-v3 ingestion verb through the existing pipeline.
+
+    *arguments* is the decoded payload (``path``, ``token_budget=1024``, and
+    for ``ingest_directory`` also ``recursive=true`` / ``max_files=1024``).
+    The ingestion root is fixed at startup by the calling surface (CLI: the
+    process working directory; HTTP: the stack's ops root; MCP: the startup
+    graph root). Raises the contract's typed errors — everything is journaled
+    exactly once, by the adapter (pre-pipeline rejections) or by the pipeline
+    itself (everything after).
+    """
+    started = time.monotonic()
+    if verb not in INGEST_VERBS:
+        raise ValueError(f"unknown ingestion verb {verb!r}")  # adapter-internal misuse, never wired
+    if not isinstance(arguments, Mapping):
+        _ingest_reject(
+            AdapterValidationError("payload must be a JSON object"),
+            audit=audit,
+            verb=verb,
+            arguments=arguments,
+            actor=actor,
+            started=started,
+        )
+    unknown = sorted(str(key) for key in arguments if key not in _INGEST_ALLOWED_KEYS[verb])
+    if unknown:
+        _ingest_reject(
+            AdapterValidationError(f"unknown properties rejected: {', '.join(unknown)}"),
+            audit=audit,
+            verb=verb,
+            arguments=arguments,
+            actor=actor,
+            started=started,
+        )
+    path = arguments.get("path")
+    if type(path) is not str or not path:
+        _ingest_reject(
+            AdapterValidationError("property 'path' is required and must be a non-empty string"),
+            audit=audit,
+            verb=verb,
+            arguments=arguments,
+            actor=actor,
+            started=started,
+        )
+    token_budget = arguments.get("token_budget", 1024)
+    if isinstance(token_budget, bool) or not isinstance(token_budget, int):
+        _ingest_reject(
+            AdapterValidationError("property 'token_budget' must be an integer"),
+            audit=audit,
+            verb=verb,
+            arguments=arguments,
+            actor=actor,
+            started=started,
+        )
+    # The frozen token-budget semantics (contract v3, shared guarantees).
+    if token_budget < MINIMUM_TOKEN_BUDGET:
+        _ingest_reject(
+            BudgetTooSmall(f"token_budget {token_budget} is below the {MINIMUM_TOKEN_BUDGET}-token minimum"),
+            audit=audit,
+            verb=verb,
+            arguments=arguments,
+            actor=actor,
+            started=started,
+        )
+    if token_budget > max_token_budget:
+        _ingest_reject(
+            BudgetExceedsMax(f"token_budget {token_budget} exceeds the configured maximum {max_token_budget}"),
+            audit=audit,
+            verb=verb,
+            arguments=arguments,
+            actor=actor,
+            started=started,
+        )
+    recursive = True
+    max_files = 1024
+    if verb == "ingest_directory":
+        recursive = arguments.get("recursive", True)
+        if type(recursive) is not bool:
+            _ingest_reject(
+                AdapterValidationError("property 'recursive' must be a boolean"),
+                audit=audit,
+                verb=verb,
+                arguments=arguments,
+                actor=actor,
+                started=started,
+            )
+        max_files = arguments.get("max_files", 1024)
+        if isinstance(max_files, bool) or not isinstance(max_files, int) or not 1 <= max_files <= 65536:
+            _ingest_reject(
+                AdapterValidationError("property 'max_files' must be an integer in [1, 65536]"),
+                audit=audit,
+                verb=verb,
+                arguments=arguments,
+                actor=actor,
+                started=started,
+            )
+    # Path discipline (contract v3): resolve against the startup-fixed
+    # ingestion root; escapes, missing paths and unreadable paths are typed.
+    try:
+        resolved = resolve_within_root(ingestion_root, path)
+    except PathEscapeError:
+        _reject_ingest_pipeline_style(
+            PathOutsideRootError(f"path {path!r} escapes the ingestion root"),
+            audit=audit,
+            verb=verb,
+            arguments=arguments,
+            actor=actor,
+            started=started,
+        )
+    if not resolved.exists():
+        _reject_ingest_pipeline_style(
+            PathNotFoundError(f"input path {path!r} does not exist"),
+            audit=audit,
+            verb=verb,
+            arguments=arguments,
+            actor=actor,
+            started=started,
+        )
+    if verb == "ingest_file" and not resolved.is_file():
+        _reject_ingest_pipeline_style(
+            PathNotFoundError(f"input path {path!r} is not a regular file"),
+            audit=audit,
+            verb=verb,
+            arguments=arguments,
+            actor=actor,
+            started=started,
+        )
+    if verb == "ingest_directory" and not resolved.is_dir():
+        _reject_ingest_pipeline_style(
+            PathNotFoundError(f"input path {path!r} is not a directory"),
+            audit=audit,
+            verb=verb,
+            arguments=arguments,
+            actor=actor,
+            started=started,
+        )
+    if not os.access(resolved, os.R_OK):
+        _reject_ingest_pipeline_style(
+            PathNotReadableError(f"input path {path!r} is not readable"),
+            audit=audit,
+            verb=verb,
+            arguments=arguments,
+            actor=actor,
+            started=started,
+        )
+    pipeline = IngestionPipeline(store, budget=IngestionBudget(max_files=max_files), actor=actor)
+    report = pipeline.ingest_path(resolved, incremental=True, recursive=recursive, resolve=True)
+    payload = report.to_dict()
+    # The contract's ``input.path`` is relative to the startup-fixed ingestion
+    # root; the pipeline reports against its own derived root (the parent of
+    # a file input). Re-anchor the envelope — never the per-file entries,
+    # which the contract defines relative to the walked directory.
+    root_path = Path(ingestion_root).resolve()
+    payload["root"] = str(root_path)
+    payload["input"] = {**payload["input"], "path": resolved.relative_to(root_path).as_posix()}
+    if verb == "ingest_file":
+        # The file proposal is atomic: it never truncates (contract v3).
+        if estimated_tokens_of_payload(payload) > token_budget:
+            raise MetadataExceedsBudget(
+                f"the ingest_file proposal exceeds the {token_budget}-token budget",
+                audit_event_id=report.audit_event_id,
+            )
+        return payload
+    # The directory payload truncates the ``files`` list tail-first under
+    # budget pressure; the envelope (input/stats/guards_hit) never truncates.
+    files = list(payload["files"])
+    truncated = False
+    while files and estimated_tokens_of_payload(payload) > token_budget:
+        files.pop()
+        truncated = True
+        payload = {**payload, "files": files}
+    if truncated:
+        payload["truncated"] = True
+    return payload
+
+
+def _ingest_error_envelope(error: IngestionError | ExtractorUnavailableError) -> dict[str, Any]:
+    """The standard envelope for the pipeline's typed failures."""
+    return {
+        "error": {
+            "code": error.code,
+            "message": redact_text(str(error))[:_MAX_ERROR_MESSAGE],
+            "retryable": False,
+            "audit_event_id": getattr(error, "audit_event_id", None),
+        }
+    }
+
+
+def _handle_ingest_sync(stack: LocalStack, verb: str, body: bytes, actor: str) -> dict[str, Any]:
+    """Decode, validate and run one ingestion verb (contract v3)."""
+    try:
+        payload: Any = json.loads(body.decode("utf-8")) if body.strip() else {}
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        audit_event_id = _journal_ingest_rejection(stack.audit, verb, {}, "VALIDATION_ERROR", actor, time.monotonic())
+        raise AdapterValidationError(
+            f"request body is not valid JSON: {error}", audit_event_id=audit_event_id
+        ) from error
+    ingestion_root = stack.ops_root if stack.ops_root is not None else Path(stack.store.db_path).resolve().parent
+    return run_ingest_verb(stack.store, stack.audit, verb, payload, actor=actor, ingestion_root=ingestion_root)
 
 
 def _validation_summary(error: ValidationError, *, max_errors: int = 3) -> str:
@@ -1173,8 +1488,19 @@ def create_app(
             return _json_response(error_envelope(UnknownOperation(f"unknown operation {operation!r}")), status=404)
         return await _handle(stack, operation, request, max_body_bytes)
 
+    # Contract v3 ingestion verbs (addendum ingestion-contract-v3.md; audit
+    # F2): two fixed routes, the same boundary middleware and JSON/CSRF
+    # discipline as every other POST route.
+    async def ingest_file(request: Request) -> Response:
+        return await _handle_ingest(stack, "ingest_file", request, max_body_bytes)
+
+    async def ingest_directory(request: Request) -> Response:
+        return await _handle_ingest(stack, "ingest_directory", request, max_body_bytes)
+
     routes = [
         Route("/v1/health", health, methods=["GET"]),
+        Route("/v1/knowledge/ingest/file", ingest_file, methods=["POST"]),
+        Route("/v1/knowledge/ingest/directory", ingest_directory, methods=["POST"]),
         Route("/v1/knowledge/{operation}", knowledge, methods=["POST"]),
         Route("/v1/ops/{operation}", ops, methods=["POST"]),
     ]
@@ -1232,6 +1558,40 @@ async def _handle(stack: LocalStack, operation: str, request: Request, max_body_
         # monitoring wired to the wrong verb must not see green when degraded.
         status = 200 if result.ok else 503
     return _json_response(to_jsonable(result), status=status)
+
+
+async def _handle_ingest(stack: LocalStack, verb: str, request: Request, max_body_bytes: int) -> Response:
+    """The contract-v3 ingestion routes: same body/CSRF discipline as _handle."""
+    content_type = request.headers.get("content-type")
+    media_type = content_type.split(";", 1)[0].strip().lower() if content_type else ""
+    if media_type != "application/json":
+        return _json_response(
+            error_envelope(UnsupportedMediaType("POST routes require Content-Type: application/json")),
+            status=415,
+        )
+    try:
+        body = await request.body()
+    except ClientDisconnect:
+        logger.info("client disconnected while reading the request body for knowledge.%s", verb)
+        return _json_response(
+            error_envelope(ClientDisconnected("the client disconnected before the request body arrived")),
+            status=400,
+        )
+    if len(body) > max_body_bytes:
+        return _json_response(error_envelope(PayloadTooLarge("request body exceeds the size cap")), status=413)
+    actor = request.headers.get("x-actor", "operator")
+    try:
+        result = await run_in_threadpool(_handle_ingest_sync, stack, verb, body, actor)
+    except (IngestionError, ExtractorUnavailableError) as error:
+        # The pipeline journaled the invocation's single audit event itself.
+        return _json_response(_ingest_error_envelope(error), status=_INGEST_STATUS_BY_CODE.get(error.code, 400))
+    except Exception as error:  # noqa: BLE001 - every failure uses the envelope
+        envelope = error_envelope(error)
+        if envelope["error"]["code"] == "INTERNAL":
+            logger.exception("unhandled internal error serving knowledge.%s", verb)
+            envelope["error"]["message"] = "internal error"
+        return _json_response(envelope, status=status_for_error(error))
+    return _json_response(to_jsonable(result), status=200)
 
 
 # --------------------------------------------------------------------- serve

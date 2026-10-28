@@ -372,7 +372,15 @@ class TestAuditedTools:
         from know_your_soul.service import KnowledgeService
 
         assert tuple(sorted(http_api.KNOWLEDGE_OPERATIONS)) == tuple(sorted(KNOWLEDGE_OPERATIONS_V2))
-        assert tuple(mcp_server.EXPECTED_TOOLS) == EXPECTED_TOOLS_V2
+        # The frozen fourteen are exactly the KNOWLEDGE_OPERATIONS mapping;
+        # contract v3 (addendum ingestion-contract-v3.md, audit F2) adds
+        # exactly the two ingestion tools on top of them.
+        assert set(EXPECTED_TOOLS_V2) <= set(mcp_server.EXPECTED_TOOLS)
+        assert tuple(sorted(set(mcp_server.EXPECTED_TOOLS) - set(EXPECTED_TOOLS_V2))) == (
+            "knowledge_ingest_directory",
+            "knowledge_ingest_file",
+        )
+        assert len(mcp_server.EXPECTED_TOOLS) == 16
         for operation in KNOWLEDGE_OPERATIONS_V2:
             assert callable(getattr(KnowledgeService, operation)), operation
         # The CLI exposes exactly the same fourteen knowledge commands (plus
@@ -814,9 +822,10 @@ class TestMcpContract:
         async def scenario() -> None:
             async with _session(server) as session:
                 listed = await session.list_tools()
-                # Contract v2 (operator ruling 2026-10-26): fourteen tools —
-                # the frozen ten plus the four G1 retrieval verbs.
-                assert len(listed.tools) == 14
+                # Contract v2 (operator ruling 2026-10-26): the frozen ten
+                # plus the four G1 retrieval verbs; contract v3 (audit F2)
+                # adds the two ingestion verbs.
+                assert len(listed.tools) == 16
                 for tool in listed.tools:
                     assert "project_path" not in tool.input_schema.get("properties", {}), tool.name
                     result = await _call_tool(session, tool.name, {"project_path": "/etc"})

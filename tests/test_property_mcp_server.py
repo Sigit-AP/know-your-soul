@@ -8,9 +8,11 @@ section 3.1, deep-research adaptations X1/X2/X6/X8) on arbitrary inputs:
   wrong JSON types (string booleans, numeric strings, bools-as-integers) with
   a typed ``INVALID_ARGUMENTS`` — deterministically and without mutating the
   caller's arguments;
-* the tool surface is exactly the ten spec operations, every name matches the
-  MCP tool-name constraint, and no schema anywhere carries a path-like
-  property (the Graphify F1 arbitrary-root shape is structurally absent);
+* the tool surface is the frozen fourteen operations plus the two contract-v3
+  ingestion verbs, every name matches the MCP tool-name constraint, and no
+  schema carries a path-like property except the confined v3 amendment
+  (``path`` on exactly the two ingestion schemas) — the Graphify F1
+  arbitrary-root shape is otherwise structurally absent;
 * the error envelope is canonical JSON, sanitized (no control/bidi/zero-width
   characters), message-capped, and carries an audit id exactly when one
   exists;
@@ -115,6 +117,9 @@ def _valid_arguments(tool: str) -> dict[str, Any]:
         "knowledge_explain": {"node_id": "n-1"},
         "knowledge_affected": {"node_id": "n-1"},
         "knowledge_god_nodes": {},
+        # Contract v3 ingestion verbs (audit F2) — the confined path amendment.
+        "knowledge_ingest_file": {"path": "src/a.py"},
+        "knowledge_ingest_directory": {"path": "src"},
     }[tool]
     return dict(base)
 
@@ -122,16 +127,18 @@ def _valid_arguments(tool: str) -> dict[str, Any]:
 # ------------------------------------------------------------ schema surface
 
 
-def test_tool_surface_is_exactly_the_v2_operations() -> None:
+def test_tool_surface_is_the_frozen_v2_operations_plus_the_v3_ingestion_verbs() -> None:
     """Contract v2 (operator ruling 2026-10-26; addendum
     docs/contracts/retrieval-verbs-v2.md): the frozen ten spec operations plus
-    the four G1 retrieval verbs — fourteen tools, bijectively mapped."""
-    assert len(EXPECTED_TOOLS) == 14
+    the four G1 retrieval verbs — fourteen tools, bijectively mapped; contract
+    v3 (addendum docs/contracts/ingestion-contract-v3.md, audit F2) adds
+    exactly the two ingestion verbs."""
+    assert len(EXPECTED_TOOLS) == 16
     assert tuple(sorted(EXPECTED_TOOLS)) == EXPECTED_TOOLS
     assert set(EXPECTED_TOOLS) == set(_TOOL_TO_OPERATION)
     operations = set(_TOOL_TO_OPERATION.values())
-    assert len(operations) == 14  # the mapping is bijective
-    assert operations == {
+    assert len(operations) == 16  # the mapping is bijective
+    frozen = {
         "knowledge.query",
         "knowledge.get_node",
         "knowledge.get_subtree",
@@ -147,9 +154,11 @@ def test_tool_surface_is_exactly_the_v2_operations() -> None:
         "knowledge.affected",
         "knowledge.god_nodes",
     }
+    assert frozen <= operations  # the fourteen are unchanged
+    assert operations - frozen == {"knowledge.ingest_file", "knowledge.ingest_directory"}
 
 
-@given(index=st.integers(min_value=0, max_value=13))
+@given(index=st.integers(min_value=0, max_value=15))
 @settings(derandomize=True, max_examples=10, deadline=None)
 def test_every_tool_name_matches_the_mcp_constraint(index: int) -> None:
     assert _TOOL_NAME_RE.fullmatch(EXPECTED_TOOLS[index])
@@ -170,9 +179,21 @@ def _walk_properties(schema: Any) -> set[str]:
 
 
 def test_no_schema_anywhere_carries_a_path_like_property() -> None:
+    """The v2 no-path rule holds except for the confined v3 amendment.
+
+    Contract v3 (docs/contracts/ingestion-contract-v3.md, adapter mapping):
+    exactly the two ingestion schemas may carry a path-like property, and it
+    is exactly ``path`` — every other tool stays path-free.
+    """
+    ingestion_tools = {"knowledge_ingest_file", "knowledge_ingest_directory"}
     for tool, schema in _tool_schemas(_MAX).items():
         names = _walk_properties(schema)
-        assert names.isdisjoint({"project_path", "path", "root", "graph_root", "cwd", "file"}), tool
+        if tool in ingestion_tools:
+            assert names & {"project_path", "path", "root", "graph_root", "cwd", "file"} == {
+                "path",
+            }, tool
+        else:
+            assert names.isdisjoint({"project_path", "path", "root", "graph_root", "cwd", "file"}), tool
 
 
 @given(tool=st.sampled_from(EXPECTED_TOOLS))
@@ -531,6 +552,9 @@ def test_required_sets_are_the_pinned_snapshot() -> None:
         "knowledge_explain": ("node_id",),
         "knowledge_affected": ("node_id",),
         "knowledge_god_nodes": (),
+        # Contract v3 ingestion verbs (audit F2).
+        "knowledge_ingest_file": ("path",),
+        "knowledge_ingest_directory": ("path",),
     }
 
 

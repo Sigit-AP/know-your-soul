@@ -29,7 +29,9 @@ from know_your_soul.store import EventStore
 
 # The MCP tool surface (contract v2 — operator ruling 2026-10-26, progress.md;
 # addendum docs/contracts/retrieval-verbs-v2.md): the frozen ten v1 tools plus
-# the four G1 retrieval verbs.
+# the four G1 retrieval verbs; contract v3 (addendum
+# docs/contracts/ingestion-contract-v3.md, audit F2) adds the two ingestion
+# verbs.
 EXPECTED_TOOLS = tuple(
     sorted(
         (
@@ -47,6 +49,8 @@ EXPECTED_TOOLS = tuple(
             "knowledge_explain",
             "knowledge_affected",
             "knowledge_god_nodes",
+            "knowledge_ingest_file",
+            "knowledge_ingest_directory",
         )
     )
 )
@@ -165,7 +169,7 @@ def test_fresh_client_discovers_ten_tools(tmp_path: Path) -> None:
             assert set(advertised) == {"tools", "resources"}, advertised
             listed = await session.list_tools()
             assert tuple(sorted(tool.name for tool in listed.tools)) == EXPECTED_TOOLS
-            assert len(listed.tools) == 14  # contract v2: ten v1 + four G1 verbs
+            assert len(listed.tools) == 16  # contract v2 (ten v1 + four G1) + contract v3 (two ingestion, F2)
             for tool in listed.tools:
                 assert "project_path" not in tool.input_schema.get("properties", {}), tool.name
             resources = await session.list_resources()

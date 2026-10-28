@@ -12,6 +12,7 @@ Properties under test:
 
 from __future__ import annotations
 
+import keyword
 import os
 import subprocess
 import sys
@@ -171,7 +172,12 @@ def test_node_id_digest_matches_contract(language: str):
 # ----------------------------------------------------------- hypothesis: fuzz
 
 
-_IDENTIFIER = st.from_regex(r"[a-z][a-z0-9_]{0,12}", fullmatch=True)
+# Keywords excluded: `def if():` is invalid Python; tree-sitter error recovery
+# on invalid sources differs between parser cores (documented residual in
+# docs/recovery/w6-f1-parity.md).
+_IDENTIFIER = st.from_regex(r"[a-z][a-z0-9_]{0,12}", fullmatch=True).filter(
+    lambda s: s not in keyword.kwlist
+)
 _ARG_COUNT = st.integers(min_value=0, max_value=3)
 
 

@@ -45,6 +45,7 @@ from know_your_soul.http_api import (
     build_stack,
     dispatch_text,
     error_envelope,
+    run_ingest_verb,
     serve,
     to_jsonable,
 )
@@ -296,6 +297,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ingest_parser.add_argument("--json", action="store_true", help="print the canonical JSON report")
 
+    # Contract v3 (addendum docs/contracts/ingestion-contract-v3.md; audit
+    # F2): the frozen adapter mapping names ``ingest-file`` /
+    # ``ingest-directory`` as the CLI surface of the two ingestion verbs.
+    # They run the same shared adapter helper as the HTTP/MCP surfaces
+    # (contract input validation, path discipline against the fixed
+    # ingestion root — the process working directory for the CLI — and the
+    # output budget shaping) and print the canonical JSON proposal payload.
+    # The ops ``ingest`` command above is untouched.
+    ingest_file_parser = subparsers.add_parser(
+        "ingest-file",
+        help="knowledge.ingest_file: ingest one file under the working directory (contract v3, proposal-only)",
+    )
+    ingest_file_parser.add_argument("path", help="file to ingest (resolved against the working directory)")
+    ingest_file_parser.add_argument(
+        "--token-budget", type=int, default=1024, help="response token budget, [128, max] (default 1024)"
+    )
+    ingest_directory_parser = subparsers.add_parser(
+        "ingest-directory",
+        help="knowledge.ingest_directory: ingest a directory under the working directory (contract v3, proposal-only)",
+    )
+    ingest_directory_parser.add_argument("path", help="directory to ingest (resolved against the working directory)")
+    ingest_directory_parser.add_argument(
+        "--recursive",
+        dest="recursive",
+        action="store_true",
+        default=True,
+        help="walk subdirectories (default)",
+    )
+    ingest_directory_parser.add_argument(
+        "--no-recursive", dest="recursive", action="store_false", help="only the top level"
+    )
+    ingest_directory_parser.add_argument(
+        "--max-files", type=int, default=1024, help="walk cap, [1, 65536] (default 1024)"
+    )
+    ingest_directory_parser.add_argument(
+        "--token-budget", type=int, default=1024, help="response token budget, [128, max] (default 1024)"
+    )
+
     # Wave-4 SUB-92: polling watcher over the ingestion pipeline. OPS surface
     # only — same rules as `ingest`: never a knowledge op, never MCP/HTTP.
     watch_parser = subparsers.add_parser(
@@ -350,6 +389,53 @@ def _print_usage_error(message: str) -> None:
     """A CLI-usage failure envelope (exit 2); nothing reaches the store."""
     envelope = {"error": {"code": "CLI_USAGE", "message": message, "retryable": False, "audit_event_id": None}}
     print(canonical_json(envelope), file=sys.stderr)
+
+
+def _ingest_verb_command(args: argparse.Namespace, command: str) -> int:
+    """The contract-v3 ingestion verbs (``ingest-file``/``ingest-directory``, audit F2).
+
+    The same shared adapter helper as the HTTP/MCP surfaces: contract input
+    validation, path discipline against the fixed ingestion root (the process
+    working directory — fixed at process startup) and the output budget
+    shaping; the canonical JSON proposal goes to stdout, typed failures use
+    the standard envelope on stderr. Exit 0 success, 1 typed failure.
+    """
+    from know_your_soul.audit import AuditLog
+    from know_your_soul.ingest.pipeline import ExtractorUnavailableError, IngestionError
+    from know_your_soul.store import EventStore
+
+    arguments: dict[str, Any] = {"path": args.path, "token_budget": args.token_budget}
+    if command == "ingest_directory":
+        arguments["recursive"] = args.recursive
+        arguments["max_files"] = args.max_files
+    store = EventStore(args.store)
+    try:
+        payload = run_ingest_verb(
+            store,
+            AuditLog(store),
+            command,
+            arguments,
+            actor=args.actor,
+            ingestion_root=os.getcwd(),
+        )
+    except (IngestionError, ExtractorUnavailableError) as error:
+        envelope = {
+            "error": {
+                "code": error.code,
+                "message": str(error),
+                "retryable": False,
+                "audit_event_id": getattr(error, "audit_event_id", None),
+            }
+        }
+        print(canonical_json(envelope), file=sys.stderr)
+        return 1
+    except Exception as error:  # noqa: BLE001 - every failure uses the envelope
+        _print_error(error)
+        return 1
+    finally:
+        store.close()
+    print(canonical_json(payload))
+    return 0
 
 
 def _config_command(args: argparse.Namespace) -> int:
@@ -500,6 +586,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         from know_your_soul.ops.ingest_cli import run_ingest_command
 
         return run_ingest_command(args)
+    if command in ("ingest_file", "ingest_directory"):
+        return _ingest_verb_command(args, command)
     if command == "watch":
         from know_your_soul.ops.watch_cli import run_watch_command
 

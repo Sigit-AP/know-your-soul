@@ -78,7 +78,7 @@ DEFAULT_MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 # applied transactionally from Python and recorded in ``schema_versions``
 # (codegraph pattern, RESEARCH-STORAGE.md §1.4) so a failed migration rolls
 # back atomically instead of leaving half-created objects behind.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # Only these kinds create a new node revision and bump the node version.
 _VERSION_BUMPING_KINDS: frozenset[EventKind] = frozenset({EventKind.NODE_UPSERT, EventKind.NODE_RETIRE})
@@ -255,6 +255,13 @@ _SCHEMA_V3_STATEMENTS: tuple[str, ...] = (
     "CREATE INDEX idx_unresolved_failed_tail ON unresolved_refs (name_tail) WHERE status = 'failed'",
 )
 
+# Schema v4 (audit-final-v020 F4): persist the resolver's deterministic
+# failure reason on each unresolved_refs row, so post-hoc audit can answer
+# *why* a reference failed from the database alone. Purely additive: one
+# nullable column (NULL = no failure recorded yet / resolved clean).
+_SCHEMA_V4_DESCRIPTION = "unresolved_refs.failure_reason: persisted resolver failure reasons (audit F4)"
+_SCHEMA_V4_STATEMENTS: tuple[str, ...] = ("ALTER TABLE unresolved_refs ADD COLUMN failure_reason TEXT",)
+
 # Adjacency statements are built per (direction, kinds) shape and cached —
 # sqlite3 caches the compiled statement per SQL string, so a bounded string
 # cache gives prepared-statement behaviour with a fixed memory ceiling
@@ -303,7 +310,12 @@ class GraphEdgeRow:
 
 @dataclass(frozen=True)
 class UnresolvedRefRow:
-    """One parked cross-file reference (schema v3 ``unresolved_refs``)."""
+    """One parked cross-file reference (schema v3 ``unresolved_refs``).
+
+    ``failure_reason`` (schema v4) is the deterministic reason of the last
+    failed resolution attempt — ``None`` while never attempted, and cleared
+    on resolution.
+    """
 
     ref_id: int
     source_node_id: str
@@ -313,6 +325,7 @@ class UnresolvedRefRow:
     status: str
     first_seen: str
     attempts: int
+    failure_reason: str | None
 
 
 def _now_iso() -> str:
@@ -515,33 +528,65 @@ class EventStore:
             is not None
         )
 
+    @staticmethod
+    def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
+        return any(str(row["name"]) == column for row in conn.execute(f"PRAGMA table_info({table})"))  # noqa: S608
+
     def _apply_versioned_migrations(self, conn: sqlite3.Connection) -> None:
         recorded = 0
+        recorded_versions: set[int] = set()
         if self._table_exists(conn, "schema_versions"):
-            row = conn.execute("SELECT MAX(version) AS v FROM schema_versions").fetchone()
-            recorded = int(row["v"] or 0) if row is not None else 0
+            rows = conn.execute("SELECT version FROM schema_versions").fetchall()
+            recorded_versions = {int(row["version"]) for row in rows}
+            recorded = max(recorded_versions) if recorded_versions else 0
         if recorded > SCHEMA_VERSION:
             raise SchemaVersionTooNew(
                 f"database schema is v{recorded}, newer than this build supports (v{SCHEMA_VERSION}); refusing to open"
             )
-        if recorded >= 3:
-            missing = [name for name in _SCHEMA_V3_TABLES if not self._table_exists(conn, name)]
-            if missing:
+        if recorded < 3:
+            if SCHEMA_VERSION < 3:
+                # Capped below v3 (tests building genuine pre-v3 fixtures):
+                # leave the store exactly as v1/v2, including no
+                # schema_versions ledger.
+                return
+            present = [name for name in _SCHEMA_V3_TABLES if self._table_exists(conn, name)]
+            if present:
                 raise SchemaStateError(
-                    f"schema_versions records v3 but tables are missing: {', '.join(missing)}; "
-                    "refusing to open an inconsistent store"
+                    f"v3 tables exist without a schema_versions record: {', '.join(present)}; "
+                    "refusing to guess the schema state"
                 )
-            return
-        if SCHEMA_VERSION < 3:
-            # Capped below v3 (tests building genuine pre-v3 fixtures): leave
-            # the store exactly as v1/v2, including no schema_versions ledger.
-            return
-        present = [name for name in _SCHEMA_V3_TABLES if self._table_exists(conn, name)]
-        if present:
+            self._migrate_v3(conn)
+            recorded = 3
+            recorded_versions.add(3)
+        # Ledger/object consistency, fail-closed: every version from 3 to the
+        # recorded maximum must have its ledger row AND its objects.
+        missing_records = [version for version in range(3, recorded + 1) if version not in recorded_versions]
+        if missing_records:
             raise SchemaStateError(
-                f"v3 tables exist without a schema_versions record: {', '.join(present)}; "
+                f"schema_versions is missing the record(s) {missing_records} while v{recorded} is recorded; "
+                "refusing to open an inconsistent store"
+            )
+        missing = [name for name in _SCHEMA_V3_TABLES if not self._table_exists(conn, name)]
+        if missing:
+            raise SchemaStateError(
+                f"schema_versions records v3 but tables are missing: {', '.join(missing)}; "
+                "refusing to open an inconsistent store"
+            )
+        has_failure_reason = self._column_exists(conn, "unresolved_refs", "failure_reason")
+        if recorded >= 4 and not has_failure_reason:
+            raise SchemaStateError(
+                "schema_versions records v4 but unresolved_refs.failure_reason is missing; "
+                "refusing to open an inconsistent store"
+            )
+        if recorded < 4 and has_failure_reason:
+            raise SchemaStateError(
+                "unresolved_refs.failure_reason exists without a v4 schema_versions record; "
                 "refusing to guess the schema state"
             )
+        if SCHEMA_VERSION >= 4 and recorded == 3:
+            self._migrate_v4(conn)
+
+    def _migrate_v3(self, conn: sqlite3.Connection) -> None:
         try:
             with self.transaction() as tx:
                 tx.execute(
@@ -567,6 +612,21 @@ class EventStore:
             raise
         except sqlite3.Error as error:
             raise MigrationError(f"schema migration to v3 failed and was rolled back: {error}") from error
+
+    def _migrate_v4(self, conn: sqlite3.Connection) -> None:
+        """v3 -> v4 (audit-final-v020 F4): one additive column, one transaction."""
+        try:
+            with self.transaction() as tx:
+                for statement in _SCHEMA_V4_STATEMENTS:
+                    tx.execute(statement)
+                tx.execute(
+                    "INSERT INTO schema_versions (version, applied_at, description) VALUES (4, ?, ?)",
+                    (_now_iso(), _SCHEMA_V4_DESCRIPTION),
+                )
+        except StoreError:
+            raise
+        except sqlite3.Error as error:
+            raise MigrationError(f"schema migration to v4 failed and was rolled back: {error}") from error
 
     def applied_migrations(self) -> list[int]:
         with self.read() as conn:
@@ -1529,6 +1589,7 @@ class EventStore:
 
     @staticmethod
     def _unresolved_ref_row(row: sqlite3.Row) -> UnresolvedRefRow:
+        reason = row["failure_reason"]
         return UnresolvedRefRow(
             ref_id=int(row["ref_id"]),
             source_node_id=str(row["source_node_id"]),
@@ -1538,6 +1599,7 @@ class EventStore:
             status=str(row["status"]),
             first_seen=str(row["first_seen"]),
             attempts=int(row["attempts"]),
+            failure_reason=None if reason is None else str(reason),
         )
 
     def unresolved_ref(self, ref_id: int) -> UnresolvedRefRow | None:
@@ -1570,8 +1632,14 @@ class EventStore:
                 ).fetchall()
         return [self._unresolved_ref_row(row) for row in rows]
 
-    def record_resolution_attempt(self, ref_id: int, *, outcome: str) -> UnresolvedRefRow:
+    def record_resolution_attempt(self, ref_id: int, *, outcome: str, reason: str | None = None) -> UnresolvedRefRow:
         """Record one resolution attempt on a pending ref: ``resolved`` or ``failed``.
+
+        ``reason`` is the deterministic failure vocabulary entry (schema v4,
+        audit F4) — required to be a non-empty string when given, only valid
+        for a ``failed`` outcome, and persisted on the row so post-hoc audit
+        can reconstruct *why* a ref failed. A ``resolved`` outcome clears any
+        previously recorded reason (the terminal state is clean).
 
         Fail-closed: unknown refs, non-pending sources and unknown outcomes
         raise :class:`UnresolvedRefError` — a resolved ref is terminal, a
@@ -1579,6 +1647,10 @@ class EventStore:
         """
         if outcome not in ("resolved", "failed"):
             raise UnresolvedRefError(f"resolution outcome must be 'resolved' or 'failed', got {outcome!r}")
+        if reason is not None and (not isinstance(reason, str) or not reason):
+            raise UnresolvedRefError(f"failure reason must be a non-empty string, got {reason!r}")
+        if outcome == "resolved" and reason is not None:
+            raise UnresolvedRefError("a resolved ref carries no failure reason")
         with self.transaction() as conn:
             row = conn.execute("SELECT * FROM unresolved_refs WHERE ref_id = ?", (int(ref_id),)).fetchone()
             if row is None:
@@ -1589,8 +1661,8 @@ class EventStore:
                     f"unresolved ref {ref_id} is {status!r}, not 'pending'; refusing to record an attempt"
                 )
             conn.execute(
-                "UPDATE unresolved_refs SET status = ?, attempts = attempts + 1 WHERE ref_id = ?",
-                (outcome, int(ref_id)),
+                "UPDATE unresolved_refs SET status = ?, attempts = attempts + 1, failure_reason = ? WHERE ref_id = ?",
+                (outcome, reason, int(ref_id)),
             )
             updated = conn.execute("SELECT * FROM unresolved_refs WHERE ref_id = ?", (int(ref_id),)).fetchone()
         assert updated is not None  # same transaction, same row

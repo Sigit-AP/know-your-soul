@@ -163,26 +163,46 @@ pub struct ExtractionResult {
     pub unresolved_refs: Vec<UnresolvedRef>,
 }
 
+/// Canonical emission order (F1 contract): both engines emit raw
+/// collections sorted by these keys, so raw `ExtractionResult` values — not
+/// just their canonical JSON — are identical across engines, and the
+/// pipeline's insertion order (rowids, ref_ids) is a pure function of the
+/// source bytes. Mirrors `_node_canonical_key`/`_edge_canonical_key`/
+/// `_ref_canonical_key` in the Python reference extractor.
+pub fn sort_nodes_canonical(nodes: &mut [ExtractedNode]) {
+    nodes.sort_by(|a, b| {
+        (a.start_line, a.start_col, &a.node_id).cmp(&(b.start_line, b.start_col, &b.node_id))
+    });
+}
+
+pub fn sort_edges_canonical(edges: &mut [ExtractedEdge]) {
+    edges.sort_by(|a, b| (&a.source, &a.target, &a.kind).cmp(&(&b.source, &b.target, &b.kind)));
+}
+
+pub fn sort_refs_canonical(refs: &mut [UnresolvedRef]) {
+    refs.sort_by(|a, b| {
+        (&a.source_node_id, &a.target_name, &a.kind, a.line, a.col).cmp(&(
+            &b.source_node_id,
+            &b.target_name,
+            &b.kind,
+            b.line,
+            b.col,
+        ))
+    });
+}
+
 impl ExtractionResult {
     /// The canonical artifact dict: sorted keys, sorted collections — mirrors
     /// `ExtractionResult.to_artifact` in the Python reference exactly.
+    /// The sorts are idempotent: the raw collections already follow the
+    /// canonical emission order.
     pub fn to_artifact(&self) -> Json {
         let mut nodes = self.nodes.clone();
-        nodes.sort_by(|a, b| {
-            (a.start_line, a.start_col, &a.node_id).cmp(&(b.start_line, b.start_col, &b.node_id))
-        });
+        sort_nodes_canonical(&mut nodes);
         let mut edges = self.edges.clone();
-        edges.sort_by(|a, b| (&a.source, &a.target, &a.kind).cmp(&(&b.source, &b.target, &b.kind)));
+        sort_edges_canonical(&mut edges);
         let mut refs = self.unresolved_refs.clone();
-        refs.sort_by(|a, b| {
-            (&a.source_node_id, &a.target_name, &a.kind, a.line, a.col).cmp(&(
-                &b.source_node_id,
-                &b.target_name,
-                &b.kind,
-                b.line,
-                b.col,
-            ))
-        });
+        sort_refs_canonical(&mut refs);
 
         let mut artifact = BTreeMap::new();
         artifact.insert(
@@ -966,6 +986,12 @@ pub fn extract_source(
         name: path.to_string(),
     }];
     walker.walk(tree.root_node(), &mut scopes)?;
+    // F1 emission-order contract: raw collections leave the walker in the
+    // canonical sort order so the raw ExtractionResult is identical across
+    // engines and the persisted store is byte-identical either way.
+    sort_nodes_canonical(&mut walker.nodes);
+    sort_edges_canonical(&mut walker.edges);
+    sort_refs_canonical(&mut walker.refs);
     Ok(ExtractionResult {
         path: path.to_string(),
         language: spec.name.clone(),

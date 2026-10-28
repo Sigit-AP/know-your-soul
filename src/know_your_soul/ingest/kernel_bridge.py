@@ -7,6 +7,17 @@ hot path; the pure-Python tree-sitter walker in
 fallback. Byte-identity between the two is proven by
 ``tests/test_kernel_rust.py``.
 
+Emission-order contract (F1, W6/SUB-97): both engines emit the raw
+``ExtractionResult`` collections (``nodes``/``edges``/``unresolved_refs``) in
+the canonical sort order — nodes by ``(start_line, start_col, node_id)``,
+edges by ``(source, target, kind)``, refs by ``(source_node_id, target_name,
+kind, line, col)``. The kernel side inherits that order from the canonical
+artifact the bridge reconstructs from; the Python walker sorts explicitly in
+``TreeSitterExtractor.extract``. Raw dataclass equality across engines is
+therefore required, and the ingestion pipeline's insertion order (rowids,
+``ref_id``s embedded in resolved edge metadata) is a pure function of the
+source bytes, so a store ingested via either engine is byte-identical.
+
 Load order for the kernel module:
 
 1. ``import know_your_soul_kernel`` (installed via ``maturin develop`` or a

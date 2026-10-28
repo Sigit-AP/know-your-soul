@@ -161,9 +161,33 @@ class UnresolvedRef:
     col: int
 
 
+def _node_canonical_key(node: ExtractedNode) -> tuple[int, int, str]:
+    """Canonical emission order for nodes (F1 contract; mirrors walker.rs)."""
+    return (node.start_line, node.start_col, node.node_id)
+
+
+def _edge_canonical_key(edge: ExtractedEdge) -> tuple[str, str, str]:
+    """Canonical emission order for edges (F1 contract; mirrors walker.rs)."""
+    return (edge.source, edge.target, edge.kind)
+
+
+def _ref_canonical_key(ref: UnresolvedRef) -> tuple[str, str, str, int, int]:
+    """Canonical emission order for refs (F1 contract; mirrors walker.rs)."""
+    return (ref.source_node_id, ref.target_name, ref.kind, ref.line, ref.col)
+
+
 @dataclass(frozen=True)
 class ExtractionResult:
-    """The deterministic output of extracting one source file."""
+    """The deterministic output of extracting one source file.
+
+    Emission-order contract (F1, W6/SUB-97): ``nodes``/``edges``/
+    ``unresolved_refs`` are emitted in the canonical sort order below by
+    **both** engines (Python walker and Rust kernel). Raw dataclass equality
+    across engines is therefore required — not just canonical-JSON equality —
+    and the pipeline's insertion order (rowids, ref_ids embedded in resolved
+    edge metadata) becomes a pure function of the source bytes, so a store
+    ingested via either engine is byte-identical.
+    """
 
     path: str
     language: str
@@ -177,13 +201,14 @@ class ExtractionResult:
     unresolved_refs: tuple[UnresolvedRef, ...]
 
     def to_artifact(self) -> dict[str, Any]:
-        """The canonical artifact dict: sorted keys, sorted collections."""
-        nodes = sorted(self.nodes, key=lambda n: (n.start_line, n.start_col, n.node_id))
-        edges = sorted(self.edges, key=lambda e: (e.source, e.target, e.kind))
-        refs = sorted(
-            self.unresolved_refs,
-            key=lambda r: (r.source_node_id, r.target_name, r.kind, r.line, r.col),
-        )
+        """The canonical artifact dict: sorted keys, sorted collections.
+
+        The sort is idempotent — the raw collections already follow the
+        canonical emission order (see the class docstring).
+        """
+        nodes = sorted(self.nodes, key=_node_canonical_key)
+        edges = sorted(self.edges, key=_edge_canonical_key)
+        refs = sorted(self.unresolved_refs, key=_ref_canonical_key)
         return {
             "edges": [{"kind": edge.kind, "source": edge.source, "target": edge.target} for edge in edges],
             "extraction_version": self.extraction_version,
@@ -396,6 +421,14 @@ class TreeSitterExtractor:
             )
         )
         self._walk(tree.root_node, [_Scope(root_id, CoreNodeKind.FILE.value, path)])
+        # F1 emission-order contract: the raw collections leave the walker in
+        # the canonical sort order so the raw ExtractionResult is identical
+        # across engines (the Rust kernel emits the same order), making the
+        # pipeline's insertion order — and therefore the persisted store —
+        # byte-identical either way.
+        self._nodes.sort(key=_node_canonical_key)
+        self._edges.sort(key=_edge_canonical_key)
+        self._refs.sort(key=_ref_canonical_key)
         return ExtractionResult(
             path=path,
             language=self._spec.name,

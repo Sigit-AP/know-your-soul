@@ -333,10 +333,20 @@ def test_probe_space_covers_every_operation() -> None:
 
 
 def test_operation_inventories_match() -> None:
-    """The 14 knowledge operations exist on both adapters, 1:1 by name."""
+    """The 14 frozen operations map 1:1 on both adapters; contract v3 adds exactly two ingestion verbs.
+
+    The frozen fourteen (v1 + the four G1 retrieval verbs) keep their 1:1
+    MCP-tool mapping; the v3 addendum (docs/contracts/ingestion-contract-v3.md,
+    audit F2) extends the MCP surface with ``knowledge_ingest_file`` /
+    ``knowledge_ingest_directory`` — HTTP exposes them as the two fixed routes
+    ``/v1/knowledge/ingest/file|directory``, never as members of
+    ``KNOWLEDGE_OPERATIONS``.
+    """
     mcp_ops = {operation.removeprefix("knowledge_") for operation in mcp_server._TOOL_TO_OPERATION}
-    assert mcp_ops == set(http_api.KNOWLEDGE_OPERATIONS)
-    assert len(mcp_server.EXPECTED_TOOLS) == 14 == len(http_api.KNOWLEDGE_OPERATIONS)
+    assert set(http_api.KNOWLEDGE_OPERATIONS) <= mcp_ops
+    assert len(http_api.KNOWLEDGE_OPERATIONS) == 14
+    assert mcp_ops - set(http_api.KNOWLEDGE_OPERATIONS) == {"ingest_file", "ingest_directory"}
+    assert len(mcp_server.EXPECTED_TOOLS) == 16
 
 
 def test_vocabulary_enums_match() -> None:

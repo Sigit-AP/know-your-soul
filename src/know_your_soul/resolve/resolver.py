@@ -230,14 +230,17 @@ class ReferenceResolver:
         outcomes: list[RefOutcome] = []
         for ref, decision in decisions:
             status: Literal["resolved", "failed"] = "resolved" if decision.reason is None else "failed"
-            store.record_resolution_attempt(ref.ref_id, outcome=status)
+            # F4 (schema v4): the deterministic failure reason is persisted on
+            # the row, and the reported outcome reads it back from the store —
+            # the BatchReport is a view of persisted state, never just memory.
+            recorded = store.record_resolution_attempt(ref.ref_id, outcome=status, reason=decision.reason)
             outcomes.append(
                 RefOutcome(
                     ref_id=ref.ref_id,
                     status=status,
                     strategy=decision.strategy,
                     target_node_id=decision.target_node_id,
-                    reason=decision.reason,
+                    reason=recorded.failure_reason,
                 )
             )
         outcomes.sort(key=lambda outcome: outcome.ref_id)

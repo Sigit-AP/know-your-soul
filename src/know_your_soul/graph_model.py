@@ -59,10 +59,12 @@ __all__ = [
     "GraphEdge",
     "GraphModelError",
     "GraphNode",
+    "InvalidBridgeEndpointError",
     "MultipleParentsError",
     "NodeIdError",
     "NodeIdParts",
     "NodeKindError",
+    "PrimaryContainmentError",
     "PrimaryError",
     "ReviewCandidate",
     "ReviewPolicy",
@@ -133,6 +135,29 @@ class ContainsCycleError(GraphModelError):
 
 class BridgeError(GraphModelError, ValueError):
     """A ``bridges`` edge violates the primary-to-primary rules."""
+
+
+class InvalidBridgeEndpointError(BridgeError):
+    """A ``bridges`` edge has a non-primary endpoint (contract v3).
+
+    The typed code ``INVALID_BRIDGE_ENDPOINT`` is the one the frozen v3
+    addendum (``docs/contracts/ingestion-contract-v3.md``, "Edge kind
+    ``bridges``") names for this failure at apply time.
+    """
+
+    code = "INVALID_BRIDGE_ENDPOINT"
+
+
+class PrimaryContainmentError(GraphModelError):
+    """A ``contains`` edge would make a primary contain another primary.
+
+    Contract v3 ("Primary node rules"): a primary is never contained by
+    another primary — cross-primary structure rides ``bridges`` only. The
+    contract names no code for this invariant; ``PRIMARY_CONTAINED_BY_PRIMARY``
+    is the introduced typed code (recorded in ``docs/recovery/w6-f2f4.md``).
+    """
+
+    code = "PRIMARY_CONTAINED_BY_PRIMARY"
 
 
 class PrimaryError(GraphModelError):
@@ -560,6 +585,17 @@ class UniversalGraph:
     def _check_contains(self, edge: GraphEdge) -> None:
         if edge.source == edge.target:
             raise ContainsCycleError(f"contains self-loop on {edge.source!r}")
+        # Contract v3 ("Primary node rules"): kind-aware containment — a
+        # primary is never contained by another primary; cross-primary
+        # structure rides ``bridges`` exclusively.
+        if (
+            self._nodes[edge.source].kind == CoreNodeKind.PRIMARY.value
+            and self._nodes[edge.target].kind == CoreNodeKind.PRIMARY.value
+        ):
+            raise PrimaryContainmentError(
+                f"a primary is never contained by another primary: {edge.source!r} -> {edge.target!r}; "
+                "cross-primary structure uses bridges edges"
+            )
         parent = self.contains_parent(edge.target)
         if parent is not None:
             raise MultipleParentsError(
@@ -579,7 +615,9 @@ class UniversalGraph:
             raise BridgeError("a bridges edge cannot be a self-loop")
         for endpoint in (edge.source, edge.target):
             if self._nodes[endpoint].kind != CoreNodeKind.PRIMARY.value:
-                raise BridgeError(f"bridges edges connect primary nodes only; {endpoint!r} is not primary")
+                raise InvalidBridgeEndpointError(
+                    f"bridges edges connect primary nodes only; {endpoint!r} is not primary"
+                )
 
     # -- hierarchy queries -------------------------------------------------
 
@@ -667,6 +705,16 @@ class UniversalGraph:
                 continue
             if edge.target in parents:
                 raise MultipleParentsError(f"node {edge.target!r} has multiple contains parents")
+            # Contract v3: re-prove kind-aware containment (eagerly enforced
+            # at insertion; a passing validate is a proof, not a repair).
+            if (
+                self._nodes[edge.source].kind == CoreNodeKind.PRIMARY.value
+                and self._nodes[edge.target].kind == CoreNodeKind.PRIMARY.value
+            ):
+                raise PrimaryContainmentError(
+                    f"primary {edge.target!r} is contained by primary {edge.source!r}; "
+                    "cross-primary structure uses bridges edges"
+                )
             parents[edge.target] = edge.source
         for start in parents:
             seen: set[str] = set()

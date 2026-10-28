@@ -703,7 +703,9 @@ def test_mcp_tools_stay_free_of_relearn() -> None:
 
     The v1 pin was "exactly ten"; contract v2 (operator ruling 2026-10-26)
     extends the surface to fourteen with the four G1 retrieval verbs — relearn
-    is still not among them.
+    is still not among them. Contract v3 (addendum
+    docs/contracts/ingestion-contract-v3.md, audit F2) adds exactly the two
+    ingestion verbs on top.
     """
-    assert len(mcp_server.EXPECTED_TOOLS) == 14
+    assert len(mcp_server.EXPECTED_TOOLS) == 16
     assert not any("relearn" in tool for tool in mcp_server.EXPECTED_TOOLS)
