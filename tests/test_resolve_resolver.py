@@ -163,7 +163,9 @@ class TestKindMapping:
         assert outcome_of(report, ref_id).status == "resolved"
         assert all_edges(store)[0][2] == edge_kind
 
-    @pytest.mark.parametrize("bad", ["CALLS", "references", "", "extends", "import"])
+    # W4 addendum: "references" left this list — it now maps to the
+    # ``references`` edge kind (tests/test_retrieval_v2_resolver_addendum.py).
+    @pytest.mark.parametrize("bad", ["CALLS", "", "extends", "import"])
     def test_unknown_kind_fails_closed(self, store: EventStore, bad: str) -> None:
         base_source(store)
         add_symbol(store, "function:tgt", "helper", "pkg/other.py")

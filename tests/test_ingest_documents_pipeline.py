@@ -309,19 +309,21 @@ class TestDocumentReferences:
             report = make_pipeline(store).ingest_path(tmp_path)
             assert report.resolution == {"resolved": 0, "failed": 1, "pending": 0}
 
-    def test_real_resolver_parks_unknown_kind_deterministically(self, tmp_path):
-        # The W2 resolver's kind table predates ``references`` (frozen);
-        # the ref enters the resolve lane and gets a typed, deterministic
-        # outcome instead of crashing. See docs/recovery/w3-documents.md.
+    def test_real_resolver_resolves_references_kind(self, tmp_path):
+        # W4 addendum: the resolver maps ref kind ``references`` → edge kind
+        # ``references``; a markdown link to a known document resolves by
+        # exact name to that document node (supersedes the W3 residual that
+        # failed these refs as unknown_ref_kind; see docs/recovery/w4-retrieval.md).
         from know_your_soul.resolve.resolver import ReferenceResolver
 
         write_fixture(tmp_path, {"a.md": "see [x](b.md)\n", "b.md": "# B\n\ny\n"})
         with EventStore() as store:
             report = IngestionPipeline(store, resolver=ReferenceResolver()).ingest_path(tmp_path)
-            assert report.resolution == {"resolved": 0, "failed": 1, "pending": 0}
-            failed = store.failed_unresolved_refs(name_tail="b.md")
-            assert len(failed) == 1
-            assert failed[0].kind == "references"
+            assert report.resolution == {"resolved": 1, "failed": 0, "pending": 0}
+            reference_edges = [row for row in edges(store) if row["kind"] == "references"]
+            assert len(reference_edges) == 1
+            target = store.symbol_by_node(reference_edges[0]["target"])
+            assert target is not None and target.name == "b.md" and target.kind == "document"
 
     def test_cross_document_graph_connected(self, tmp_path):
         write_fixture(tmp_path, {"a.md": "[x](b.md)\n", "b.md": "[y](c.md)\n", "c.md": "# C\n\nz\n"})

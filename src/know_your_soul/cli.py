@@ -295,6 +295,50 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-file-bytes", type=int, default=4 * 1024 * 1024, help="per-file size cap (default 4 MiB)"
     )
     ingest_parser.add_argument("--json", action="store_true", help="print the canonical JSON report")
+
+    # Wave-4 SUB-92: polling watcher over the ingestion pipeline. OPS surface
+    # only — same rules as `ingest`: never a knowledge op, never MCP/HTTP.
+    watch_parser = subparsers.add_parser(
+        "watch",
+        help="ops: poll a directory and incrementally ingest changes (proposal-only, not a knowledge op)",
+    )
+    watch_parser.add_argument("path", help="directory to watch (the ingestion root)")
+    watch_parser.add_argument(
+        "--interval",
+        type=float,
+        default=2.0,
+        help="seconds between polls (default 2.0; hard floor 0.05 — no busy-loop)",
+    )
+    watch_parser.add_argument("--once", action="store_true", help="run a single cycle and exit (tests/CI)")
+    watch_parser.add_argument("--max-cycles", type=int, default=None, help="stop after N cycles")
+    watch_parser.add_argument(
+        "--debounce", type=float, default=2.0, help="full debounce window in seconds for bursts (default 2.0)"
+    )
+    watch_parser.add_argument(
+        "--quick-quiet",
+        type=float,
+        default=0.3,
+        help="quiet window in seconds when at most --quick-max-changes files are pending (default 0.3)",
+    )
+    watch_parser.add_argument("--quick-max-changes", type=int, default=2, help="quick-path quiet threshold (default 2)")
+    watch_parser.add_argument(
+        "--full-scan-ceiling",
+        type=int,
+        default=500,
+        help="above this many pending changes (or any removal) a full scan-diff replaces per-file ingest",
+    )
+    watch_parser.add_argument(
+        "--max-failures",
+        type=int,
+        default=5,
+        help="auto-degrade (log + stop, never crash) after this many consecutive cycle failures",
+    )
+    watch_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="override the WSL/remote-mount refusal (KNOW_YOUR_SOUL_NO_WATCH still wins)",
+    )
+    watch_parser.add_argument("--json", action="store_true", help="print the canonical JSON watch report")
     return parser
 
 
@@ -456,6 +500,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         from know_your_soul.ops.ingest_cli import run_ingest_command
 
         return run_ingest_command(args)
+    if command == "watch":
+        from know_your_soul.ops.watch_cli import run_watch_command
+
+        return run_watch_command(args)
 
     payload_text: str = args.payload if args.payload is not None else "{}"
     if payload_text == "-":

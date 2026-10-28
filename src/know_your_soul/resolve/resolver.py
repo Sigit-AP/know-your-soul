@@ -57,10 +57,14 @@ PROVENANCE: str = f"resolver:two-phase:v{RESOLVER_VERSION}"
 
 #: Ref kinds the resolver accepts, mapped to the edge kind they mint
 #: (``function_ref`` is codegraph's call-site alias for a ``calls`` edge).
+#: W4 addendum (temuan SUB-90): W3 document ingestion parks markdown/
+#: plaintext link refs as ``references`` — mapped to the frozen core edge
+#: kind ``references`` (graph_model.CoreEdgeKind.REFERENCES).
 REF_KIND_TO_EDGE_KIND: dict[str, str] = {
     "calls": "calls",
     "imports": "imports",
     "function_ref": "calls",
+    "references": "references",
 }
 
 #: Extension → language fallback when the source file has no ``files`` row
