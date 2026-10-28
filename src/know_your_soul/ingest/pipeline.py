@@ -173,6 +173,14 @@ try:  # SUB-87 language registry is canonical when present
 except ImportError:  # pragma: no cover - exercised only before SUB-87 lands
     _sibling_language_for_path = None
 
+try:  # SUB-90 document extractor (W3); additive routing for non-code formats
+    from know_your_soul.ingest import documents as _document_extractor
+
+    _DOCUMENT_LANGUAGES: frozenset[str] = frozenset(_document_extractor.DOCUMENT_LANGUAGES)
+except ImportError:  # pragma: no cover - exercised only before SUB-90 lands
+    _document_extractor = None
+    _DOCUMENT_LANGUAGES = frozenset({"markdown", "pdf", "text"})
+
 
 # --------------------------------------------------------------------- errors
 
@@ -708,6 +716,13 @@ class IngestionPipeline:
             digest.update(f"{relpath}\0ERROR:UNSUPPORTED_MEDIA_TYPE\n".encode())
             return FileReport(relpath=relpath, status="failed", size=size, error_code="UNSUPPORTED_MEDIA_TYPE")
 
+        # W3 (SUB-90): document formats are bytes-based (a PDF never decodes
+        # as UTF-8) and route to the document extractor; they version against
+        # DOCUMENT_EXTRACTION_VERSION, not the code extractor's counter.
+        document_language = language if language in _DOCUMENT_LANGUAGES else None
+        if document_language is not None and _document_extractor is not None:
+            extraction_version = int(getattr(_document_extractor, "DOCUMENT_EXTRACTION_VERSION", extraction_version))
+
         tracked = self._store.get_file(relpath) if incremental else None
         if (
             tracked is not None
@@ -744,20 +759,34 @@ class IngestionPipeline:
             stats["skipped"] += 1
             return FileReport(relpath=relpath, status="skipped", language=language, sha256=sha256, size=size)
 
-        try:
-            source = content.decode("utf-8-sig")
-        except UnicodeDecodeError:
-            stats["failed"] += 1
-            return FileReport(relpath=relpath, status="failed", language=language, size=size, error_code="DECODE_ERROR")
+        if document_language is not None and _document_extractor is not None:
+            # W3 (SUB-90) document lane: raw bytes in, ExtractionResult-shaped
+            # result out (file root + document/section/page/paragraph nodes).
+            try:
+                extraction = _document_extractor.extract_document(relpath, content, language=document_language)
+            except Exception as error:  # noqa: BLE001 - per-file failure never aborts the walk
+                stats["failed"] += 1
+                code = getattr(error, "code", None)
+                if not isinstance(code, str):
+                    code = "EXTRACTION_FAILED"
+                return FileReport(relpath=relpath, status="failed", language=language, size=size, error_code=code)
+        else:
+            try:
+                source = content.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                stats["failed"] += 1
+                return FileReport(
+                    relpath=relpath, status="failed", language=language, size=size, error_code="DECODE_ERROR"
+                )
 
-        try:
-            extraction = extractor.extract_source(relpath, source, language=None, generated_hint=False)
-        except Exception as error:  # noqa: BLE001 - per-file failure never aborts the walk
-            stats["failed"] += 1
-            code = getattr(error, "code", None)
-            if not isinstance(code, str):
-                code = "EXTRACTION_FAILED"
-            return FileReport(relpath=relpath, status="failed", language=language, size=size, error_code=code)
+            try:
+                extraction = extractor.extract_source(relpath, source, language=None, generated_hint=False)
+            except Exception as error:  # noqa: BLE001 - per-file failure never aborts the walk
+                stats["failed"] += 1
+                code = getattr(error, "code", None)
+                if not isinstance(code, str):
+                    code = "EXTRACTION_FAILED"
+                return FileReport(relpath=relpath, status="failed", language=language, size=size, error_code=code)
 
         nodes_all = _normalize_nodes(extraction)
         edges = _normalize_edges(extraction)
