@@ -13,6 +13,7 @@ import threading
 from pathlib import Path
 
 import pytest
+
 from _serve_helpers import (
     EXPECTED_TOOLS_16,
     SocketClient,
@@ -21,7 +22,6 @@ from _serve_helpers import (
     tool_payload,
     wait_for,
 )
-
 from know_your_soul.serve import rpc
 from know_your_soul.serve.superpower import (
     READ_TOOLS,

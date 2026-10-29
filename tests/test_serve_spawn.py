@@ -15,8 +15,8 @@ import threading
 from pathlib import Path
 
 import pytest
-from _serve_helpers import SocketClient, make_config, wait_for
 
+from _serve_helpers import SocketClient, make_config, wait_for
 from know_your_soul.serve.daemon_config import DaemonConfig
 from know_your_soul.serve.superpower import (
     DaemonUnavailable,

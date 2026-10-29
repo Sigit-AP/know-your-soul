@@ -22,8 +22,8 @@ import anyio
 import pytest
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
-from _serve_helpers import mask_volatile, seed_store, tool_payload, wait_for
 
+from _serve_helpers import mask_volatile, seed_store, tool_payload, wait_for
 from know_your_soul import runtime_guard
 from know_your_soul.serve import rpc
 from know_your_soul.serve.daemon_config import DaemonConfig

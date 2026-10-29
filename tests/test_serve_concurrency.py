@@ -17,8 +17,8 @@ import time
 from pathlib import Path
 
 import pytest
-from _serve_helpers import SocketClient, make_config, tool_error_code, tool_payload
 
+from _serve_helpers import SocketClient, make_config, tool_error_code, tool_payload
 from know_your_soul.serve import rpc
 from know_your_soul.serve.superpower import SuperpowerDaemon
 from know_your_soul.store import EventStore
