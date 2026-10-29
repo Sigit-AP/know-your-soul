@@ -13,7 +13,7 @@ import threading
 from pathlib import Path
 
 import pytest
-from tests._serve_helpers import (
+from _serve_helpers import (
     EXPECTED_TOOLS_16,
     SocketClient,
     make_config,

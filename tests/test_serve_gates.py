@@ -30,7 +30,7 @@ import time
 from pathlib import Path
 
 import pytest
-from tests._serve_helpers import SocketClient, make_config, tool_payload, wait_for
+from _serve_helpers import SocketClient, make_config, tool_payload, wait_for
 
 from know_your_soul.serve import rpc
 from know_your_soul.serve.superpower import (

@@ -51,8 +51,8 @@ the frozen semantic and is what the fixtures pin.
 ## Engine surface
 
 ```python
-engine = ScoreEngine(store)                    # config defaults to the bundled TOML
-engine.score_node(node_id, context=tags, at=when)        # node's own evidence, depth 0
+engine = ScoreEngine(store)  # config defaults to the bundled TOML
+engine.score_node(node_id, context=tags, at=when)  # node's own evidence, depth 0
 engine.aggregate_primary(primary_id, context=tags, at=when)  # primary + descendants
 ```
 

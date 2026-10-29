@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from tests._serve_helpers import seed_store, wait_for
+from _serve_helpers import seed_store, wait_for
 
 
 def _pid_alive(pid: int) -> bool:

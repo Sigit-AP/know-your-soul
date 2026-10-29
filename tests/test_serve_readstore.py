@@ -13,7 +13,7 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
-from tests._serve_helpers import seed_store, upsert_node
+from _serve_helpers import seed_store, upsert_node
 
 from know_your_soul.domain import Event, EventKind, Node, NodeKind, PrimaryDomain
 from know_your_soul.serve.superpower import ReadOnlyEventStore, ReadOnlyStoreError

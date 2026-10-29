@@ -49,12 +49,13 @@ Enam modul eksportir baru di `src/know_your_soul/exporters/` (total 1.732 LOC sr
 
 ```python
 from know_your_soul.exporters import adjacency, cytoscape, d3force, gexf, summary, tgf
-gexf.register_gexf(registry)          # exports/graph.gexf
+
+gexf.register_gexf(registry)  # exports/graph.gexf
 cytoscape.register_cytoscape(registry)  # exports/cytoscape.json
-d3force.register_d3force(registry)     # exports/d3-force.json
-adjacency.register_adjacency(registry) # exports/adjacency.csv + exports/edges.txt
-tgf.register_tgf(registry)             # exports/graph.tgf
-summary.register_summary(registry)     # analytics/graph-summary.json (kind="analytics")
+d3force.register_d3force(registry)  # exports/d3-force.json
+adjacency.register_adjacency(registry)  # exports/adjacency.csv + exports/edges.txt
+tgf.register_tgf(registry)  # exports/graph.tgf
+summary.register_summary(registry)  # analytics/graph-summary.json (kind="analytics")
 ```
 
 Semua artifact lolos `produce_exports` (cap + round-trip) dan siap masuk manifest via `manifest_entries`. Mengubah bentuk output = bump `version` di `register_*`.

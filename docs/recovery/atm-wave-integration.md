@@ -97,9 +97,10 @@ from know_your_soul.exporters.orchestrator import default_registry
 registry = default_registry()
 registry.register_json(
     "analytics/centrality.json",
-    my_centrality_fn,                 # read_model (graph.json mapping) -> Mapping
-    kind="analytics", version=1,      # bump version on any format change
-    max_bytes=128 * 1024,             # explicit per-artifact cap, fail-closed
+    my_centrality_fn,  # read_model (graph.json mapping) -> Mapping
+    kind="analytics",
+    version=1,  # bump version on any format change
+    max_bytes=128 * 1024,  # explicit per-artifact cap, fail-closed
 )
 ```
 

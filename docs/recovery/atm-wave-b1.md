@@ -38,7 +38,8 @@ Tiga modul eksportir baru di `src/know_your_soul/exporters/`, masing-masing meng
 
 ```python
 from know_your_soul.exporters import dot, mermaid, tabular
-dot.register_dot(registry)          # exports/graph.dot
+
+dot.register_dot(registry)  # exports/graph.dot
 mermaid.register_mermaid(registry)  # exports/graph.mmd (max_nodes=200)
 tabular.register_tabular(registry)  # exports/nodes.csv + exports/edges.csv
 ```

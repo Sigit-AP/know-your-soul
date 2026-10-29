@@ -22,7 +22,7 @@ import anyio
 import pytest
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
-from tests._serve_helpers import mask_volatile, seed_store, tool_payload, wait_for
+from _serve_helpers import mask_volatile, seed_store, tool_payload, wait_for
 
 from know_your_soul import runtime_guard
 from know_your_soul.serve import rpc
@@ -197,7 +197,7 @@ class TestForwardingAndAudit:
         args = {"purpose": "run the gates", "domain": "P1", "token_budget": 512}
         with _RawProxy(db, graph_root) as proxy:
             via_proxy = tool_payload(proxy.request("tools/call", {"name": "knowledge_query", "arguments": args}))
-        from tests._serve_helpers import SocketClient
+        from _serve_helpers import SocketClient
 
         with SocketClient(config.paths.socket) as direct:
             via_daemon = tool_payload(direct.call_tool("knowledge_query", args, actor="spawn-test"))
