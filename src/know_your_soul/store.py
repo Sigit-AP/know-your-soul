@@ -1516,7 +1516,7 @@ class EventStore:
             where_column, order_column = "target", "source"
         sql = (
             "SELECT edge_id, source, target, kind, line, col, metadata, provenance FROM graph_edges "
-            f"WHERE {where_column} = ?"
+            f"WHERE {where_column} = ?"  # nosec B608 -- where_column is a fixed internal allowlist value
         )
         if kinds:
             placeholders = ", ".join("?" for _ in kinds)

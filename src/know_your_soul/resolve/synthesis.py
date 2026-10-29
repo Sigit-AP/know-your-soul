@@ -265,7 +265,7 @@ def _run_method_class_containment(store: EventStore, config: SynthesisConfig) ->
     with store.read() as conn:
         methods = conn.execute(
             "SELECT s.* FROM symbols s JOIN files f ON f.path = s.path "
-            f"WHERE s.kind = 'method' {generated_filter} ORDER BY s.node_id"
+            f"WHERE s.kind = 'method' {generated_filter} ORDER BY s.node_id"  # nosec B608 -- generated_filter is a fixed internal fragment
         ).fetchall()
     for row in methods:
         node_id = str(row["node_id"])

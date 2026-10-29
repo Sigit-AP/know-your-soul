@@ -925,7 +925,7 @@ class IngestionPipeline:
         names[file_id] = relpath
         placeholders = ", ".join("?" for _ in old_nodes)
         incoming = conn.execute(
-            f"SELECT source, target, kind FROM graph_edges WHERE target IN ({placeholders}) "
+            f"SELECT source, target, kind FROM graph_edges WHERE target IN ({placeholders}) "  # nosec B608 -- placeholders are generated "?" marks; values bound
             "ORDER BY kind, source, IFNULL(line, -1), IFNULL(col, -1), edge_id",
             tuple(old_nodes),
         ).fetchall()
@@ -941,10 +941,13 @@ class IngestionPipeline:
                 (source, names[target], names[target].rsplit(".", 1)[-1], kind, f"resurrect:{relpath}"),
             )
         conn.execute(
-            f"DELETE FROM graph_edges WHERE source IN ({placeholders}) OR target IN ({placeholders})",
+            f"DELETE FROM graph_edges WHERE source IN ({placeholders}) OR target IN ({placeholders})",  # nosec B608 -- generated placeholders; values bound
             tuple(old_nodes) + tuple(old_nodes),
         )
-        conn.execute(f"DELETE FROM unresolved_refs WHERE source_node_id IN ({placeholders})", tuple(old_nodes))
+        conn.execute(
+            f"DELETE FROM unresolved_refs WHERE source_node_id IN ({placeholders})",  # nosec B608 -- generated placeholders; values bound
+            tuple(old_nodes),
+        )
         conn.execute("DELETE FROM symbols WHERE path = ?", (relpath,))
 
     def _delete_missing(self, seen: set[str], digest: Any) -> int:

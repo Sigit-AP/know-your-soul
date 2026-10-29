@@ -492,7 +492,7 @@ class NameMatchResolver:
             for row in conn.execute(
                 "SELECT s.* FROM symbols s JOIN files f ON f.path = s.path "
                 "WHERE lower(s.name) = lower(?) AND f.language IN ({}) "
-                "ORDER BY s.path, s.line, s.col, s.node_id".format(", ".join("?" for _ in family)),
+                "ORDER BY s.path, s.line, s.col, s.node_id".format(", ".join("?" for _ in family)),  # nosec B608 -- generated placeholders; values bound
                 (ref.name_tail or ref.target_name, *sorted(family)),
             ).fetchall():
                 symbol = _symbol_row(row)
@@ -504,7 +504,7 @@ class NameMatchResolver:
                 rows = conn.execute(
                     "SELECT s.* FROM symbols s JOIN files f ON f.path = s.path "
                     "WHERE lower(s.name) LIKE ? ESCAPE '\\' AND f.language IN ({}) "
-                    "ORDER BY s.path, s.line, s.col, s.node_id LIMIT ?".format(", ".join("?" for _ in family)),
+                    "ORDER BY s.path, s.line, s.col, s.node_id LIMIT ?".format(", ".join("?" for _ in family)),  # nosec B608 -- generated placeholders; values bound
                     (f"%{_escape_like(segment.lower())}%", *sorted(family), cap + 1 - len(found)),
                 ).fetchall()
                 if len(rows) > cap - len(found):

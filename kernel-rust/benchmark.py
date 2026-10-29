@@ -81,10 +81,12 @@ def main() -> int:
         rust_json = kernel.extract_source(display, source, language, False)
         assert rust_json == python_json, f"{language}: kernel diverged — refusing to benchmark"
 
-        def run_python() -> None:
+        def run_python(
+            source: str = source, language: str = language, display: str = display
+        ) -> None:
             TreeSitterExtractor(get_spec(language)).extract(display, source)
 
-        def time_rust() -> None:
+        def time_rust(source: str = source, language: str = language, display: str = display) -> None:
             kernel.extract_source(display, source, language, False)
 
         python_ms = time_median(run_python, args.runs)
