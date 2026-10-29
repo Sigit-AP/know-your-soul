@@ -412,6 +412,7 @@ class EventStore:
             Path(self.db_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._adjacency_sql_cache: dict[tuple[str, tuple[str, ...]], str] = {}
+        self._savepoint_counter = 0
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute(f"PRAGMA busy_timeout = {int(busy_timeout_ms)}")
@@ -472,8 +473,30 @@ class EventStore:
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
-        """Serialize one write transaction (``BEGIN IMMEDIATE`` ... ``COMMIT``)."""
+        """Serialize one write transaction (``BEGIN IMMEDIATE`` ... ``COMMIT``).
+
+        Reentrant per thread: inside an outer transaction the context becomes
+        a ``SAVEPOINT`` scope instead of a nested ``BEGIN`` (which SQLite
+        rejects). This is the group-commit seam (W7 superpower server): one
+        outer transaction can join several high-level write operations into a
+        single fsync while every per-operation in-variant — audit journal,
+        failure path, idempotency dedup — keeps its own savepoint rollback
+        semantics. The single-writer RLock already serializes the thread
+        lattice, so a savepoint never escapes its outer scope.
+        """
         with self._lock:
+            if self._conn.in_transaction:
+                self._savepoint_counter += 1
+                name = f"kys_sp_{self._savepoint_counter}"
+                self._conn.execute(f"SAVEPOINT {name}")
+                try:
+                    yield self._conn
+                except BaseException:
+                    self._conn.execute(f"ROLLBACK TO {name}")
+                    self._conn.execute(f"RELEASE {name}")
+                    raise
+                self._conn.execute(f"RELEASE {name}")
+                return
             self._conn.execute("BEGIN IMMEDIATE")
             try:
                 yield self._conn

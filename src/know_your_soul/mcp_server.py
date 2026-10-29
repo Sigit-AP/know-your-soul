@@ -1095,52 +1095,58 @@ def main(argv: list[str] | None = None) -> int:
         print(f"know-your-soul-mcp: startup refused: {type(error).__name__}: {error}", file=sys.stderr)
         return 2
 
-    # The socket guard stays installed for the process lifetime: no code path
-    # may open an outbound connection. The import guard is proven at startup
-    # by ``verify_runtime`` but not left installed: the pinned Graphify
+    # The socket guard stays installed for the whole serving lifetime: no code
+    # path may open an outbound connection. The import guard is proven at
+    # startup by ``verify_runtime`` but not left installed: the pinned Graphify
     # distribution lazily probes optional extras with ``except ImportError``
     # fallbacks, and the guard's deliberate non-ImportError denial must not
-    # break those allowed-surface fallbacks.
-    runtime_guard.install_socket_guard()
+    # break those allowed-surface fallbacks. The guard IS uninstalled when
+    # ``main`` returns: serving is over, and embedding hosts (tests) must not
+    # inherit the process-wide patch.
+    socket_guard = runtime_guard.install_socket_guard()
 
-    if args.transport == "http":
-        # Wave-2 F6: a named env var keeps the key out of process argv.
-        api_key: str | None = args.api_key
-        if args.api_key_env is not None:
-            api_key = os.environ.get(args.api_key_env) or None
-            if api_key is None:
-                print(
-                    f"know-your-soul-mcp: environment variable {args.api_key_env} is not set or is empty",
-                    file=sys.stderr,
-                )
+    try:
+        if args.transport == "http":
+            # Wave-2 F6: a named env var keeps the key out of process argv.
+            api_key: str | None = args.api_key
+            if args.api_key_env is not None:
+                api_key = os.environ.get(args.api_key_env) or None
+                if api_key is None:
+                    print(
+                        f"know-your-soul-mcp: environment variable {args.api_key_env} is not set or is empty",
+                        file=sys.stderr,
+                    )
+                    return 2
+            try:
+                assert_bind_allowed(f"{args.host}:{args.port}", api_key=api_key)
+            except Exception as error:  # noqa: BLE001
+                print(f"know-your-soul-mcp: bind refused: {error}", file=sys.stderr)
                 return 2
-        try:
-            assert_bind_allowed(f"{args.host}:{args.port}", api_key=api_key)
-        except Exception as error:  # noqa: BLE001
-            print(f"know-your-soul-mcp: bind refused: {error}", file=sys.stderr)
-            return 2
-        import uvicorn
+            import uvicorn
 
-        # Wave-2 F3: the streamable-HTTP app is wrapped in the same boundary
-        # middleware as the Task 7 API — Host allowlist plus per-request API
-        # key authentication (a configured key gates loopback too). Final-audit
-        # S-6: boundary denials append the same aggregated tamper-evident audit
-        # events as the HTTP API, through the service's own store.
-        denial_recorder = BoundaryDenialRecorder(service._store)  # noqa: SLF001 - same-package wiring
-        app = BoundaryMiddleware(
-            server.streamable_http_app(),
-            api_key=api_key,
-            host_allowlist=DEFAULT_HOST_ALLOWLIST,
-            max_body_bytes=DEFAULT_MAX_PAYLOAD_BYTES,
-            denial_recorder=denial_recorder.record,
-        )
-        uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+            # Wave-2 F3: the streamable-HTTP app is wrapped in the same boundary
+            # middleware as the Task 7 API — Host allowlist plus per-request API
+            # key authentication (a configured key gates loopback too). Final-audit
+            # S-6: boundary denials append the same aggregated tamper-evident audit
+            # events as the HTTP API, through the service's own store.
+            denial_recorder = BoundaryDenialRecorder(service._store)  # noqa: SLF001 - same-package wiring
+            app = BoundaryMiddleware(
+                server.streamable_http_app(),
+                api_key=api_key,
+                host_allowlist=DEFAULT_HOST_ALLOWLIST,
+                max_body_bytes=DEFAULT_MAX_PAYLOAD_BYTES,
+                denial_recorder=denial_recorder.record,
+            )
+            uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+            return 0
+
+        import anyio
+
+        anyio.run(_serve_stdio, server)
         return 0
-
-    import anyio
-
-    anyio.run(_serve_stdio, server)
-    return 0
+    finally:
+        if socket_guard is not None:  # tests may stub install_socket_guard to None
+            socket_guard.uninstall()
 
 
 if __name__ == "__main__":  # pragma: no cover

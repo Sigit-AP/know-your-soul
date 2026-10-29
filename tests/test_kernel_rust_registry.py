@@ -23,13 +23,20 @@ EXPECTED_LANGUAGES = (
     "c",
     "cpp",
     "csharp",
+    "dart",
     "go",
+    "haskell",
     "java",
     "javascript",
+    "kotlin",
+    "lua",
+    "perl",
     "php",
     "python",
     "ruby",
     "rust",
+    "scala",
+    "swift",
     "typescript",
 )
 
@@ -93,7 +100,7 @@ def test_dump_tool_check_mode_exit_codes() -> None:
     assert proc.returncode == 0
 
 
-def test_registry_payload_covers_all_phase1_languages() -> None:
+def test_registry_payload_covers_all_supported_languages() -> None:
     payload = json.loads(REGISTRY_JSON.read_text(encoding="utf-8"))
     assert payload["format_version"] == 1
     assert tuple(sorted(payload["languages"])) == EXPECTED_LANGUAGES
@@ -103,6 +110,7 @@ def test_registry_payload_covers_all_phase1_languages() -> None:
     for name, spec in payload["languages"].items():
         assert spec["name"] == name
         assert spec["parser"], name
+        assert spec["engine"] in ("rust", "python"), name
         assert isinstance(spec["declaration_kinds"], list), name
         for node_type, kind in spec["declaration_kinds"]:
             assert isinstance(node_type, str) and isinstance(kind, str)

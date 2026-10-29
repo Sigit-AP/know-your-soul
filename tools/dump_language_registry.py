@@ -45,6 +45,7 @@ def build_registry() -> dict[str, object]:
             ],
             "container_types": [[node_type, field] for node_type, field in spec.container_types],
             "declaration_kinds": [[node_type, kind] for node_type, kind in spec.declaration_kinds],
+            "engine": spec.engine,
             "identifier_types": list(spec.identifier_types),
             "import_rules": [
                 {

@@ -155,6 +155,41 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="watcher snapshot path (default: alongside the store; must live outside the watched root)",
     )
+    # Wave-7 SUB-100: superpower server modes. Without these flags `serve`
+    # remains the HTTP/unix local API; with them it manages the detached
+    # multi-agent daemon or runs the thin MCP stdio proxy.
+    superpower = serve_parser.add_mutually_exclusive_group()
+    superpower.add_argument(
+        "--daemon",
+        action="store_true",
+        help="superpower: spawn the detached multi-agent daemon (double-fork/setsid) and exit",
+    )
+    superpower.add_argument(
+        "--proxy",
+        action="store_true",
+        help="superpower: run the thin MCP stdio proxy (auto-spawns the daemon)",
+    )
+    superpower.add_argument("--daemon-foreground", action="store_true", help=argparse.SUPPRESS)
+    serve_parser.add_argument(
+        "--max-agents", type=int, default=50, help="superpower: concurrent agent cap (default 50)"
+    )
+    serve_parser.add_argument(
+        "--read-pool-size", type=int, default=8, help="superpower: read-only pool size (default 8)"
+    )
+    serve_parser.add_argument(
+        "--idle-timeout",
+        type=float,
+        default=300.0,
+        help="superpower: seconds with no clients before the daemon exits (default 300)",
+    )
+
+    daemon_parser = subparsers.add_parser("daemon", help="superpower: inspect or stop the daemon bound to --store")
+    daemon_parser.add_argument("daemon_action", choices=("status", "stop"))
+    daemon_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="with stop: skip the drain window (queued work fails typed, daemon exits 2)",
+    )
 
     # ATM F-D1: operational export commands. These are OPS surface only —
     # they are NOT knowledge operations, never join KNOWLEDGE_OPERATIONS /
@@ -252,6 +287,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-permissions",
         action="store_true",
         help="skip the file-permission check (diagnose.check_permissions)",
+    )
+
+    # W7 SUB-101: loopback-only read-only web viewer. OPS surface only — not
+    # a knowledge operation, never dispatched over MCP/HTTP.
+    webview_parser = subparsers.add_parser(
+        "webview",
+        help="ops: open the loopback-only token-authenticated web viewer (not a knowledge op)",
+    )
+    webview_parser.add_argument(
+        "--port",
+        type=int,
+        default=0,
+        help="loopback port; 0 picks a free one (default)",
+    )
+    webview_parser.add_argument(
+        "--no-open",
+        action="store_true",
+        help="print the URL but do not open a browser",
     )
 
     # Wave-2 SUB-89: universal-graph ingestion. OPS surface only — NOT a
@@ -524,7 +577,69 @@ def _diagnose_command(args: argparse.Namespace) -> int:
     return ops_diagnose.exit_code(report)
 
 
+def _serve_superpower_command(args: argparse.Namespace) -> int:
+    """Wave-7 SUB-100: detached superpower daemon + thin MCP stdio proxy."""
+    import json as _json
+
+    from know_your_soul.serve.daemon_config import ConfigError, DaemonConfig
+    from know_your_soul.serve.superpower import DaemonUnavailable, run_daemon, spawn_daemon
+
+    try:
+        config = DaemonConfig(
+            db_path=args.store,
+            graph_root=args.output_root,
+            max_agents=args.max_agents,
+            read_pool_size=args.read_pool_size,
+            idle_timeout_seconds=args.idle_timeout,
+        )
+    except ConfigError as error:
+        _print_usage_error(f"invalid superpower configuration: {error}")
+        return 2
+    if args.daemon_foreground:
+        return run_daemon(config)
+    if args.proxy:
+        from know_your_soul.serve.proxy import run_proxy
+
+        return run_proxy(config, actor=args.actor)
+    if os.environ.get("KNOW_YOUR_SOUL_DAEMON_INTERNAL"):
+        print("know-your-soul serve --daemon: refusing recursive daemon spawn", file=sys.stderr)
+        return 2
+    try:
+        result = spawn_daemon(config)
+    except DaemonUnavailable as error:
+        print(f"know-your-soul serve --daemon: {error}", file=sys.stderr)
+        return 1
+    status = "already_running" if result.already_running else "started"
+    print(_json.dumps({"status": status, "pid": result.pid, "socket": str(result.socket_path)}, sort_keys=True))
+    return 0
+
+
+def _daemon_command(args: argparse.Namespace) -> int:
+    """Wave-7 SUB-100: `daemon status|stop` against the store's daemon."""
+    import json as _json
+
+    from know_your_soul.serve.daemon_config import ConfigError, DaemonConfig
+    from know_your_soul.serve.superpower import DaemonUnavailable, daemon_status, stop_daemon
+
+    try:
+        config = DaemonConfig(db_path=args.store, graph_root=args.output_root)
+    except ConfigError as error:
+        _print_usage_error(f"invalid superpower configuration: {error}")
+        return 2
+    if args.daemon_action == "status":
+        print(_json.dumps(daemon_status(config), indent=2, sort_keys=True))
+        return 0
+    try:
+        print(_json.dumps(stop_daemon(config, force=args.force), indent=2, sort_keys=True))
+    except DaemonUnavailable as error:
+        print(f"know-your-soul daemon stop: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def _serve_command(args: argparse.Namespace) -> int:
+    if args.daemon or args.proxy or args.daemon_foreground:
+        return _serve_superpower_command(args)
     socket_path: str | None = args.socket
     http: str | None = args.http
     if socket_path is None and http is None:
@@ -572,6 +687,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     command = str(args.command).replace("-", "_")
     if command == "serve":
         return _serve_command(args)
+    if command == "daemon":
+        return _daemon_command(args)
     if command in ("export", "analytics"):
         from know_your_soul.ops.export_cli import run_export_command
 
@@ -582,6 +699,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _metrics_command(args)
     if command == "diagnose":
         return _diagnose_command(args)
+    if command == "webview":
+        from know_your_soul.serve.webview import main as webview_main
+
+        webview_argv = ["--store", args.store, "--port", str(args.port)]
+        if not args.no_open:
+            webview_argv.append("--open")
+        return webview_main(webview_argv)
     if command == "ingest":
         from know_your_soul.ops.ingest_cli import run_ingest_command
 

@@ -1,0 +1,932 @@
+{
+  "baseline": "448c6781af9e9ec6ff70ed7d7560c8dc6fbcabdf347850925beeb2f83a765b30",
+  "dataset": {
+    "fetched": "2026-10-28",
+    "manifest": "8226dcd44108791f7fdb7b79e922e316a2ceb3a98f139f292d03e16738aa4dd4"
+  },
+  "gate": {
+    "correctness_ok": true,
+    "failures": [
+      "tree-sitter-python: stats.proposed 45 != baseline 43",
+      "tree-sitter-python: stats.failed 30 != baseline 32",
+      "tree-sitter-python: failed_files changed (baseline 32 entries, now 30; diff ['Package.swift [UNSUPPORTED_MEDIA_TYPE]', 'bindings/swift/TreeSitterPythonTests/TreeSitterPythonTests.swift [UNSUPPORTED_MEDIA_TYPE]'])",
+      "tree-sitter-python: nodes 1445 != baseline 1439",
+      "tree-sitter-python: edges 1557 != baseline 1547",
+      "tree-sitter-python: refs_total 2678 != baseline 2674",
+      "tree-sitter-python: refs_resolved 292 != baseline 288"
+    ],
+    "ok": false,
+    "regression": "FAIL (7 violations)"
+  },
+  "ground_truth": "de408df9d2720ad861cea884e10a73c661dfbde5515d007f2d84a8d6eb1762ff",
+  "repeats": 20,
+  "results": [
+    {
+      "determinism": {
+        "byte_identical": true,
+        "run_a_sha256": "fba6ee26c2424eca542982ea2c5378c4c220182f936ecb46f09d362924e4a6f7",
+        "run_b_sha256": "fba6ee26c2424eca542982ea2c5378c4c220182f936ecb46f09d362924e4a6f7"
+      },
+      "ingest": {
+        "dump_sha256": "fba6ee26c2424eca542982ea2c5378c4c220182f936ecb46f09d362924e4a6f7",
+        "edges": 18,
+        "extract_p50_ms": 0.6460010190494359,
+        "extract_p95_ms": 11.182753019966185,
+        "failed_files": [],
+        "files_per_s": 97.632,
+        "nodes": 10,
+        "ref_resolved_pct": 0.8,
+        "refs_failed": 2,
+        "refs_pending": 0,
+        "refs_resolved": 8,
+        "refs_total": 10,
+        "resolve_ms": 53.10465698130429,
+        "stats": {
+          "deleted": 0,
+          "failed": 0,
+          "proposed": 5,
+          "scanned": 5,
+          "skipped": 0
+        },
+        "tracemalloc_peak_bytes": 18736137,
+        "walk_ms": 51.21285002678633
+      },
+      "name": "fixture",
+      "queries": {
+        "hierarchy": {
+          "results": [
+            {
+              "actual": [
+                {
+                  "kind": "function",
+                  "name": "direct",
+                  "path": "pylib/api.py"
+                },
+                {
+                  "kind": "method",
+                  "name": "run",
+                  "path": "pylib/core.py"
+                }
+              ],
+              "depth": 1,
+              "direction": "callers",
+              "exact_match": true,
+              "expect": [
+                {
+                  "kind": "function",
+                  "name": "direct",
+                  "path": "pylib/api.py"
+                },
+                {
+                  "kind": "method",
+                  "name": "run",
+                  "path": "pylib/core.py"
+                }
+              ],
+              "file": "pylib/core.py",
+              "symbol": "base_helper"
+            },
+            {
+              "actual": [
+                {
+                  "kind": "class",
+                  "name": "Worker",
+                  "path": "pylib/core.py"
+                },
+                {
+                  "kind": "method",
+                  "name": "run",
+                  "path": "pylib/core.py"
+                }
+              ],
+              "depth": 1,
+              "direction": "callees",
+              "exact_match": true,
+              "expect": [
+                {
+                  "kind": "class",
+                  "name": "Worker",
+                  "path": "pylib/core.py"
+                },
+                {
+                  "kind": "method",
+                  "name": "run",
+                  "path": "pylib/core.py"
+                }
+              ],
+              "file": "pylib/api.py",
+              "symbol": "handle"
+            },
+            {
+              "actual": [
+                {
+                  "kind": "function",
+                  "name": "base_helper",
+                  "path": "pylib/core.py"
+                }
+              ],
+              "depth": 1,
+              "direction": "callees",
+              "exact_match": true,
+              "expect": [
+                {
+                  "kind": "function",
+                  "name": "base_helper",
+                  "path": "pylib/core.py"
+                }
+              ],
+              "file": "pylib/api.py",
+              "symbol": "direct"
+            },
+            {
+              "actual": [
+                {
+                  "kind": "function",
+                  "name": "main",
+                  "path": "jslib/main.js"
+                }
+              ],
+              "depth": 1,
+              "direction": "callers",
+              "exact_match": true,
+              "expect": [
+                {
+                  "kind": "function",
+                  "name": "main",
+                  "path": "jslib/main.js"
+                }
+              ],
+              "file": "jslib/util.js",
+              "symbol": "shout"
+            },
+            {
+              "actual": [
+                {
+                  "kind": "function",
+                  "name": "formatName",
+                  "path": "jslib/util.js"
+                }
+              ],
+              "depth": 1,
+              "direction": "callees",
+              "exact_match": true,
+              "expect": [
+                {
+                  "kind": "function",
+                  "name": "formatName",
+                  "path": "jslib/util.js"
+                }
+              ],
+              "file": "jslib/util.js",
+              "symbol": "shout"
+            },
+            {
+              "actual": [],
+              "depth": 1,
+              "direction": "callers",
+              "exact_match": true,
+              "expect": [],
+              "file": "jslib/main.js",
+              "symbol": "main"
+            }
+          ]
+        },
+        "lookups": {
+          "k": 10,
+          "repeats": 20,
+          "results": [
+            {
+              "expect": {
+                "kind": "class",
+                "name": "Worker",
+                "path": "pylib/core.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "class",
+                  "line": 9,
+                  "name": "Worker",
+                  "path": "pylib/core.py",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 1.5269439900293946,
+              "p95_ms": 9.758810978382826,
+              "query": "Worker",
+              "top1_ok": true
+            },
+            {
+              "expect": {
+                "kind": "function",
+                "name": "base_helper",
+                "path": "pylib/core.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "function",
+                  "line": 4,
+                  "name": "base_helper",
+                  "path": "pylib/core.py",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 0.9764339774847031,
+              "p95_ms": 1.5365160070359707,
+              "query": "base_helper",
+              "top1_ok": true
+            },
+            {
+              "expect": {
+                "kind": "function",
+                "name": "handle",
+                "path": "pylib/api.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "function",
+                  "line": 6,
+                  "name": "handle",
+                  "path": "pylib/api.py",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 0.9648649720475078,
+              "p95_ms": 1.3786870404146612,
+              "query": "handle",
+              "top1_ok": true
+            },
+            {
+              "expect": {
+                "kind": "function",
+                "name": "shout",
+                "path": "jslib/util.js"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "function",
+                  "line": 6,
+                  "name": "shout",
+                  "path": "jslib/util.js",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 0.9564140345901251,
+              "p95_ms": 1.7826870316639543,
+              "query": "shout",
+              "top1_ok": true
+            },
+            {
+              "expect": {
+                "kind": "function",
+                "name": "formatName",
+                "path": "jslib/util.js"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "function",
+                  "line": 2,
+                  "name": "formatName",
+                  "path": "jslib/util.js",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 1.573566987644881,
+              "p95_ms": 4.317180020734668,
+              "query": "formatName",
+              "top1_ok": true
+            },
+            {
+              "expect": null,
+              "hit_at_k": true,
+              "hits": [],
+              "p50_ms": 1.2000789865851402,
+              "p95_ms": 1.579391013365239,
+              "query": "zzz_no_such_symbol",
+              "top1_ok": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "determinism": {
+        "byte_identical": true,
+        "run_a_sha256": "1bf6751846f42a2f03599d51ef2ab121a786e51a0e1428fe6ed92033786f6d43",
+        "run_b_sha256": "1bf6751846f42a2f03599d51ef2ab121a786e51a0e1428fe6ed92033786f6d43"
+      },
+      "ingest": {
+        "dump_sha256": "1bf6751846f42a2f03599d51ef2ab121a786e51a0e1428fe6ed92033786f6d43",
+        "edges": 2832,
+        "extract_p50_ms": 2.0113070495426655,
+        "extract_p95_ms": 22.63693296117708,
+        "failed_files": [
+          ".coveragerc [UNSUPPORTED_MEDIA_TYPE]",
+          ".git-blame-ignore-revs [UNSUPPORTED_MEDIA_TYPE]",
+          ".github/FUNDING.yml [UNSUPPORTED_MEDIA_TYPE]",
+          ".github/dependabot.yml [UNSUPPORTED_MEDIA_TYPE]",
+          ".github/workflows/close-issues.yml [UNSUPPORTED_MEDIA_TYPE]",
+          ".github/workflows/codeql-analysis.yml [UNSUPPORTED_MEDIA_TYPE]",
+          ".github/workflows/lint.yml [UNSUPPORTED_MEDIA_TYPE]",
+          ".github/workflows/lock-issues.yml [UNSUPPORTED_MEDIA_TYPE]",
+          ".github/workflows/run-tests.yml [UNSUPPORTED_MEDIA_TYPE]",
+          ".gitignore [UNSUPPORTED_MEDIA_TYPE]",
+          ".pre-commit-config.yaml [UNSUPPORTED_MEDIA_TYPE]",
+          ".readthedocs.yaml [UNSUPPORTED_MEDIA_TYPE]",
+          "AUTHORS.rst [UNSUPPORTED_MEDIA_TYPE]",
+          "LICENSE [UNSUPPORTED_MEDIA_TYPE]",
+          "MANIFEST.in [UNSUPPORTED_MEDIA_TYPE]",
+          "Makefile [UNSUPPORTED_MEDIA_TYPE]",
+          "NOTICE [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/.nojekyll [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/Makefile [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/_static/custom.css [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/_static/requests-sidebar.png [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/_templates/hacks.html [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/_templates/sidebarintro.html [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/_templates/sidebarlogo.html [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/_themes/.gitignore [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/_themes/LICENSE [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/api.rst [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/community/faq.rst [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/community/out-there.rst [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/community/recommended.rst [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/community/release-process.rst [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/community/support.rst [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/community/updates.rst [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/community/vulnerabilities.rst [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/dev/authors.rst [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/dev/contributing.rst [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/index.rst [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/make.bat [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/user/advanced.rst [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/user/authentication.rst [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/user/install.rst [UNSUPPORTED_MEDIA_TYPE]",
+          "docs/user/quickstart.rst [UNSUPPORTED_MEDIA_TYPE]",
+          "ext/LICENSE [UNSUPPORTED_MEDIA_TYPE]",
+          "ext/flower-of-life.jpg [UNSUPPORTED_MEDIA_TYPE]",
+          "ext/kr-compressed.png [UNSUPPORTED_MEDIA_TYPE]",
+          "ext/kr.png [UNSUPPORTED_MEDIA_TYPE]",
+          "ext/psf-compressed.png [UNSUPPORTED_MEDIA_TYPE]",
+          "ext/psf.png [UNSUPPORTED_MEDIA_TYPE]",
+          "ext/requests-logo-compressed.png [UNSUPPORTED_MEDIA_TYPE]",
+          "ext/requests-logo.ai [UNSUPPORTED_MEDIA_TYPE]",
+          "ext/requests-logo.png [UNSUPPORTED_MEDIA_TYPE]",
+          "ext/requests-logo.svg [UNSUPPORTED_MEDIA_TYPE]",
+          "ext/ss-compressed.png [UNSUPPORTED_MEDIA_TYPE]",
+          "ext/ss.png [UNSUPPORTED_MEDIA_TYPE]",
+          "pyproject.toml [UNSUPPORTED_MEDIA_TYPE]",
+          "setup.cfg [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/expired/Makefile [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/expired/ca/Makefile [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/expired/ca/ca-private.key [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/expired/ca/ca.cnf [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/expired/ca/ca.crt [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/expired/ca/ca.srl [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/expired/server/Makefile [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/expired/server/cert.cnf [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/expired/server/server.csr [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/expired/server/server.key [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/expired/server/server.pem [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/mtls/Makefile [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/mtls/client/Makefile [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/mtls/client/cert.cnf [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/mtls/client/client.csr [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/mtls/client/client.key [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/mtls/client/client.pem [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/valid/server/Makefile [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/valid/server/cert.cnf [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/valid/server/server.csr [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/valid/server/server.key [UNSUPPORTED_MEDIA_TYPE]",
+          "tests/certs/valid/server/server.pem [UNSUPPORTED_MEDIA_TYPE]",
+          "tox.ini [UNSUPPORTED_MEDIA_TYPE]"
+        ],
+        "files_per_s": 4.197,
+        "nodes": 1804,
+        "ref_resolved_pct": 0.40284,
+        "refs_failed": 1724,
+        "refs_pending": 0,
+        "refs_resolved": 1163,
+        "refs_total": 2887,
+        "resolve_ms": 2062.251686002128,
+        "stats": {
+          "deleted": 0,
+          "failed": 79,
+          "proposed": 50,
+          "scanned": 129,
+          "skipped": 0
+        },
+        "tracemalloc_peak_bytes": 12315017,
+        "walk_ms": 11913.46389602404
+      },
+      "name": "requests",
+      "queries": {
+        "hierarchy": {
+          "results": [
+            {
+              "actual": [
+                {
+                  "kind": "method",
+                  "name": "request",
+                  "path": "src/requests/sessions.py"
+                },
+                {
+                  "kind": "method",
+                  "name": "test_env_cert_bundles",
+                  "path": "tests/test_requests.py"
+                }
+              ],
+              "depth": 1,
+              "direction": "callers",
+              "exact_match": true,
+              "expect": [
+                {
+                  "kind": "method",
+                  "name": "request",
+                  "path": "src/requests/sessions.py"
+                },
+                {
+                  "kind": "method",
+                  "name": "test_env_cert_bundles",
+                  "path": "tests/test_requests.py"
+                }
+              ],
+              "file": "src/requests/sessions.py",
+              "symbol": "merge_environment_settings"
+            }
+          ]
+        },
+        "lookups": {
+          "k": 10,
+          "repeats": 20,
+          "results": [
+            {
+              "expect": {
+                "name": "Session",
+                "path": "src/requests/sessions.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "class",
+                  "line": 356,
+                  "name": "Session",
+                  "path": "src/requests/sessions.py",
+                  "source": "exact"
+                },
+                {
+                  "kind": "function",
+                  "line": 819,
+                  "name": "session",
+                  "path": "src/requests/sessions.py",
+                  "source": "exact"
+                },
+                {
+                  "kind": "class",
+                  "line": 106,
+                  "name": "SessionRedirectMixin",
+                  "path": "src/requests/sessions.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 1585,
+                  "name": "test_session_pickling",
+                  "path": "tests/test_requests.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 1205,
+                  "name": "test_prepared_from_session",
+                  "path": "tests/test_requests.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 2155,
+                  "name": "test_session_close_proxy_clear",
+                  "path": "tests/test_requests.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 407,
+                  "name": "test_request_cookie_overrides_session_cookie",
+                  "path": "tests/test_requests.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 765,
+                  "name": "test_DIGEST_AUTH_SETS_SESSION_COOKIES",
+                  "path": "tests/test_requests.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 1651,
+                  "name": "test_session_get_adapter_prefix_matching",
+                  "path": "tests/test_requests.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 2137,
+                  "name": "test_unconsumed_session_response_closes_connection",
+                  "path": "tests/test_requests.py",
+                  "source": "fts"
+                }
+              ],
+              "p50_ms": 12.299930036533624,
+              "p95_ms": 19.791678001638502,
+              "query": "Session",
+              "top1_ok": null
+            },
+            {
+              "expect": {
+                "name": "session",
+                "path": "src/requests/sessions.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "class",
+                  "line": 356,
+                  "name": "Session",
+                  "path": "src/requests/sessions.py",
+                  "source": "exact"
+                },
+                {
+                  "kind": "function",
+                  "line": 819,
+                  "name": "session",
+                  "path": "src/requests/sessions.py",
+                  "source": "exact"
+                },
+                {
+                  "kind": "class",
+                  "line": 106,
+                  "name": "SessionRedirectMixin",
+                  "path": "src/requests/sessions.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 1585,
+                  "name": "test_session_pickling",
+                  "path": "tests/test_requests.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 1205,
+                  "name": "test_prepared_from_session",
+                  "path": "tests/test_requests.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 2155,
+                  "name": "test_session_close_proxy_clear",
+                  "path": "tests/test_requests.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 407,
+                  "name": "test_request_cookie_overrides_session_cookie",
+                  "path": "tests/test_requests.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 765,
+                  "name": "test_DIGEST_AUTH_SETS_SESSION_COOKIES",
+                  "path": "tests/test_requests.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 1651,
+                  "name": "test_session_get_adapter_prefix_matching",
+                  "path": "tests/test_requests.py",
+                  "source": "fts"
+                },
+                {
+                  "kind": "method",
+                  "line": 2137,
+                  "name": "test_unconsumed_session_response_closes_connection",
+                  "path": "tests/test_requests.py",
+                  "source": "fts"
+                }
+              ],
+              "p50_ms": 8.709941990673542,
+              "p95_ms": 20.20756498677656,
+              "query": "session",
+              "top1_ok": null
+            },
+            {
+              "expect": {
+                "name": "PreparedRequest",
+                "path": "src/requests/models.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "class",
+                  "line": 313,
+                  "name": "PreparedRequest",
+                  "path": "src/requests/models.py",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 1.9594249897636473,
+              "p95_ms": 11.68462901841849,
+              "query": "PreparedRequest",
+              "top1_ok": null
+            },
+            {
+              "expect": {
+                "name": "merge_environment_settings",
+                "path": "src/requests/sessions.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "method",
+                  "line": 750,
+                  "name": "merge_environment_settings",
+                  "path": "src/requests/sessions.py",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 2.291269018314779,
+              "p95_ms": 13.85962899075821,
+              "query": "merge_environment_settings",
+              "top1_ok": null
+            },
+            {
+              "expect": {
+                "name": "HTTPAdapter",
+                "path": "src/requests/adapters.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "class",
+                  "line": 167,
+                  "name": "HTTPAdapter",
+                  "path": "src/requests/adapters.py",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 2.3493379703722894,
+              "p95_ms": 10.75320300878957,
+              "query": "HTTPAdapter",
+              "top1_ok": null
+            },
+            {
+              "expect": {
+                "name": "SessionRedirectMixin",
+                "path": "src/requests/sessions.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "class",
+                  "line": 106,
+                  "name": "SessionRedirectMixin",
+                  "path": "src/requests/sessions.py",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 3.6819149972870946,
+              "p95_ms": 19.98665399150923,
+              "query": "SessionRedirectMixin",
+              "top1_ok": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "determinism": {
+        "byte_identical": true,
+        "run_a_sha256": "60fb861ef1e13c12885a24c8b8e104fb4c36095a6647b7427c4ed4c3853be3c9",
+        "run_b_sha256": "60fb861ef1e13c12885a24c8b8e104fb4c36095a6647b7427c4ed4c3853be3c9"
+      },
+      "ingest": {
+        "dump_sha256": "60fb861ef1e13c12885a24c8b8e104fb4c36095a6647b7427c4ed4c3853be3c9",
+        "edges": 321,
+        "extract_p50_ms": 2.408240980003029,
+        "extract_p95_ms": 15.9500339650549,
+        "failed_files": [
+          ".editorconfig [UNSUPPORTED_MEDIA_TYPE]",
+          ".gitattributes [UNSUPPORTED_MEDIA_TYPE]",
+          ".github/funding.yml [UNSUPPORTED_MEDIA_TYPE]",
+          ".github/workflows/main.yml [UNSUPPORTED_MEDIA_TYPE]",
+          ".gitignore [UNSUPPORTED_MEDIA_TYPE]",
+          ".npmrc [UNSUPPORTED_MEDIA_TYPE]",
+          "license [UNSUPPORTED_MEDIA_TYPE]",
+          "media/logo.png [UNSUPPORTED_MEDIA_TYPE]",
+          "media/logo.svg [UNSUPPORTED_MEDIA_TYPE]",
+          "media/screenshot.png [UNSUPPORTED_MEDIA_TYPE]",
+          "package.json [UNSUPPORTED_MEDIA_TYPE]"
+        ],
+        "files_per_s": 38.94,
+        "nodes": 252,
+        "ref_resolved_pct": 0.144695,
+        "refs_failed": 532,
+        "refs_pending": 0,
+        "refs_resolved": 90,
+        "refs_total": 622,
+        "resolve_ms": 292.99128998536617,
+        "stats": {
+          "deleted": 0,
+          "failed": 11,
+          "proposed": 23,
+          "scanned": 34,
+          "skipped": 0
+        },
+        "tracemalloc_peak_bytes": 1152705,
+        "walk_ms": 590.6485560117289
+      },
+      "name": "chalk",
+      "queries": {
+        "lookups": {
+          "k": 10,
+          "repeats": 20,
+          "results": [
+            {
+              "expect": {
+                "name": "createChalk",
+                "path": "source/index.js"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "function",
+                  "line": 50,
+                  "name": "createChalk",
+                  "path": "source/index.js",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 1.2701950035989285,
+              "p95_ms": 10.209178959485143,
+              "query": "createChalk",
+              "top1_ok": null
+            },
+            {
+              "expect": {
+                "name": "applyOptions",
+                "path": "source/index.js"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "function",
+                  "line": 24,
+                  "name": "applyOptions",
+                  "path": "source/index.js",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 1.7657279968261719,
+              "p95_ms": 5.713826976716518,
+              "query": "applyOptions",
+              "top1_ok": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "determinism": {
+        "byte_identical": true,
+        "run_a_sha256": "e2994573736261803914ac6855ba4e4f44a39d67a9fc9effc21890b7b4100a6c",
+        "run_b_sha256": "e2994573736261803914ac6855ba4e4f44a39d67a9fc9effc21890b7b4100a6c"
+      },
+      "ingest": {
+        "dump_sha256": "e2994573736261803914ac6855ba4e4f44a39d67a9fc9effc21890b7b4100a6c",
+        "edges": 1557,
+        "extract_p50_ms": 1.4739219914190471,
+        "extract_p95_ms": 75.36593300756067,
+        "failed_files": [
+          ".editorconfig [UNSUPPORTED_MEDIA_TYPE]",
+          ".gitattributes [UNSUPPORTED_MEDIA_TYPE]",
+          ".github/ISSUE_TEMPLATE/bug_report.yml [UNSUPPORTED_MEDIA_TYPE]",
+          ".github/ISSUE_TEMPLATE/config.yml [UNSUPPORTED_MEDIA_TYPE]",
+          ".github/ISSUE_TEMPLATE/feature_request.yml [UNSUPPORTED_MEDIA_TYPE]",
+          ".github/workflows/ci.yml [UNSUPPORTED_MEDIA_TYPE]",
+          ".github/workflows/fuzz.yml [UNSUPPORTED_MEDIA_TYPE]",
+          ".github/workflows/lint.yml [UNSUPPORTED_MEDIA_TYPE]",
+          ".github/workflows/publish.yml [UNSUPPORTED_MEDIA_TYPE]",
+          ".gitignore [UNSUPPORTED_MEDIA_TYPE]",
+          "Cargo.lock [UNSUPPORTED_MEDIA_TYPE]",
+          "Cargo.toml [UNSUPPORTED_MEDIA_TYPE]",
+          "LICENSE [UNSUPPORTED_MEDIA_TYPE]",
+          "Makefile [UNSUPPORTED_MEDIA_TYPE]",
+          "Package.resolved [UNSUPPORTED_MEDIA_TYPE]",
+          "binding.gyp [UNSUPPORTED_MEDIA_TYPE]",
+          "bindings/c/tree-sitter-python.pc.in [UNSUPPORTED_MEDIA_TYPE]",
+          "bindings/python/tree_sitter_python/__init__.pyi [UNSUPPORTED_MEDIA_TYPE]",
+          "bindings/python/tree_sitter_python/py.typed [UNSUPPORTED_MEDIA_TYPE]",
+          "go.mod [UNSUPPORTED_MEDIA_TYPE]",
+          "go.sum [UNSUPPORTED_MEDIA_TYPE]",
+          "package-lock.json [UNSUPPORTED_MEDIA_TYPE]",
+          "package.json [UNSUPPORTED_MEDIA_TYPE]",
+          "pyproject.toml [UNSUPPORTED_MEDIA_TYPE]",
+          "queries/highlights.scm [UNSUPPORTED_MEDIA_TYPE]",
+          "queries/tags.scm [UNSUPPORTED_MEDIA_TYPE]",
+          "src/grammar.json [UNSUPPORTED_MEDIA_TYPE]",
+          "src/node-types.json [UNSUPPORTED_MEDIA_TYPE]",
+          "src/parser.c [FILE_TOO_LARGE]",
+          "tree-sitter.json [UNSUPPORTED_MEDIA_TYPE]"
+        ],
+        "files_per_s": 4.455,
+        "nodes": 1445,
+        "ref_resolved_pct": 0.109037,
+        "refs_failed": 2386,
+        "refs_pending": 0,
+        "refs_resolved": 292,
+        "refs_total": 2678,
+        "resolve_ms": 3042.148887005169,
+        "stats": {
+          "deleted": 0,
+          "failed": 30,
+          "proposed": 45,
+          "scanned": 75,
+          "skipped": 0
+        },
+        "tracemalloc_peak_bytes": 12996720,
+        "walk_ms": 10101.134883996565
+      },
+      "name": "tree-sitter-python",
+      "queries": {
+        "lookups": {
+          "k": 10,
+          "repeats": 20,
+          "results": [
+            {
+              "expect": {
+                "name": "new_delimiter",
+                "path": "src/scanner.c"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "function",
+                  "line": 38,
+                  "name": "new_delimiter",
+                  "path": "src/scanner.c",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 8.619914995506406,
+              "p95_ms": 26.944700977765024,
+              "query": "new_delimiter",
+              "top1_ok": null
+            },
+            {
+              "expect": {
+                "name": "_get_query",
+                "path": "bindings/python/tree_sitter_python/__init__.py"
+              },
+              "hit_at_k": true,
+              "hits": [
+                {
+                  "kind": "function",
+                  "line": 8,
+                  "name": "_get_query",
+                  "path": "bindings/python/tree_sitter_python/__init__.py",
+                  "source": "exact"
+                }
+              ],
+              "p50_ms": 7.297038042452186,
+              "p95_ms": 19.045288034249097,
+              "query": "_get_query",
+              "top1_ok": null
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "stamp": "20261028T220828Z",
+  "suite": "codebase",
+  "summary": {
+    "determinism_ok": true,
+    "hierarchy_exact": 7,
+    "hierarchy_total": 7,
+    "lookup_hit_at_k": 15,
+    "lookup_top1_ok": 15,
+    "lookup_total": 15,
+    "negative_ok": true
+  }
+}

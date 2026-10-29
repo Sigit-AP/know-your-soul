@@ -16,6 +16,13 @@ auditable graph — scored, versioned, and impossible to change without your
 approval. No model, no embeddings, no provider calls inside. The AI stays on
 the agent side; this is the part that never guesses.
 
+New in 0.3.0: a **superpower server** — a multi-agent daemon that serves up to
+50 concurrent agents (read pool + single writer with group commit, per-agent
+fairness, typed backpressure under overload, crash-safe journaling) plus a
+**web view** (`know-your-soul webview`) with an interactive graph, search,
+metrics, health, analytics, and audit tabs. Code ingestion now covers
+**19 languages**.
+
 New in 0.2.0: the graph is no longer limited to curated knowledge. Point it at
 any folder and it ingests source code in twelve languages (through a Rust
 tree-sitter kernel, byte-identical to the Python reference), PDFs, markdown,

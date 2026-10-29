@@ -20,7 +20,7 @@ from know_your_soul.ingest.extractor import (
     extract_file,
     extract_source,
 )
-from know_your_soul.ingest.languages import EXTENSION_MAP
+from know_your_soul.ingest.languages import EXTENSION_MAP, get_spec
 
 FIXTURES = Path(__file__).parent / "fixtures" / "ingest"
 
@@ -98,6 +98,48 @@ LANGUAGE_CASES: dict[str, tuple[str, frozenset[str], frozenset[str], frozenset[s
         frozenset(),
         frozenset({"format_name", "top_level"}),
         frozenset({"./lib.sh", "other.sh"}),
+    ),
+    "kotlin": (
+        "kotlin/sample.kt",
+        frozenset({"class"}),
+        frozenset({"greet", "helper", "topLevel"}),
+        frozenset({"kotlin.collections.List", "java.util.Objects.requireNonNull"}),
+    ),
+    "swift": (
+        "swift/sample.swift",
+        frozenset({"class", "interface"}),
+        frozenset({"greet", "helper", "topLevel"}),
+        frozenset({"Foundation", "UIKit"}),
+    ),
+    "scala": (
+        "scala/sample.scala",
+        frozenset({"class", "interface"}),
+        frozenset({"greet", "helper", "topLevel"}),
+        frozenset({"scala.collection.mutable.ListBuffer", "java.util.Objects.requireNonNull"}),
+    ),
+    "lua": (
+        "lua/sample.lua",
+        frozenset(),
+        frozenset({"greet", "helper", "top_level"}),
+        frozenset({"json", "mod"}),
+    ),
+    "dart": (
+        "dart/sample.dart",
+        frozenset({"class"}),
+        frozenset({"greet", "walk", "helper", "topLevel"}),
+        frozenset({"dart:async", "package:foo/foo.dart"}),
+    ),
+    "haskell": (
+        "haskell/sample.hs",
+        frozenset({"type", "interface"}),
+        frozenset({"greet", "greetName", "helper", "topLevel"}),
+        frozenset({"Data.List", "Data.Map"}),
+    ),
+    "perl": (
+        "perl/sample.pl",
+        frozenset(),
+        frozenset({"greet", "helper", "top_level"}),
+        frozenset({"strict", "JSON::PP"}),
     ),
 }
 
@@ -225,8 +267,14 @@ def test_import_nodes_created(language: str):
 
 @ALL
 def test_call_refs_emitted(language: str):
+    """Languages with declared ``call_types`` must emit call refs on their
+    fixture; languages whose grammar exposes no callee field (empty
+    ``call_types`` — kotlin/swift/dart) must emit none."""
     calls = [ref for ref in extract_fixture(language).unresolved_refs if ref.kind == "calls"]
-    assert calls, f"{language}: no call refs"
+    if get_spec(language).call_types:
+        assert calls, f"{language}: no call refs"
+    else:
+        assert not calls, f"{language}: unexpected call refs with empty call_types"
 
 
 @ALL

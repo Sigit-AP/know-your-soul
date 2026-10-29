@@ -1,11 +1,11 @@
 {
-  "created": "20261028T053359Z",
+  "created": "20261028T220828Z",
   "note": "counts are a STRICT gate (truth), timings a LOOSE gate (10.0x + 250.0ms slack, machine jitter); refresh with: uv run python bench/codebase/run.py run --update-baseline",
   "targets": {
     "chalk": {
       "edges": 321,
-      "extract_p50_ms": 2.3702129838056862,
-      "extract_p95_ms": 8.906972012482584,
+      "extract_p50_ms": 2.408240980003029,
+      "extract_p95_ms": 15.9500339650549,
       "failed_files": [
         ".editorconfig [UNSUPPORTED_MEDIA_TYPE]",
         ".gitattributes [UNSUPPORTED_MEDIA_TYPE]",
@@ -24,7 +24,7 @@
       "refs_pending": 0,
       "refs_resolved": 90,
       "refs_total": 622,
-      "resolve_ms": 283.1087170052342,
+      "resolve_ms": 292.99128998536617,
       "stats": {
         "deleted": 0,
         "failed": 11,
@@ -32,19 +32,19 @@
         "scanned": 34,
         "skipped": 0
       },
-      "walk_ms": 450.48396999482065
+      "walk_ms": 590.6485560117289
     },
     "fixture": {
       "edges": 18,
-      "extract_p50_ms": 0.49168599070981145,
-      "extract_p95_ms": 8.498708019033074,
+      "extract_p50_ms": 0.6460010190494359,
+      "extract_p95_ms": 11.182753019966185,
       "failed_files": [],
       "nodes": 10,
       "refs_failed": 2,
       "refs_pending": 0,
       "refs_resolved": 8,
       "refs_total": 10,
-      "resolve_ms": 30.647138017229736,
+      "resolve_ms": 53.10465698130429,
       "stats": {
         "deleted": 0,
         "failed": 0,
@@ -52,12 +52,12 @@
         "scanned": 5,
         "skipped": 0
       },
-      "walk_ms": 25.686776032671332
+      "walk_ms": 51.21285002678633
     },
     "requests": {
       "edges": 2832,
-      "extract_p50_ms": 2.7994599658995867,
-      "extract_p95_ms": 26.59237402258441,
+      "extract_p50_ms": 2.0113070495426655,
+      "extract_p95_ms": 22.63693296117708,
       "failed_files": [
         ".coveragerc [UNSUPPORTED_MEDIA_TYPE]",
         ".git-blame-ignore-revs [UNSUPPORTED_MEDIA_TYPE]",
@@ -144,7 +144,7 @@
       "refs_pending": 0,
       "refs_resolved": 1163,
       "refs_total": 2887,
-      "resolve_ms": 1630.3130150190555,
+      "resolve_ms": 2062.251686002128,
       "stats": {
         "deleted": 0,
         "failed": 79,
@@ -152,12 +152,12 @@
         "scanned": 129,
         "skipped": 0
       },
-      "walk_ms": 9134.546359011438
+      "walk_ms": 11913.46389602404
     },
     "tree-sitter-python": {
-      "edges": 1547,
-      "extract_p50_ms": 1.064798969309777,
-      "extract_p95_ms": 41.03149601723999,
+      "edges": 1557,
+      "extract_p50_ms": 1.4739219914190471,
+      "extract_p95_ms": 75.36593300756067,
       "failed_files": [
         ".editorconfig [UNSUPPORTED_MEDIA_TYPE]",
         ".gitattributes [UNSUPPORTED_MEDIA_TYPE]",
@@ -174,12 +174,10 @@
         "LICENSE [UNSUPPORTED_MEDIA_TYPE]",
         "Makefile [UNSUPPORTED_MEDIA_TYPE]",
         "Package.resolved [UNSUPPORTED_MEDIA_TYPE]",
-        "Package.swift [UNSUPPORTED_MEDIA_TYPE]",
         "binding.gyp [UNSUPPORTED_MEDIA_TYPE]",
         "bindings/c/tree-sitter-python.pc.in [UNSUPPORTED_MEDIA_TYPE]",
         "bindings/python/tree_sitter_python/__init__.pyi [UNSUPPORTED_MEDIA_TYPE]",
         "bindings/python/tree_sitter_python/py.typed [UNSUPPORTED_MEDIA_TYPE]",
-        "bindings/swift/TreeSitterPythonTests/TreeSitterPythonTests.swift [UNSUPPORTED_MEDIA_TYPE]",
         "go.mod [UNSUPPORTED_MEDIA_TYPE]",
         "go.sum [UNSUPPORTED_MEDIA_TYPE]",
         "package-lock.json [UNSUPPORTED_MEDIA_TYPE]",
@@ -192,20 +190,20 @@
         "src/parser.c [FILE_TOO_LARGE]",
         "tree-sitter.json [UNSUPPORTED_MEDIA_TYPE]"
       ],
-      "nodes": 1439,
+      "nodes": 1445,
       "refs_failed": 2386,
       "refs_pending": 0,
-      "refs_resolved": 288,
-      "refs_total": 2674,
-      "resolve_ms": 1267.5038300221786,
+      "refs_resolved": 292,
+      "refs_total": 2678,
+      "resolve_ms": 3042.148887005169,
       "stats": {
         "deleted": 0,
-        "failed": 32,
-        "proposed": 43,
+        "failed": 30,
+        "proposed": 45,
         "scanned": 75,
         "skipped": 0
       },
-      "walk_ms": 6598.731287987903
+      "walk_ms": 10101.134883996565
     }
   },
   "version": 1

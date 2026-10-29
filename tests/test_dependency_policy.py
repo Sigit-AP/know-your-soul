@@ -179,7 +179,7 @@ def test_lock_is_a_v1_uv_lock(lock: dict, locked_packages: dict[str, dict]) -> N
     assert lock.get("version") == 1
     assert lock.get("requires-python") == LOCKED_PYTHON
     assert PROJECT_NAME in locked_packages
-    assert locked_packages[PROJECT_NAME]["version"] == "0.2.0"
+    assert locked_packages[PROJECT_NAME]["version"] == "0.3.0"
 
 
 def test_lock_pins_graphify_with_hash(locked_packages: dict[str, dict]) -> None:

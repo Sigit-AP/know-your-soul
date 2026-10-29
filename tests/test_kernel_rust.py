@@ -42,6 +42,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 KERNEL_TARGET = REPO_ROOT / "kernel-rust" / "target"
 
 ALL_LANGUAGES = supported_languages()
+#: Dual-engine languages (kernel + Python reference, byte-identical by gate).
+#: Languages with ``engine == "python"`` (e.g. dart — no crates.io grammar
+#: parse-identical to the bundled revision, docs/recovery/w7-languages.md)
+#: are served by the Python walker through the bridge's fallback path.
+DUAL_ENGINE_LANGUAGES = tuple(name for name in ALL_LANGUAGES if get_spec(name).engine == "rust")
+PYTHON_FALLBACK_LANGUAGES = tuple(name for name in ALL_LANGUAGES if get_spec(name).engine == "python")
 
 
 def _kernel_required() -> None:
@@ -80,7 +86,7 @@ def _python_walker_reference(relative: str):
     return TreeSitterExtractor(get_spec(relative.split("/", 1)[0])).extract(relative, source)
 
 
-@pytest.mark.parametrize("language", ALL_LANGUAGES)
+@pytest.mark.parametrize("language", DUAL_ENGINE_LANGUAGES)
 def test_bridge_matches_python_byte_identical(language: str) -> None:
     """Raw ``ExtractionResult`` from the kernel equals the Python walker's.
 
@@ -96,7 +102,7 @@ def test_bridge_matches_python_byte_identical(language: str) -> None:
     assert rust_result.canonical_json() == python_result.canonical_json()
 
 
-@pytest.mark.parametrize("language", ALL_LANGUAGES)
+@pytest.mark.parametrize("language", DUAL_ENGINE_LANGUAGES)
 def test_cli_matches_python_byte_identical(language: str) -> None:
     cli = _kernel_cli()
     relative = _fixture_rel(language)
@@ -160,8 +166,35 @@ def test_cli_rejects_invalid_utf8(tmp_path: Path) -> None:
 
 
 def test_kernel_reports_supported_languages() -> None:
+    """The kernel serves exactly the dual-engine (``engine == "rust"``) set."""
     _kernel_required()
-    assert tuple(kernel_bridge.kernel_supported_languages()) == ALL_LANGUAGES
+    assert tuple(kernel_bridge.kernel_supported_languages()) == DUAL_ENGINE_LANGUAGES
+
+
+@pytest.mark.parametrize("language", PYTHON_FALLBACK_LANGUAGES)
+def test_python_fallback_language_not_served_by_kernel(language: str) -> None:
+    """Python-fallback languages are absent from the kernel's served set…"""
+    _kernel_required()
+    assert language not in kernel_bridge.kernel_supported_languages()
+
+
+@pytest.mark.parametrize("language", PYTHON_FALLBACK_LANGUAGES)
+def test_python_fallback_language_routes_to_reference(language: str) -> None:
+    """…and ``extract_source`` still answers via the Python walker fallback.
+
+    The kernel has no compiled grammar for these parsers, so the bridge's
+    documented fallback re-runs the reference walker; the observable result
+    must equal the direct Python walker's, byte-identically.
+    """
+    _kernel_required()
+    relative = _fixture_rel(language)
+    expected = _python_walker_reference(relative)
+    from know_your_soul.ingest.extractor import extract_source
+
+    source = (FIXTURES / relative).read_text(encoding="utf-8")
+    result = extract_source(relative, source, language=language)
+    assert result == expected
+    assert result.canonical_json() == expected.canonical_json()
 
 
 def test_kernel_make_node_id_matches_python() -> None:

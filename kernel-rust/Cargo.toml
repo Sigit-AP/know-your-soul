@@ -13,6 +13,20 @@ publish = false
 # grammar src/ tree at the bundled rev against every tag); those are pinned
 # with "=" below. python/cpp/csharp changed grammar rules after their last
 # crates.io release, so they are pinned to the exact bundled git revisions.
+#
+# W7 (SUB-102, docs/recovery/w7-languages.md): six more grammars verified the
+# same way against the 1.22.1 provenance manifest. Only haskell has a
+# crates.io release whose src/ tree is byte-identical to the bundled rev
+# (0.24.1); kotlin/scala/lua/perl exist on crates.io but no published
+# version matches the bundled rev, so they pin the exact bundled git rev
+# (same precedent as python/cpp/csharp; Cargo.lock pins the commits).
+# swift and dart stay Python-fallback: swift's bundled rev predates the
+# committed generated parser (no src/parser.c in the repo — the pack runs
+# `tree-sitter generate` itself — and crates.io 0.7.4's grammar *differs*
+# from the bundled rev); dart's bundled rev binding predates the
+# tree-sitter-language shim (tree-sitter 0.22 types, incompatible with the
+# 0.25 runtime) and the crates.io tree-sitter-dart releases are a fork
+# (nielsenko) whose parser.c differs from the bundled grammar.
 
 [lib]
 name = "know_your_soul_kernel"
@@ -31,6 +45,7 @@ tree-sitter = "=0.25.10"
 tree-sitter-bash = "=0.25.1"
 tree-sitter-c = "=0.24.2"
 tree-sitter-go = "=0.25.0"
+tree-sitter-haskell = "=0.24.1"
 tree-sitter-java = "=0.23.5"
 tree-sitter-javascript = "=0.25.0"
 tree-sitter-php = "=0.25.1"
@@ -40,6 +55,10 @@ tree-sitter-typescript = "=0.23.2"
 tree-sitter-python = { git = "https://github.com/tree-sitter/tree-sitter-python", rev = "26855eabccb19c6abf499fbc5b8dc7cc9ab8bc64" }
 tree-sitter-cpp = { git = "https://github.com/tree-sitter/tree-sitter-cpp", rev = "c009222808634c1014f82438d4883753516a2c24" }
 tree-sitter-c-sharp = { git = "https://github.com/tree-sitter/tree-sitter-c-sharp", rev = "8c0abe0b84a3681d3e6852ce2e2a1eecb4f731c5" }
+tree-sitter-kotlin = { git = "https://github.com/fwcd/tree-sitter-kotlin", rev = "1852ea17b7f60fb3f9d84e0b1555d56b46b39fb1" }
+tree-sitter-scala = { git = "https://github.com/tree-sitter/tree-sitter-scala", rev = "db390f312a54b04b13790e1767bfac32665c17ac" }
+tree-sitter-lua = { git = "https://github.com/MunifTanjim/tree-sitter-lua", rev = "4fbec840c34149b7d5fe10097c93a320ee4af053" }
+tree-sitter-perl = { git = "https://github.com/tree-sitter-perl/tree-sitter-perl", rev = "04477eeb0f165f29fbc8f398bb1c1689f870f67a", package = "ts-parser-perl" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 regex = "1"

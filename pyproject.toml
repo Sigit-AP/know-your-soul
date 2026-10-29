@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "know-your-soul"
-version = "0.2.0"
+version = "0.3.0"
 description = "Standalone deterministic knowledge and learning graph for Hermes Agent; no model, provider, or vector calls."
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]

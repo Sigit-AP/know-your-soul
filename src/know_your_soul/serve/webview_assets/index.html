@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Know Your Soul — Webview</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header id="topbar">
+  <span id="brand">Know&nbsp;Your&nbsp;Soul</span>
+  <nav id="tabs" aria-label="views">
+    <button class="tab active" data-tab="graph" type="button">Graph</button>
+    <button class="tab" data-tab="search" type="button">Search</button>
+    <button class="tab" data-tab="metrics" type="button">Metrics</button>
+    <button class="tab" data-tab="health" type="button">Health</button>
+    <button class="tab" data-tab="analytics" type="button">Analytics</button>
+    <button class="tab" data-tab="audit" type="button">Audit</button>
+    <button class="tab" data-tab="proposals" type="button">Proposals</button>
+  </nav>
+  <span id="status" role="status"></span>
+</header>
+
+<main id="main">
+  <section id="view-graph" class="view active">
+    <div id="graph-toolbar">
+      <span id="graph-stats"></span>
+      <button id="graph-fit" type="button">Fit</button>
+      <button id="graph-reload" type="button">Reload</button>
+    </div>
+    <div id="graph-wrap">
+      <canvas id="graph-canvas"></canvas>
+      <aside id="detail-panel" class="hidden" aria-label="node detail">
+        <button id="detail-close" type="button" aria-label="close">×</button>
+        <h2 id="detail-title"></h2>
+        <div id="detail-body"></div>
+      </aside>
+    </div>
+  </section>
+
+  <section id="view-search" class="view">
+    <form id="search-form" autocomplete="off">
+      <input id="search-q" type="search" placeholder="search symbols…" aria-label="query">
+      <input id="search-kind" type="text" placeholder="kind (function, class…)" aria-label="kind filter">
+      <input id="search-lang" type="text" placeholder="lang (python, javascript…)" aria-label="language filter">
+      <button type="submit">Search</button>
+    </form>
+    <div id="search-results"></div>
+  </section>
+
+  <section id="view-metrics" class="view"><div class="panel-json" id="metrics-body"></div></section>
+  <section id="view-health" class="view"><div class="panel-json" id="health-body"></div></section>
+  <section id="view-analytics" class="view"><div class="panel-json" id="analytics-body"></div></section>
+  <section id="view-audit" class="view"><div class="panel-json" id="audit-body"></div></section>
+  <section id="view-proposals" class="view"><div class="panel-json" id="proposals-body"></div></section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

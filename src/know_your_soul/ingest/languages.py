@@ -9,6 +9,8 @@ these tables; adding a language means adding data here, never code there.
 
 Phase-1 languages (MASTER-PLAN W2): python, javascript, typescript, go, rust,
 java, c, cpp, csharp, ruby, php, bash.
+Phase-2 languages (W7, SUB-102 — selective audit, docs/recovery/w7-languages.md):
+kotlin, swift, scala, lua, dart, haskell, perl.
 """
 
 from __future__ import annotations
@@ -93,6 +95,11 @@ class LanguageSpec:
     * ``scoped_functions_become_methods``: a node mapped to ``function``
       becomes ``method`` when the innermost scope is class-ish or a
       transparent container.
+    * ``engine``: which extraction engine serves this language — ``"rust"``
+      when the Rust kernel ships a grammar parse-identical to the language
+      pack's bundled revision (proven byte-identical by
+      ``tests/test_kernel_rust.py``), else ``"python"`` (reference walker via
+      the bridge's fallback path). Fail-closed default: ``"python"``.
     """
 
     name: str
@@ -109,6 +116,7 @@ class LanguageSpec:
     scoped_functions_become_methods: bool = True
     call_name_fields: tuple[str, ...] = ("function", "method", "name", "macro")
     variable_rules: tuple[VariableRule, ...] = ()
+    engine: str = "python"
 
 
 # --------------------------------------------------------------------------
@@ -117,6 +125,7 @@ class LanguageSpec:
 _PY = LanguageSpec(
     name="python",
     parser="python",
+    engine="rust",
     declaration_kinds=(
         ("class_definition", "class"),
         ("function_definition", "function"),
@@ -160,6 +169,7 @@ _JS_VARIABLES = (
 _JS = LanguageSpec(
     name="javascript",
     parser="javascript",
+    engine="rust",
     declaration_kinds=_JS_DECLARATIONS,
     import_rules=_JS_IMPORTS,
     call_types=_JS_CALLS,
@@ -172,6 +182,7 @@ _JS = LanguageSpec(
 _TS = LanguageSpec(
     name="typescript",
     parser="typescript",
+    engine="rust",
     declaration_kinds=_JS_DECLARATIONS
     + (
         ("abstract_class_declaration", "class"),
@@ -193,6 +204,7 @@ _TS = LanguageSpec(
 _GO = LanguageSpec(
     name="go",
     parser="go",
+    engine="rust",
     declaration_kinds=(
         ("function_declaration", "function"),
         ("method_declaration", "method"),
@@ -211,6 +223,7 @@ _GO = LanguageSpec(
 _RUST = LanguageSpec(
     name="rust",
     parser="rust",
+    engine="rust",
     declaration_kinds=(
         ("function_item", "function"),
         ("struct_item", "type"),
@@ -233,6 +246,7 @@ _RUST = LanguageSpec(
 _JAVA = LanguageSpec(
     name="java",
     parser="java",
+    engine="rust",
     declaration_kinds=(
         ("class_declaration", "class"),
         ("interface_declaration", "interface"),
@@ -265,6 +279,7 @@ _C_IDENTIFIERS = ("identifier", "type_identifier", "field_identifier")
 _C = LanguageSpec(
     name="c",
     parser="c",
+    engine="rust",
     declaration_kinds=_C_DECLARATIONS,
     import_rules=_C_IMPORTS,
     call_types=_C_CALLS,
@@ -276,6 +291,7 @@ _C = LanguageSpec(
 _CPP = LanguageSpec(
     name="cpp",
     parser="cpp",
+    engine="rust",
     declaration_kinds=_C_DECLARATIONS
     + (
         ("class_specifier", "class"),
@@ -290,6 +306,7 @@ _CPP = LanguageSpec(
 _CSHARP = LanguageSpec(
     name="csharp",
     parser="csharp",
+    engine="rust",
     declaration_kinds=(
         ("class_declaration", "class"),
         ("interface_declaration", "interface"),
@@ -313,6 +330,7 @@ _CSHARP = LanguageSpec(
 _RUBY = LanguageSpec(
     name="ruby",
     parser="ruby",
+    engine="rust",
     declaration_kinds=(
         ("class", "class"),
         ("module", "module"),
@@ -335,6 +353,7 @@ _RUBY = LanguageSpec(
 _PHP = LanguageSpec(
     name="php",
     parser="php",
+    engine="rust",
     declaration_kinds=(
         ("class_declaration", "class"),
         ("interface_declaration", "interface"),
@@ -364,6 +383,7 @@ _PHP = LanguageSpec(
 _BASH = LanguageSpec(
     name="bash",
     parser="bash",
+    engine="rust",
     declaration_kinds=(("function_definition", "function"),),
     import_rules=(ImportRule("command", target_fields=("argument",), match_text=("source", ".")),),
     call_types=("command",),
@@ -375,11 +395,176 @@ _BASH = LanguageSpec(
     scoped_functions_become_methods=False,
 )
 
+# ------------------------------------------------------- phase-2 (W7) tables
+# Every table below was derived from parsing real samples with the bundled
+# tree-sitter-language-pack 1.22.1 grammars (not from grammar READMEs);
+# docs/recovery/w7-languages.md records the audit, the rejected candidates,
+# and the per-language limitations (e.g. kotlin/swift/dart grammars expose no
+# callee field on their call nodes, so call extraction is impossible in the
+# declarative model and ``call_types`` is honestly empty).
+
+_KOTLIN = LanguageSpec(
+    name="kotlin",
+    parser="kotlin",
+    engine="rust",
+    # fwcd/tree-sitter-kotlin merges class/interface/object under
+    # class_declaration/object_declaration (no separate interface node type).
+    declaration_kinds=(
+        ("class_declaration", "class"),
+        ("object_declaration", "class"),
+        ("function_declaration", "function"),
+        ("package_header", "module"),
+    ),
+    import_rules=(ImportRule("import_header", target_regex=r"import\s+([\w.]+)"),),
+    call_types=(),  # call_expression carries no callee field (verified)
+    identifier_types=("identifier", "simple_identifier", "type_identifier"),
+)
+
+_SWIFT = LanguageSpec(
+    name="swift",
+    parser="swift",
+    engine="python",  # bundled rev has no committed parser.c; crates.io grammar diverges
+    # alex-pinkus/tree-sitter-swift: class_declaration covers class/struct/enum.
+    declaration_kinds=(
+        ("class_declaration", "class"),
+        ("protocol_declaration", "interface"),
+        ("function_declaration", "function"),
+        ("protocol_function_declaration", "method"),
+    ),
+    import_rules=(ImportRule("import_declaration", target_regex=r"import\s+([\w.]+)"),),
+    call_types=(),  # call_expression carries no callee field (verified)
+    identifier_types=("simple_identifier", "type_identifier"),
+)
+
+_SCALA = LanguageSpec(
+    name="scala",
+    parser="scala",
+    engine="rust",
+    declaration_kinds=(
+        ("class_definition", "class"),
+        ("trait_definition", "interface"),
+        ("object_definition", "class"),
+        ("enum_definition", "type"),
+        ("type_definition", "type"),
+        ("function_definition", "function"),
+        ("function_declaration", "function"),
+        ("package_clause", "module"),
+    ),
+    # import_declaration's `path` fields are per-segment (first would truncate
+    # `scala.collection.mutable.ListBuffer` to `scala`), so regex the full text.
+    import_rules=(ImportRule("import_declaration", target_regex=r"import\s+([\w.]+)"),),
+    call_types=("call_expression",),
+    call_name_fields=("function",),
+    identifier_types=("identifier", "type_identifier"),
+    variable_rules=(
+        VariableRule("val_definition", name_field="pattern", kind="variable"),
+        VariableRule("var_definition", name_field="pattern", kind="variable"),
+    ),
+)
+
+_LUA = LanguageSpec(
+    name="lua",
+    parser="lua",
+    engine="rust",
+    declaration_kinds=(("function_declaration", "function"),),
+    import_rules=(
+        ImportRule(
+            "function_call",
+            target_regex=r"require\s*\(?\s*[\"']([^\"']+)",
+            match_text=("require",),
+        ),
+    ),
+    call_types=("function_call",),
+    call_name_fields=("name",),
+    identifier_types=("identifier",),
+    # M.greet: name field holds a dot_index_expression; resolve its `field`.
+    name_fields=("name", "field"),
+    scoped_functions_become_methods=False,
+)
+
+_DART = LanguageSpec(
+    name="dart",
+    parser="dart",
+    engine="python",  # no crates.io grammar parse-identical to the bundled rev
+    # The grammar splits member declarations: method_signature wraps
+    # function_signature, so declaring function_signature alone yields one
+    # node per method (flipped) and per top-level function — no duplicates.
+    declaration_kinds=(
+        ("class_definition", "class"),
+        ("mixin_declaration", "class"),
+        ("enum_declaration", "type"),
+        ("function_signature", "function"),
+    ),
+    import_rules=(ImportRule("import_specification", target_regex=r"[\"']([^\"']+)[\"']"),),
+    call_types=(),  # invocations are identifier+selector chains, no call node
+    identifier_types=("identifier", "type_identifier"),
+)
+
+_HASKELL = LanguageSpec(
+    name="haskell",
+    parser="haskell",
+    engine="rust",
+    # Signatures carry the function name; the value-level equation node type
+    # ("function") is shared with *type-level* functions (A -> B), which would
+    # fabricate nodes via the identifier fallback — so only signatures declare
+    # (documented: calls inside equations attribute to the enclosing scope).
+    declaration_kinds=(
+        ("header", "module"),
+        ("data_type", "type"),
+        ("newtype", "type"),
+        ("class", "interface"),
+        ("signature", "function"),
+    ),
+    import_rules=(ImportRule("import", target_fields=("module",)),),
+    call_types=("apply",),
+    call_name_fields=("function",),
+    # "module" and "name" are genuine named node types in this grammar
+    # (module wrapper, declaration names); "variable" is the value identifier.
+    identifier_types=("variable", "name", "module", "module_id", "constructor"),
+    name_fields=("name", "module"),
+)
+
+_PERL = LanguageSpec(
+    name="perl",
+    parser="perl",
+    engine="rust",
+    declaration_kinds=(
+        ("package_statement", "module"),
+        ("subroutine_declaration_statement", "function"),
+    ),
+    import_rules=(
+        ImportRule("use_statement", target_fields=("module",)),
+        ImportRule("require_expression", target_regex=r"require\s+([\w:]+)"),
+    ),
+    call_types=("function_call_expression", "method_call_expression"),
+    identifier_types=("bareword", "package"),
+)
+
 #: The language registry. Iteration order is alphabetical for determinism.
 LANGUAGES: dict[str, LanguageSpec] = {
     spec.name: spec
     for spec in sorted(
-        (_PY, _JS, _TS, _GO, _RUST, _JAVA, _C, _CPP, _CSHARP, _RUBY, _PHP, _BASH),
+        (
+            _PY,
+            _JS,
+            _TS,
+            _GO,
+            _RUST,
+            _JAVA,
+            _C,
+            _CPP,
+            _CSHARP,
+            _RUBY,
+            _PHP,
+            _BASH,
+            _KOTLIN,
+            _SWIFT,
+            _SCALA,
+            _LUA,
+            _DART,
+            _HASKELL,
+            _PERL,
+        ),
         key=lambda spec: spec.name,
     )
 }
@@ -412,6 +597,17 @@ EXTENSION_MAP: dict[str, str] = {
     ".php": "php",
     ".sh": "bash",
     ".bash": "bash",
+    ".kt": "kotlin",
+    ".kts": "kotlin",
+    ".swift": "swift",
+    ".scala": "scala",
+    ".sc": "scala",
+    ".lua": "lua",
+    ".dart": "dart",
+    ".hs": "haskell",
+    ".lhs": "haskell",
+    ".pl": "perl",
+    ".pm": "perl",
 }
 
 

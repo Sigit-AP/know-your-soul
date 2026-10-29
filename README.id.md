@@ -16,6 +16,13 @@ satu graph lokal yang teraudit — dinilai, berversi, dan mustahil berubah tanpa
 persetujuanmu. Tidak ada model, embedding, atau panggilan provider di dalamnya.
 AI tetap di sisi agent; ini bagian yang tidak pernah menebak.
 
+Baru di 0.3.0: **superpower server** — daemon multi-agent yang melayani
+hingga 50 agent bersamaan (read pool + writer tunggal dengan group commit,
+fairness per-agent, backpressure typed saat overload, journal crash-safe)
+plus **web view** (`know-your-soul webview`) dengan graph interaktif, search,
+metrics, health, analytics, dan tab audit. Ingestion kode kini mencakup
+**19 bahasa**.
+
 Baru di 0.2.0: graph tidak lagi terbatas pada pengetahuan terkurasi. Arahkan
 ke folder mana pun dan ia meng-ingest kode sumber dalam dua belas bahasa
 (lewat kernel tree-sitter Rust, byte-identik dengan referensi Python), PDF,

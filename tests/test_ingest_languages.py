@@ -30,15 +30,50 @@ EXPECTED_LANGUAGES = (
     "c",
     "cpp",
     "csharp",
+    "dart",
     "go",
+    "haskell",
     "java",
     "javascript",
+    "kotlin",
+    "lua",
+    "perl",
     "php",
     "python",
     "ruby",
     "rust",
+    "scala",
+    "swift",
     "typescript",
 )
+
+#: Languages served by the Rust kernel (engine == "rust"); the rest are
+#: Python-fallback by design (docs/recovery/w7-languages.md).
+EXPECTED_RUST_ENGINE = (
+    "bash",
+    "c",
+    "cpp",
+    "csharp",
+    "go",
+    "haskell",
+    "java",
+    "javascript",
+    "kotlin",
+    "lua",
+    "perl",
+    "php",
+    "python",
+    "ruby",
+    "rust",
+    "scala",
+    "typescript",
+)
+EXPECTED_PYTHON_ENGINE = ("dart", "swift")
+
+#: Grammars that expose no callee field on their call node, so no call
+#: extraction is possible in the declarative model (verified against the
+#: real grammars in tree-sitter-language-pack 1.22.1; W7 audit).
+NO_CALL_FIELD_GRAMMARS = frozenset({"dart", "kotlin", "swift"})
 
 ALL_LANGUAGES = pytest.mark.parametrize("language", EXPECTED_LANGUAGES)
 
@@ -46,8 +81,20 @@ ALL_LANGUAGES = pytest.mark.parametrize("language", EXPECTED_LANGUAGES)
 # ------------------------------------------------------------------ registry
 
 
-def test_exactly_the_twelve_phase1_languages():
+def test_exactly_the_nineteen_supported_languages():
     assert supported_languages() == EXPECTED_LANGUAGES
+
+
+def test_engine_assignment_is_exact():
+    rust = tuple(name for name in supported_languages() if get_spec(name).engine == "rust")
+    python = tuple(name for name in supported_languages() if get_spec(name).engine == "python")
+    assert rust == EXPECTED_RUST_ENGINE
+    assert python == EXPECTED_PYTHON_ENGINE
+
+
+@ALL_LANGUAGES
+def test_engine_is_a_known_value(language: str):
+    assert get_spec(language).engine in ("rust", "python")
 
 
 def test_supported_languages_sorted():
@@ -181,13 +228,23 @@ def test_import_rule_has_some_target_strategy(language: str):
 
 
 @ALL_LANGUAGES
-def test_call_types_nonempty(language: str):
-    assert get_spec(language).call_types, f"{language} has no call types"
+def test_call_types_nonempty_unless_grammar_has_no_callee_field(language: str):
+    """Bidirectional gate: every language extracts calls, except the audited
+    grammars whose call node carries no callee field (kotlin/swift
+    ``call_expression``, dart's selector-based invocations) — those must
+    declare empty ``call_types`` (honest data over dead strategies)."""
+    spec = get_spec(language)
+    if language in NO_CALL_FIELD_GRAMMARS:
+        assert spec.call_types == (), f"{language}: grammar has no callee field; call_types must be empty"
+    else:
+        assert spec.call_types, f"{language} has no call types"
 
 
 @ALL_LANGUAGES
 def test_call_name_fields_nonempty(language: str):
-    assert get_spec(language).call_name_fields, f"{language} has no call name fields"
+    spec = get_spec(language)
+    if spec.call_types:
+        assert spec.call_name_fields, f"{language} has no call name fields"
 
 
 @ALL_LANGUAGES
@@ -275,6 +332,17 @@ def test_every_language_has_an_extension(language: str):
         ("a.php", "php"),
         ("a.sh", "bash"),
         ("a.bash", "bash"),
+        ("a.kt", "kotlin"),
+        ("a.kts", "kotlin"),
+        ("a.swift", "swift"),
+        ("a.scala", "scala"),
+        ("a.sc", "scala"),
+        ("a.lua", "lua"),
+        ("a.dart", "dart"),
+        ("a.hs", "haskell"),
+        ("a.lhs", "haskell"),
+        ("a.pl", "perl"),
+        ("a.pm", "perl"),
         ("dir/deep/file.py", "python"),
         ("UPPER.PY", "python"),
         ("no_extension", None),

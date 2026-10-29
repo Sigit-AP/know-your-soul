@@ -20,6 +20,10 @@ pub struct LanguageSpec {
     pub conditional_kinds: Vec<(String, Vec<(String, String)>, String)>,
     pub container_types: Vec<(String, String)>,
     pub declaration_kinds: Vec<(String, String)>,
+    /// Which engine serves this language ("rust" | "python"); fail-closed
+    /// default "python" when the field is absent (older dumps).
+    #[serde(default = "default_engine")]
+    pub engine: String,
     pub identifier_types: Vec<String>,
     pub import_rules: Vec<ImportRule>,
     pub method_scope_kinds: Vec<String>,
@@ -52,6 +56,10 @@ pub struct VariableRule {
 
 const REGISTRY_JSON: &str = include_str!("../registry.json");
 
+fn default_engine() -> String {
+    "python".to_string()
+}
+
 static REGISTRY: std::sync::OnceLock<Registry> = std::sync::OnceLock::new();
 
 pub fn registry() -> &'static Registry {
@@ -62,8 +70,15 @@ pub fn get_spec(language: &str) -> Option<&'static LanguageSpec> {
     registry().languages.get(language)
 }
 
+/// Languages this kernel serves: registry entries with `engine == "rust"`
+/// (python-engine languages fall back to the reference walker by design).
 pub fn supported_languages() -> Vec<&'static str> {
-    registry().languages.keys().map(String::as_str).collect()
+    registry()
+        .languages
+        .iter()
+        .filter(|(_, spec)| spec.engine == "rust")
+        .map(|(name, _)| name.as_str())
+        .collect()
 }
 
 /// The PurePosixPath `.suffix` of the final path component, lowercased.
@@ -95,10 +110,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_loads_all_phase1_languages() {
-        assert_eq!(supported_languages().len(), 12);
+    fn registry_loads_all_supported_languages() {
+        // 17 dual-engine (engine == "rust") languages; swift/dart are
+        // registered but Python-fallback (W7, docs/recovery/w7-languages.md).
+        assert_eq!(supported_languages().len(), 17);
+        assert_eq!(registry().languages.len(), 19);
         assert!(get_spec("python").is_some());
         assert!(get_spec("bash").is_some());
+        assert!(get_spec("perl").is_some());
+        assert!(!supported_languages().contains(&"swift"));
+        assert!(!supported_languages().contains(&"dart"));
+        assert!(supported_languages().contains(&"haskell"));
     }
 
     #[test]

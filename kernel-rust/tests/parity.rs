@@ -11,7 +11,10 @@ const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/fixtures/i
 
 #[test]
 fn all_fixtures_extract_deterministically() {
-    let cases: [(&str, &str); 12] = [
+    // Dual-engine languages only (engine == "rust"); swift and dart are
+    // Python-fallback by design (no parse-identical buildable crate — see
+    // the Cargo.toml note).
+    let cases: [(&str, &str); 17] = [
         ("python", "python/sample.py"),
         ("javascript", "javascript/sample.js"),
         ("typescript", "typescript/sample.ts"),
@@ -24,6 +27,11 @@ fn all_fixtures_extract_deterministically() {
         ("ruby", "ruby/sample.rb"),
         ("php", "php/sample.php"),
         ("bash", "bash/sample.sh"),
+        ("kotlin", "kotlin/sample.kt"),
+        ("scala", "scala/sample.scala"),
+        ("lua", "lua/sample.lua"),
+        ("haskell", "haskell/sample.hs"),
+        ("perl", "perl/sample.pl"),
     ];
     for (language, relative) in cases {
         let path = format!("{FIXTURES}/{relative}");
@@ -102,6 +110,6 @@ fn make_node_id_format() {
 }
 
 #[test]
-fn registry_lists_twelve_languages() {
-    assert_eq!(registry::supported_languages().len(), 12);
+fn registry_lists_seventeen_dual_engine_languages() {
+    assert_eq!(registry::supported_languages().len(), 17);
 }

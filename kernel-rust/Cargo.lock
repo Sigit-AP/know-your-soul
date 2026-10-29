@@ -136,13 +136,18 @@ dependencies = [
  "tree-sitter-c-sharp",
  "tree-sitter-cpp",
  "tree-sitter-go",
+ "tree-sitter-haskell",
  "tree-sitter-java",
  "tree-sitter-javascript",
+ "tree-sitter-kotlin",
+ "tree-sitter-lua",
  "tree-sitter-php",
  "tree-sitter-python",
  "tree-sitter-ruby",
  "tree-sitter-rust",
+ "tree-sitter-scala",
  "tree-sitter-typescript",
+ "ts-parser-perl",
 ]
 
 [[package]]
@@ -421,6 +426,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-haskell"
+version = "0.24.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "781de30e0d1ec8e6db4ed799d36ce1cedaf4684374dada45ebe2a8ea44c3f814"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-java"
 version = "0.23.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -441,10 +456,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-kotlin"
+version = "0.4.0"
+source = "git+https://github.com/fwcd/tree-sitter-kotlin?rev=1852ea17b7f60fb3f9d84e0b1555d56b46b39fb1#1852ea17b7f60fb3f9d84e0b1555d56b46b39fb1"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-language"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0af592be68c579aa78a16846bd19422978c3c52e438523d45ff5d1bff1f9d4a"
+
+[[package]]
+name = "tree-sitter-lua"
+version = "0.3.1-dev.0"
+source = "git+https://github.com/MunifTanjim/tree-sitter-lua?rev=4fbec840c34149b7d5fe10097c93a320ee4af053#4fbec840c34149b7d5fe10097c93a320ee4af053"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
 
 [[package]]
 name = "tree-sitter-php"
@@ -486,10 +519,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-scala"
+version = "0.26.2"
+source = "git+https://github.com/tree-sitter/tree-sitter-scala?rev=db390f312a54b04b13790e1767bfac32665c17ac#db390f312a54b04b13790e1767bfac32665c17ac"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-typescript"
 version = "0.23.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c5f76ed8d947a75cc446d5fccd8b602ebf0cde64ccf2ffa434d873d7a575eff"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "ts-parser-perl"
+version = "2.0.0"
+source = "git+https://github.com/tree-sitter-perl/tree-sitter-perl?rev=04477eeb0f165f29fbc8f398bb1c1689f870f67a#04477eeb0f165f29fbc8f398bb1c1689f870f67a"
 dependencies = [
  "cc",
  "tree-sitter-language",
