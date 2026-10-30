@@ -9,7 +9,7 @@ This is the Wave-7 answer to the codegraph daemon (RESEARCH-ARCH section
   ``retry_after_ms`` — never a crash, never an unbounded queue.
 * **Read pool vs single writer.** ``read_pool_size`` (default 8) read-only
   SQLite connections (:class:`ReadOnlyEventStore`, WAL ``mode=ro``) serve
-  the nine read verbs; the seven mutation verbs are serialized through one
+  the read verbs; the mutation verbs are serialized through one
   writer thread. Query execution on the pool never blocks the writer and
   the writer never blocks the pool (WAL).
 * **Write arbitration with idempotency dedup.** Every mutation flows
@@ -20,9 +20,10 @@ This is the Wave-7 answer to the codegraph daemon (RESEARCH-ARCH section
   ``params._meta.actor``; rejections and executions are journaled exactly
   once through the same audit contract as the MCP stdio surface.
 * **Scope enforcement.** The dispatch allowlist is the frozen fourteen ops
-  plus the two contract-v3 ingestion verbs and nothing else; the envelope
-  carries no path-like escape hatch, and ingestion paths stay confined to
-  the startup-fixed graph root by ``run_ingest_verb``.
+  plus the two contract-v3 ingestion verbs plus the one contract-v4
+  extraction verb and nothing else; the envelope carries no path-like escape
+  hatch beyond the confined amendments, and ingestion/extraction paths stay
+  confined to the startup-fixed graph root.
 * **Supervision.** Atomic ``O_EXCL`` lockfile + pidfile, double-fork/setsid
   detached spawn, refcount + idle-timeout reaping, a liveness watchdog that
   kills a starved daemon, and a proxy-side PPID watchdog (see
@@ -115,6 +116,10 @@ WRITE_TOOLS: frozenset[str] = frozenset(
         "knowledge_propose_improvement",
         "knowledge_apply_improvement",
         "knowledge_rollback",
+        # Contract v4 (extraction-contract-v4.md): the external-agent
+        # extraction verb is a write-lane tool; the per-agent admission token
+        # bucket applies unchanged.
+        "knowledge_submit_extraction",
     }
 )
 HEAVY_TOOLS: frozenset[str] = frozenset(

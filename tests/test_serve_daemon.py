@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from _serve_helpers import (
-    EXPECTED_TOOLS_16,
+    EXPECTED_TOOLS_ALL,
     SocketClient,
     make_config,
     tool_error_code,
@@ -52,17 +52,18 @@ def _query_args() -> dict:
 
 
 class TestClassification:
-    def test_lanes_partition_the_frozen_sixteen(self) -> None:
+    def test_lanes_partition_the_extended_surface(self) -> None:
         from know_your_soul.serve.superpower import HEAVY_TOOLS
 
-        assert READ_TOOLS | WRITE_TOOLS | HEAVY_TOOLS == frozenset(EXPECTED_TOOLS_16)
+        assert READ_TOOLS | WRITE_TOOLS | HEAVY_TOOLS == frozenset(EXPECTED_TOOLS_ALL)
         assert not (READ_TOOLS & WRITE_TOOLS)
         assert not (READ_TOOLS & HEAVY_TOOLS)
         assert not (WRITE_TOOLS & HEAVY_TOOLS)
-        # Lane sizes follow write semantics: evaluate (score materialization)
-        # and review (decision record) persist, so they ride the writer lane.
+        # Lane sizes follow write semantics: evaluate (score materialization),
+        # review (decision record) and the contract-v4 extraction intake
+        # (durable queue row) persist, so they ride the writer lane.
         assert len(READ_TOOLS) == 7
-        assert len(WRITE_TOOLS) == 7
+        assert len(WRITE_TOOLS) == 8
         assert len(HEAVY_TOOLS) == 2
 
     @pytest.mark.parametrize("tool", sorted(READ_TOOLS))
@@ -97,12 +98,12 @@ class TestHandshakeAndMeta:
         assert set(result["capabilities"]) == {"tools", "resources"}
         assert result["serverInfo"]["name"] == "know-your-soul"
 
-    def test_tools_list_sixteen(self, daemon) -> None:
+    def test_tools_list_seventeen(self, daemon) -> None:
         _, config = daemon
         with SocketClient(config.paths.socket) as client:
             result = client.request("tools/list")["result"]
         names = tuple(tool["name"] for tool in result["tools"])
-        assert names == EXPECTED_TOOLS_16
+        assert names == EXPECTED_TOOLS_ALL
 
     def test_tools_list_matches_reference_server(self, daemon) -> None:
         """tools/list through the daemon equals the reference adapter surface."""

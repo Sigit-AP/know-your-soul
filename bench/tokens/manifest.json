@@ -1,0 +1,368 @@
+{
+  "archive": {
+    "bytes": 138115,
+    "file": "data/corpus.tar.gz",
+    "sha256": "d79d72f55cd56ea5f290c46295f6e8dcf5861bff6b3df1ecf98436bb3bc18b24"
+  },
+  "files": [
+    {
+      "path": "code/chalk__ansi-styles.js",
+      "sha256": "92efdc3e5203d02d1710ff60dea3965066f97a77c0feaaa919b2693c989b7ec1",
+      "size": 5256
+    },
+    {
+      "path": "code/chalk__index.js",
+      "sha256": "64b22b1c442e6d460069807b521bf0a84e112c00c2b4163bc59deab20a9292db",
+      "size": 5902
+    },
+    {
+      "path": "code/chalk__rainbow.js",
+      "sha256": "13dc988a22991f33b31b06c2dee7883f1e1fee66ec2c1f3117d0a92ecffa07e7",
+      "size": 955
+    },
+    {
+      "path": "code/chalk__supports-color.js",
+      "sha256": "e82368a5f05d145e33de6ae3464056511664b620735ef58d1800a7bcda6691e5",
+      "size": 3965
+    },
+    {
+      "path": "code/chalk__test-chalk.js",
+      "sha256": "eb15d65d84f303af7bee58113c8a2b003e2184806957d0aa5deef8cf265f3d09",
+      "size": 4464
+    },
+    {
+      "path": "code/chalk__utilities.js",
+      "sha256": "698ce3cb21b00b570631742d3a9e168de31df74b3a88220c4bcf18ac30fd00cd",
+      "size": 997
+    },
+    {
+      "path": "code/requests__api.py",
+      "sha256": "fd96fd39aeedcd5222cd32b016b3e30c463d7a3b66fce9d2444467003c46b10b",
+      "size": 6449
+    },
+    {
+      "path": "code/requests__auth.py",
+      "sha256": "905ef9b6a9cb72d67d31ffe19bd4d9223e1c4169cde6ec51cfca16b31e70991d",
+      "size": 10186
+    },
+    {
+      "path": "code/requests__compat.py",
+      "sha256": "27bb088d1e97a031a9e494d5ccec642b97d2a145546bf3e373b8916610161a62",
+      "size": 2142
+    },
+    {
+      "path": "code/requests__cookies.py",
+      "sha256": "6cd8be8aa123e0d3d9d34fa86feac7bf392f39bccdde5129830de0ea9692dd7c",
+      "size": 18590
+    },
+    {
+      "path": "code/requests__docs_conf.py",
+      "sha256": "e1e73c212613ea5c4ae94f1504a76a8f32791459b78c73c74ccf816bbe53272f",
+      "size": 12207
+    },
+    {
+      "path": "code/requests__exceptions.py",
+      "sha256": "8c93d2d545804ecf3a4a155468ba2b4e225bd52686ba83445a020225ea7e5646",
+      "size": 4260
+    },
+    {
+      "path": "code/requests__flask_theme_support.py",
+      "sha256": "bba3677c6eeb99f678e808e90142a025b798b7658bac1ab4632591df8441d209",
+      "size": 4875
+    },
+    {
+      "path": "code/requests__help.py",
+      "sha256": "80f5f977f1fb5ddf3c6830017a386a1a097d075545453b79066898bcbdcfcc84",
+      "size": 3875
+    },
+    {
+      "path": "code/requests__init__.py",
+      "sha256": "e3168011198f0c804fb1ad8fb23a54f6bd3aca8a0afb69992874d90215915adb",
+      "size": 5072
+    },
+    {
+      "path": "code/requests__models.py",
+      "sha256": "32365d67893bb67c3ed67cf93ca4a18e63e6ab29342fa0dc8b09c59e06ff564e",
+      "size": 35510
+    },
+    {
+      "path": "code/requests__sessions.py",
+      "sha256": "ca44c8f145864a5b4e7c7d3b1caa25947ee44c11b0e168620556901a67244f0e",
+      "size": 30495
+    },
+    {
+      "path": "code/requests__setup.py",
+      "sha256": "e484951d58114ebf85b814b0800abb7673103d7ba37b41547833df1f7aa6e4a5",
+      "size": 3228
+    },
+    {
+      "path": "code/requests__status_codes.py",
+      "sha256": "889500780db96da4ddc3ee8f7c3d1e178aa1a48343251248fb268cab1b382c42",
+      "size": 4322
+    },
+    {
+      "path": "code/requests__structures.py",
+      "sha256": "f886e6855cf4e92fb968f499b94b6167afba0fd5ce8d1b935c739a6d8d38d573",
+      "size": 2912
+    },
+    {
+      "path": "code/requests__test_lowlevel.py",
+      "sha256": "2dc5990ef15fbbfcf1681827a337e6195144ee0e2031fb951ed1d32e29cdc27d",
+      "size": 15343
+    },
+    {
+      "path": "code/requests__test_structures.py",
+      "sha256": "f7b80e00888105ae80312203279e0cf9256726740bcaa15c6cee7c2c07d33d60",
+      "size": 2279
+    },
+    {
+      "path": "code/requests__test_testserver.py",
+      "sha256": "5c388f68ff0bb13c255856ed19c5943ed493cfa52a62ad557c5ae84887b5da1f",
+      "size": 5553
+    },
+    {
+      "path": "code/requests__test_utils.py",
+      "sha256": "5ef1d612edb55d4629fa8c3c6867bae0bf69050b951da9954927e42e48b88ff1",
+      "size": 30135
+    },
+    {
+      "path": "code/requests__testserver_server.py",
+      "sha256": "15a9092cc5edb005af6732097555515c4b82093d9394f6463c966259f83068c3",
+      "size": 5147
+    },
+    {
+      "path": "code/requests__utils.py",
+      "sha256": "5aa53ceab677c2f842fad42359c8ed1ff1c4299c1607789609957a496e4311d4",
+      "size": 33213
+    },
+    {
+      "path": "code/tree_sitter__grammar.js",
+      "sha256": "936af466b2b4b9883e59185ab91ee39f33036c42a5125f8bd21c212624bb8c37",
+      "size": 26669
+    },
+    {
+      "path": "code/tree_sitter__parser.h",
+      "sha256": "a1f6ef161fbaf48a0e10fca90ef5290a062462b307b3898aa562993853b9f80a",
+      "size": 7039
+    },
+    {
+      "path": "code/tree_sitter__python2_grammar.py",
+      "sha256": "5008d0357851f744321f0ec3e8c6568214d5dd88e251c9a861ad533b1557d92a",
+      "size": 30981
+    },
+    {
+      "path": "code/tree_sitter__python3_grammar.py",
+      "sha256": "eddc388af6d77394197d51276263b90a8f722bc12c58330829a22b1ce4baae38",
+      "size": 30784
+    },
+    {
+      "path": "code/tree_sitter__scanner.c",
+      "sha256": "411b2357bc1286b171fd042ccb0f640109074cc341d3cd78b5628144887f7ab8",
+      "size": 15109
+    },
+    {
+      "path": "docs/chalk__code-of-conduct.md",
+      "sha256": "311554fc64b9bfdfd0676103ba413b0eb0e9703b09476b0908c4df04dc1bd1e9",
+      "size": 3230
+    },
+    {
+      "path": "docs/chalk__readme.md",
+      "sha256": "03d260b86ecf3becaee6ae05d891ff32b291ba613661b5707d6d0121b8c2bec9",
+      "size": 11696
+    },
+    {
+      "path": "docs/requests__CONTRIBUTING.md",
+      "sha256": "6ce203a20b7bc3c87eccdb9be5888bded1bcb7743a598b3cf91b7be65f41f4e0",
+      "size": 2885
+    },
+    {
+      "path": "docs/requests__HISTORY.md",
+      "sha256": "d87f6a0878eec47a33747962d1ab3e19d805bde83e1bbb7da20d2960324d964f",
+      "size": 60778
+    },
+    {
+      "path": "docs/requests__README.md",
+      "sha256": "4f7bfa1b3f7c87268767235307d0bcae78997a96ca00a3b31062e5b9a295ed7c",
+      "size": 2929
+    },
+    {
+      "path": "docs/requests__SECURITY.md",
+      "sha256": "4d8f1a61f94c22df37414ac13a0e5c1e5e40fcb563797cf996b20dc50a85e5d0",
+      "size": 3944
+    },
+    {
+      "path": "docs/soul__effort-router.md",
+      "sha256": "127720a18849ab8a027b24877e2ba049b28f4e0a27171cf2f2751c7e5bf4c04a",
+      "size": 4029
+    },
+    {
+      "path": "docs/soul__glossary-bilingual.md",
+      "sha256": "613ff4708793361187912e90f1368043bceff4d35c5ea05ef47039c438647908",
+      "size": 5026
+    },
+    {
+      "path": "docs/soul__identity-compliance.md",
+      "sha256": "2d38d30862f3629710781ea5384f19215f9b55d3dcf7ac22f01af92034fc0f7d",
+      "size": 2237
+    },
+    {
+      "path": "docs/soul__measured-facts.md",
+      "sha256": "9e408fdd07263c9b2f4ed76c7301315903c5e1302d29f1284f93de72a782e7e9",
+      "size": 3136
+    },
+    {
+      "path": "docs/soul__query-playbook.md",
+      "sha256": "daa180d06f4bf3cc2c6dff1b51381f773bbe020ad31c184dbcaa7d32f63162b7",
+      "size": 3079
+    },
+    {
+      "path": "docs/tree_sitter__README.md",
+      "sha256": "f36a78a14e69e951378922daebc85a385930fbdcd1cc32624456c45d0bf365c2",
+      "size": 1201
+    },
+    {
+      "path": "papers/attention-notes.pdf",
+      "sha256": "1159764c6221f56c66a5996c8b74f02c80d44ab67cdc5a7244bf692e28d705df",
+      "size": 1100
+    },
+    {
+      "path": "papers/flash-attention-notes.pdf",
+      "sha256": "e0373dfccba1cf5a0520c4eddbd169a306e11ce5bea23bcaf82a265830f193f9",
+      "size": 916
+    },
+    {
+      "path": "papers/quantization-notes.pdf",
+      "sha256": "4e39f6aa6ef749b11469ef40d3d56096a0c55d2634a4992a3e02bd0ba3a1e703",
+      "size": 778
+    },
+    {
+      "path": "papers/rag-notes.pdf",
+      "sha256": "f63fd5e382fc0a67a4a8c09db0c78db4bcdfcdd379343ff5767e664e8b3a84ce",
+      "size": 867
+    },
+    {
+      "path": "papers/tokenizer-notes.pdf",
+      "sha256": "7deb259e547f3c38c33ff41244944bdd08f8a8bb6ed4de0f0d52f9d2b1b8cd8f",
+      "size": 829
+    },
+    {
+      "path": "text/tree_sitter__expressions.txt",
+      "sha256": "597748f21901f4e2e8da4801c4e3149d63da1b8f4ccbf91e3cdb6f657b6f2a0d",
+      "size": 28587
+    },
+    {
+      "path": "text/tree_sitter__literals.txt",
+      "sha256": "c93e99b759077f9ac12035335efb9dea084f94305bcd5b70298fe6801ff849e9",
+      "size": 22621
+    },
+    {
+      "path": "text/tree_sitter__pattern_matching.txt",
+      "sha256": "01b1a468d1b10de9e9fa603cd21d1474106f071a6f60b40d850c1440b3371d4a",
+      "size": 42112
+    },
+    {
+      "path": "text/tree_sitter__statements.txt",
+      "sha256": "3f66e5c58f530180586284f3ea4300d10ed3f41331a09cf17c1df275be93b7f3",
+      "size": 36450
+    }
+  ],
+  "note": "mixed corpus (code multi-language + markdown + text + small PDFs), canonical tar.gz (sorted entries, zeroed mtimes, gzip mtime=0); PDFs generated deterministically by run.py make_pdf_bytes; tiers nested small < medium < large",
+  "tier_file_counts": {
+    "large": 52,
+    "medium": 26,
+    "small": 6
+  },
+  "tiers": {
+    "large": [
+      "code/requests__api.py",
+      "code/requests__exceptions.py",
+      "code/chalk__index.js",
+      "code/tree_sitter__scanner.c",
+      "docs/requests__README.md",
+      "papers/attention-notes.pdf",
+      "code/requests__auth.py",
+      "code/requests__cookies.py",
+      "code/requests__models.py",
+      "code/requests__sessions.py",
+      "code/requests__structures.py",
+      "code/requests__utils.py",
+      "code/requests__help.py",
+      "code/requests__status_codes.py",
+      "code/requests__compat.py",
+      "code/requests__init__.py",
+      "code/chalk__ansi-styles.js",
+      "code/chalk__supports-color.js",
+      "code/chalk__test-chalk.js",
+      "code/tree_sitter__grammar.js",
+      "code/tree_sitter__parser.h",
+      "docs/requests__CONTRIBUTING.md",
+      "docs/requests__SECURITY.md",
+      "docs/chalk__readme.md",
+      "papers/flash-attention-notes.pdf",
+      "papers/tokenizer-notes.pdf",
+      "code/requests__test_utils.py",
+      "code/requests__test_lowlevel.py",
+      "code/requests__test_structures.py",
+      "code/requests__test_testserver.py",
+      "code/requests__testserver_server.py",
+      "code/requests__setup.py",
+      "code/requests__docs_conf.py",
+      "code/requests__flask_theme_support.py",
+      "code/tree_sitter__python3_grammar.py",
+      "code/tree_sitter__python2_grammar.py",
+      "code/chalk__utilities.js",
+      "code/chalk__rainbow.js",
+      "text/tree_sitter__expressions.txt",
+      "text/tree_sitter__literals.txt",
+      "text/tree_sitter__statements.txt",
+      "text/tree_sitter__pattern_matching.txt",
+      "docs/requests__HISTORY.md",
+      "docs/chalk__code-of-conduct.md",
+      "docs/tree_sitter__README.md",
+      "papers/rag-notes.pdf",
+      "papers/quantization-notes.pdf",
+      "docs/soul__effort-router.md",
+      "docs/soul__query-playbook.md",
+      "docs/soul__measured-facts.md",
+      "docs/soul__glossary-bilingual.md",
+      "docs/soul__identity-compliance.md"
+    ],
+    "medium": [
+      "code/requests__api.py",
+      "code/requests__exceptions.py",
+      "code/chalk__index.js",
+      "code/tree_sitter__scanner.c",
+      "docs/requests__README.md",
+      "papers/attention-notes.pdf",
+      "code/requests__auth.py",
+      "code/requests__cookies.py",
+      "code/requests__models.py",
+      "code/requests__sessions.py",
+      "code/requests__structures.py",
+      "code/requests__utils.py",
+      "code/requests__help.py",
+      "code/requests__status_codes.py",
+      "code/requests__compat.py",
+      "code/requests__init__.py",
+      "code/chalk__ansi-styles.js",
+      "code/chalk__supports-color.js",
+      "code/chalk__test-chalk.js",
+      "code/tree_sitter__grammar.js",
+      "code/tree_sitter__parser.h",
+      "docs/requests__CONTRIBUTING.md",
+      "docs/requests__SECURITY.md",
+      "docs/chalk__readme.md",
+      "papers/flash-attention-notes.pdf",
+      "papers/tokenizer-notes.pdf"
+    ],
+    "small": [
+      "code/requests__api.py",
+      "code/requests__exceptions.py",
+      "code/chalk__index.js",
+      "code/tree_sitter__scanner.c",
+      "docs/requests__README.md",
+      "papers/attention-notes.pdf"
+    ]
+  },
+  "version": 1
+}

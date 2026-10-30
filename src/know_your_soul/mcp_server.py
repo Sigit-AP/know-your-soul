@@ -129,6 +129,12 @@ _TOOL_TO_OPERATION: dict[str, str] = {
     # graph root, never the KnowledgeService fourteen.
     "knowledge_ingest_file": "knowledge.ingest_file",
     "knowledge_ingest_directory": "knowledge.ingest_directory",
+    # Contract v4 (addendum docs/contracts/extraction-contract-v4.md): the
+    # external-agent extraction verb. It is the confined amendment of the v2
+    # no-path-like-property rule — one optional ``source_path`` property —
+    # and it runs the ExtractionEngine against the durable review queue,
+    # never the canonical graph.
+    "knowledge_submit_extraction": "knowledge.submit_extraction",
 }
 EXPECTED_TOOLS: tuple[str, ...] = tuple(sorted(_TOOL_TO_OPERATION))
 
@@ -377,6 +383,95 @@ def _tool_schemas(max_token_budget: int) -> dict[str, dict[str, Any]]:
                 "token_budget": budget,
             },
         },
+        # Contract v4 extraction verb (addendum extraction-contract-v4.md):
+        # a closed schema with the same ranges as the service, the v1 NodeKind
+        # / RelationKind / PrimaryDomain vocabularies, and exactly one
+        # path-like property (``source_path``) — the confined amendment of
+        # the v2 no-path rule. The range/format refinements (hex shape,
+        # decimal confidence, caps, edge endpoint references) are enforced by
+        # the engine and surface as the contract's typed errors.
+        "knowledge_submit_extraction": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["source_sha256", "payload", "method", "confidence"],
+            "properties": {
+                "source_sha256": {"type": "string", "minLength": 64, "maxLength": 64},
+                "source_path": {"type": "string", "minLength": 1, "maxLength": 4096},
+                "payload": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["text", "nodes", "edges"],
+                    "properties": {
+                        "text": {"type": "string", "maxLength": 262144},
+                        "nodes": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "required": ["name", "domain"],
+                                "properties": {
+                                    "name": {"type": "string", "minLength": 1, "maxLength": 512},
+                                    "kind": {"enum": ["root", "primary", "child", "branch", "leaf"]},
+                                    "domain": {"enum": ["P1", "P2", "P3", "P4", "P5", "P6", "P7"]},
+                                    "summary": {"type": "string", "maxLength": 4096},
+                                    "span": {
+                                        "type": ["object", "null"],
+                                        "additionalProperties": False,
+                                        "required": ["line"],
+                                        "properties": {
+                                            "line": {"type": "integer", "minimum": 1},
+                                            "col": {"type": ["integer", "null"], "minimum": 0},
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                        "edges": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "required": ["relation", "source", "target"],
+                                "properties": {
+                                    "relation": {"enum": _RELATION_VALUES},
+                                    "source": {
+                                        "type": "object",
+                                        "additionalProperties": False,
+                                        "required": ["kind", "name"],
+                                        "properties": {
+                                            "kind": {"type": "string", "minLength": 1, "maxLength": 64},
+                                            "name": {"type": "string", "minLength": 1, "maxLength": 512},
+                                        },
+                                    },
+                                    "target": {
+                                        "type": "object",
+                                        "additionalProperties": False,
+                                        "required": ["kind", "name"],
+                                        "properties": {
+                                            "kind": {"type": "string", "minLength": 1, "maxLength": 64},
+                                            "name": {"type": "string", "minLength": 1, "maxLength": 512},
+                                        },
+                                    },
+                                    "evidence": {"type": "string", "maxLength": 1024},
+                                },
+                            },
+                        },
+                    },
+                },
+                "method": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["agent", "extracted_at"],
+                    "properties": {
+                        "agent": {"type": "string", "minLength": 1, "maxLength": 256},
+                        "extracted_at": {"type": "string", "minLength": 1, "maxLength": 64},
+                        "prompt_id": {"type": "string", "minLength": 1, "maxLength": 256},
+                        "tool": {"type": "string", "minLength": 1, "maxLength": 256},
+                    },
+                },
+                "confidence": {"type": "string", "minLength": 1, "maxLength": 64},
+            },
+        },
     }
 
 
@@ -402,6 +497,10 @@ _DESCRIPTIONS: dict[str, str] = {
     "knowledge_ingest_directory": (
         "Walk a directory under the fixed ingestion root and propose an extraction for every ingestible file "
         "(contract v3; bytewise order; per-file failures never abort the walk)."
+    ),
+    "knowledge_submit_extraction": (
+        "Submit an external agent's extraction of a hashed source into the review queue "
+        "(contract v4; proposal-only, idempotent, corroboration-scored; never writes the graph)."
     ),
 }
 
@@ -858,6 +957,34 @@ class _Adapter:
 
     def _op_ingest_directory(self, args: dict[str, Any]) -> dict[str, Any]:
         return self._run_ingest_verb("ingest_directory", args)
+
+    # Contract-v4 extraction verb (addendum extraction-contract-v4.md): the
+    # same shared adapter helper as HTTP/CLI over the extraction engine. The
+    # extraction root is the startup-fixed graph root.
+
+    def _op_submit_extraction(self, args: dict[str, Any]) -> dict[str, Any]:
+        from know_your_soul.extraction import ExtractionError
+        from know_your_soul.http_api import run_extraction_verb
+
+        try:
+            return run_extraction_verb(
+                self._service._store,  # noqa: SLF001 - same-package wiring
+                self._audit,
+                "submit_extraction",
+                args,
+                actor=self._actor,
+                extraction_root=self._root,
+            )
+        except ExtractionError as error:
+            # The engine journaled the invocation's single audit event itself
+            # and attached its id; converting to ToolError must never journal
+            # a second event.
+            raise ToolError(
+                error.code,
+                str(error),
+                audit_event_id=error.audit_event_id,
+                already_journaled=error.audit_event_id is None,
+            ) from None
 
     # --------------------------------------------------------------- resources
 

@@ -45,6 +45,7 @@ from know_your_soul.http_api import (
     build_stack,
     dispatch_text,
     error_envelope,
+    run_extraction_verb,
     run_ingest_verb,
     serve,
     to_jsonable,
@@ -232,6 +233,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="output directory (default: <output-root>/exports; resolved inside the containment root)",
     )
 
+    # W8 SUB-107: composite graph-analysis report (god nodes, surprising
+    # connections, suggested questions, token benchmark). OPS surface only —
+    # not a knowledge operation, never dispatched over MCP or HTTP.
+    report_parser = subparsers.add_parser(
+        "report",
+        help="ops: build the composite graph analysis report from the active generation (not a knowledge op)",
+    )
+    report_parser.add_argument(
+        "--format",
+        choices=("json", "markdown"),
+        default="markdown",
+        help="stdout format (default: markdown)",
+    )
+    report_parser.add_argument(
+        "--out",
+        default=None,
+        help="also write graph-report.json + graph-report.md into this directory (contained)",
+    )
+    report_parser.add_argument("--top-god", type=int, default=10, help="god-node ranking cap (default 10)")
+    report_parser.add_argument("--top-surprising", type=int, default=10, help="surprising-connection cap (default 10)")
+    report_parser.add_argument("--top-questions", type=int, default=8, help="suggested-question cap (default 8)")
+
     # Mega-wave 2 OPS tooling (SUB-77 modules, wired by SUB-80): layered
     # configuration introspection, operational metrics, and the fail-closed
     # self-check. OPS surface only — never knowledge ops, never MCP/HTTP.
@@ -388,6 +411,40 @@ def build_parser() -> argparse.ArgumentParser:
         "--token-budget", type=int, default=1024, help="response token budget, [128, max] (default 1024)"
     )
 
+    # Contract v4 (addendum docs/contracts/extraction-contract-v4.md): the
+    # frozen adapter mapping names ``submit-extraction`` as the CLI surface of
+    # the external-agent extraction verb. It runs the same shared adapter
+    # helper as the HTTP/MCP surfaces (extraction root = the process working
+    # directory, fixed at process startup) and prints the canonical JSON
+    # receipt. The payload is a JSON object (or '-' for stdin) — the same
+    # convention as the fourteen frozen operations.
+    submit_extraction_parser = subparsers.add_parser(
+        "submit-extraction",
+        help="knowledge.submit_extraction: queue an external extraction for review (contract v4, proposal-only)",
+    )
+    submit_extraction_parser.add_argument(
+        "payload",
+        nargs="?",
+        default=None,
+        help="JSON payload object; '-' reads it from stdin; omitted means {}",
+    )
+
+    # The contract-v4 review surface: operator-only (never an MCP tool).
+    extraction_parser = subparsers.add_parser(
+        "extraction",
+        help="contract v4 review surface: review/approve/reject queued external extractions (operator-only)",
+    )
+    extraction_sub = extraction_parser.add_subparsers(dest="extraction_action", required=True)
+    extraction_review = extraction_sub.add_parser("review", help="list the review queue, or show one submission's diff")
+    extraction_review.add_argument(
+        "--status", default=None, help="filter by status (pending_review, corroborated, ...)"
+    )
+    extraction_review.add_argument("--receipt", default=None, help="show one submission's proposed diff")
+    for action in ("approve", "reject"):
+        sub = extraction_sub.add_parser(action, help=f"{action} one queued extraction (operator-gated)")
+        sub.add_argument("receipt_id", help="the ext-… receipt id")
+        sub.add_argument("--note", default="", help="operator note recorded with the decision")
+
     # Wave-4 SUB-92: polling watcher over the ingestion pipeline. OPS surface
     # only — same rules as `ingest`: never a knowledge op, never MCP/HTTP.
     watch_parser = subparsers.add_parser(
@@ -487,6 +544,94 @@ def _ingest_verb_command(args: argparse.Namespace, command: str) -> int:
         return 1
     finally:
         store.close()
+    print(canonical_json(payload))
+    return 0
+
+
+def _extraction_verb_command(args: argparse.Namespace) -> int:
+    """The contract-v4 ``submit-extraction`` verb (addendum extraction-contract-v4.md).
+
+    The same shared adapter helper as the HTTP/MCP surfaces: contract input
+    validation, source binding against the fixed extraction root (the process
+    working directory — fixed at process startup), and the canonical JSON
+    receipt on stdout. Exit 0 success, 1 typed failure, 2 adapter rejection.
+    """
+    import json as _json
+
+    from know_your_soul.audit import AuditLog
+    from know_your_soul.extraction import ExtractionError
+    from know_your_soul.store import EventStore
+
+    payload_text: str = args.payload if args.payload is not None else "{}"
+    if payload_text == "-":
+        payload_text = sys.stdin.read()
+    store = EventStore(args.store)
+    try:
+        try:
+            arguments = _json.loads(payload_text)
+        except _json.JSONDecodeError as error:
+            _print_usage_error(f"payload is not valid JSON: {error}")
+            return 2
+        payload = run_extraction_verb(
+            store,
+            AuditLog(store),
+            "submit_extraction",
+            arguments,
+            actor=args.actor,
+            extraction_root=os.getcwd(),
+        )
+    except ExtractionError as error:
+        envelope = {
+            "error": {
+                "code": error.code,
+                "message": str(error),
+                "retryable": False,
+                "audit_event_id": getattr(error, "audit_event_id", None),
+            }
+        }
+        print(canonical_json(envelope), file=sys.stderr)
+        return 1
+    except Exception as error:  # noqa: BLE001 - every failure uses the envelope
+        _print_error(error)
+        return 1
+    finally:
+        store.close()
+    print(canonical_json(payload))
+    return 0
+
+
+def _extraction_review_command(args: argparse.Namespace) -> int:
+    """The contract-v4 operator review surface: ``extraction review|approve|reject``.
+
+    Read-only listing/diff for ``review``; ``approve`` applies the queued
+    proposal through the existing audited write path; ``reject`` marks the
+    row. Exit 0 success, 1 typed failure.
+    """
+    from know_your_soul.extraction import ExtractionEngine, ExtractionError, ExtractionQueue
+
+    stack = build_stack(args.store, args.output_root, ops_root=args.ops_root)
+    try:
+        engine = ExtractionEngine(stack.store, stack.audit, queue=ExtractionQueue.for_store(stack.store))
+        try:
+            if args.extraction_action == "review":
+                payload = engine.review(status=args.status, receipt_id=args.receipt)
+            elif args.extraction_action == "approve":
+                payload = engine.approve(args.receipt_id, operator=args.actor, service=stack.service, note=args.note)
+            else:
+                payload = engine.reject(args.receipt_id, operator=args.actor, note=args.note)
+        except ExtractionError as error:
+            envelope = {
+                "error": {
+                    "code": error.code,
+                    "message": str(error),
+                    "retryable": False,
+                    "audit_event_id": getattr(error, "audit_event_id", None),
+                }
+            }
+            print(canonical_json(envelope), file=sys.stderr)
+            return 1
+    finally:
+        stack.close()
     print(canonical_json(payload))
     return 0
 
@@ -693,6 +838,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         from know_your_soul.ops.export_cli import run_export_command
 
         return run_export_command(args, command=command)
+    if command == "report":
+        from know_your_soul.ops.report_cli import run_report_command
+
+        return run_report_command(args)
     if command == "config":
         return _config_command(args)
     if command == "metrics":
@@ -712,6 +861,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_ingest_command(args)
     if command in ("ingest_file", "ingest_directory"):
         return _ingest_verb_command(args, command)
+    if command == "submit_extraction":
+        return _extraction_verb_command(args)
+    if command == "extraction":
+        return _extraction_review_command(args)
     if command == "watch":
         from know_your_soul.ops.watch_cli import run_watch_command
 

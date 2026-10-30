@@ -1,0 +1,584 @@
+{
+  "budget_tokens": 2000,
+  "determinism": {
+    "identical": true,
+    "ingest_hashes": {
+      "large": [
+        "1738bebf3897e05b466ccf2cbf4bb1dbd525f00def0cf3802541229b20f2081f",
+        "1738bebf3897e05b466ccf2cbf4bb1dbd525f00def0cf3802541229b20f2081f"
+      ],
+      "medium": [
+        "f32d521c90522e169adba189c139a9a5930b723bc1848cee356e94c011adfd2e",
+        "f32d521c90522e169adba189c139a9a5930b723bc1848cee356e94c011adfd2e"
+      ],
+      "small": [
+        "2c61a2b34e8766782c09e686df2a5d2e246b13a8e1a6f8dc44212dc5727b5453",
+        "2c61a2b34e8766782c09e686df2a5d2e246b13a8e1a6f8dc44212dc5727b5453"
+      ]
+    },
+    "ingest_identical": true,
+    "pass_a_sha256": "f80858dea2e8787c5fb800d25ea4d804492ff1f79a2646fab5f406ced9f297aa",
+    "pass_b_sha256": "f80858dea2e8787c5fb800d25ea4d804492ff1f79a2646fab5f406ced9f297aa",
+    "query_hashes": {
+      "large": [
+        "329038d03cc3a127e1a416c07bad4350abeaeb257df6e2728d0c07eb0e40dd25",
+        "329038d03cc3a127e1a416c07bad4350abeaeb257df6e2728d0c07eb0e40dd25"
+      ],
+      "medium": [
+        "0fd3da3d578b68c1de78ab43248593f547a10d001fb77967a873b04870359ab6",
+        "0fd3da3d578b68c1de78ab43248593f547a10d001fb77967a873b04870359ab6"
+      ],
+      "small": [
+        "a9b056f97c10039514745123b25a97b162779ba78ed62d85664ea9210a191b1d",
+        "a9b056f97c10039514745123b25a97b162779ba78ed62d85664ea9210a191b1d"
+      ]
+    },
+    "query_identical": true
+  },
+  "estimator": "ceil(utf8_bytes/4)",
+  "gate": {
+    "determinism_ok": true,
+    "failures": [],
+    "ok": true,
+    "recall_ok": true,
+    "rubric_ok": true
+  },
+  "graphify_reference": {
+    "avg_query_tokens": 1726,
+    "claim": "71.5x fewer tokens per query vs reading raw files",
+    "corpus": "Karpathy repos (nanoGPT/minGPT/micrograd) + 5 papers + 4 images",
+    "corpus_tokens": 123488,
+    "files": 52,
+    "note": "different corpus, different estimator (words*133/100 vs ceil(bytes/4)), different retrieval product; their average EXCLUDES no-match questions, ours includes them. Context only \u2014 never a gate.",
+    "reduction_ratio": 71.5,
+    "sources": [
+      "https://github.com/Graphify-Labs/graphify/blob/v8/docs/how-it-works.md",
+      "https://github.com/Graphify-Labs/graphify/blob/v5/worked/karpathy-repos/review.md"
+    ]
+  },
+  "harness_version": 1,
+  "manifest_sha256": "4066e15f002b59a6f4112ef9f188f897a157980ebbba038f197109d876604f37",
+  "questions_sha256": "31156088f18ec28d5ccc3eaa61231025fa63dfd10c10ead9b97aad86077b086f",
+  "rubric_floor": 0.5,
+  "stamp": "20261030T200243Z",
+  "suite": "tokens",
+  "tiers": {
+    "large": {
+      "bytes": 606344,
+      "files": 52,
+      "mean_query_tokens": 325.062,
+      "mean_rubric_coverage": 0.9667,
+      "negatives_ok": true,
+      "questions": [
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-l1",
+          "p50_ms": 5.743,
+          "p95_ms": 16.553,
+          "query_tokens": 400,
+          "question": "tls server socket consume",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 2,
+          "rubric_terms": 2,
+          "source_files": [
+            "code/requests__testserver_server.py"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-l2",
+          "p50_ms": 16.699,
+          "p95_ms": 20.045,
+          "query_tokens": 429,
+          "question": "test parse header links",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 1,
+          "rubric_terms": 1,
+          "source_files": [
+            "code/requests__test_utils.py"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-l3",
+          "p50_ms": 9.959,
+          "p95_ms": 13.042,
+          "query_tokens": 435,
+          "question": "digest auth 401 redirect test",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 1,
+          "rubric_terms": 1,
+          "source_files": [
+            "code/requests__test_lowlevel.py"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-l4",
+          "p50_ms": 7.235,
+          "p95_ms": 9.628,
+          "query_tokens": 371,
+          "question": "netrc auth from url",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 2,
+          "rubric_terms": 2,
+          "source_files": [
+            "code/requests__utils.py"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-l5",
+          "p50_ms": 9.324,
+          "p95_ms": 10.876,
+          "query_tokens": 380,
+          "question": "grammar tests comprehension",
+          "rubric_coverage": 0.5,
+          "rubric_matched": 1,
+          "rubric_terms": 2,
+          "source_files": [
+            "code/tree_sitter__python3_grammar.py"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-l6",
+          "p50_ms": 8.184,
+          "p95_ms": 13.872,
+          "query_tokens": 372,
+          "question": "expressions corpus",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 1,
+          "rubric_terms": 1,
+          "source_files": [
+            "text/tree_sitter__expressions.txt"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-l7",
+          "p50_ms": 9.709,
+          "p95_ms": 10.818,
+          "query_tokens": 369,
+          "question": "requests history release notes",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 1,
+          "rubric_terms": 1,
+          "source_files": [
+            "docs/requests__HISTORY.md"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-l8",
+          "p50_ms": 16.568,
+          "p95_ms": 20.139,
+          "query_tokens": 388,
+          "question": "code of conduct enforcement",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 2,
+          "rubric_terms": 2,
+          "source_files": [
+            "docs/chalk__code-of-conduct.md"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-l9",
+          "p50_ms": 4.946,
+          "p95_ms": 13.629,
+          "query_tokens": 357,
+          "question": "retrieval augmented generation notes",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 1,
+          "rubric_terms": 1,
+          "source_files": [
+            "papers/rag-notes.pdf"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-l10",
+          "p50_ms": 3.491,
+          "p95_ms": 15.504,
+          "query_tokens": 356,
+          "question": "quantization int8 scale notes",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 1,
+          "rubric_terms": 1,
+          "source_files": [
+            "papers/quantization-notes.pdf"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-l11",
+          "p50_ms": 8.411,
+          "p95_ms": 23.069,
+          "query_tokens": 368,
+          "question": "tokenizer byte pair notes",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 1,
+          "rubric_terms": 1,
+          "source_files": [
+            "papers/tokenizer-notes.pdf"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 4,
+          "id": "q-l12",
+          "p50_ms": 3.251,
+          "p95_ms": 11.699,
+          "query_tokens": 157,
+          "question": "effort router",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 1,
+          "rubric_terms": 1,
+          "source_files": [
+            "docs/soul__effort-router.md"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 7,
+          "id": "q-l13",
+          "p50_ms": 9.119,
+          "p95_ms": 20.825,
+          "query_tokens": 262,
+          "question": "query playbook",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 1,
+          "rubric_terms": 1,
+          "source_files": [
+            "docs/soul__query-playbook.md"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 5,
+          "id": "q-l14",
+          "p50_ms": 3.616,
+          "p95_ms": 14.333,
+          "query_tokens": 199,
+          "question": "glossary bilingual",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 1,
+          "rubric_terms": 1,
+          "source_files": [
+            "docs/soul__glossary-bilingual.md"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 9,
+          "id": "q-l15",
+          "p50_ms": 4.098,
+          "p95_ms": 16.988,
+          "query_tokens": 342,
+          "question": "delimiter raw triple bytes",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 3,
+          "rubric_terms": 3,
+          "source_files": [
+            "code/tree_sitter__scanner.c"
+          ]
+        },
+        {
+          "expect_hits": false,
+          "hits": 0,
+          "id": "q-l16",
+          "p50_ms": 128.422,
+          "p95_ms": 215.854,
+          "query_tokens": 16,
+          "question": "blockchain merkle proof",
+          "rubric_coverage": null,
+          "rubric_matched": 0,
+          "rubric_terms": 0,
+          "source_files": []
+        }
+      ],
+      "raw_tokens": 151606,
+      "recall_hits": 15,
+      "recall_total": 15,
+      "reduction_ratio": 466.39,
+      "saving_pct": 99.79
+    },
+    "medium": {
+      "bytes": 249729,
+      "files": 26,
+      "mean_query_tokens": 319.5,
+      "mean_rubric_coverage": 0.8704,
+      "negatives_ok": true,
+      "questions": [
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-m1",
+          "p50_ms": 8.464,
+          "p95_ms": 14.984,
+          "query_tokens": 372,
+          "question": "session redirect mixin",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 2,
+          "rubric_terms": 2,
+          "source_files": [
+            "code/requests__sessions.py"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-m2",
+          "p50_ms": 7.593,
+          "p95_ms": 9.553,
+          "query_tokens": 355,
+          "question": "http basic auth header",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 2,
+          "rubric_terms": 2,
+          "source_files": [
+            "code/requests__auth.py"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-m3",
+          "p50_ms": 8.227,
+          "p95_ms": 9.403,
+          "query_tokens": 350,
+          "question": "digest auth build header",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 2,
+          "rubric_terms": 2,
+          "source_files": [
+            "code/requests__auth.py"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-m4",
+          "p50_ms": 7.912,
+          "p95_ms": 11.717,
+          "query_tokens": 399,
+          "question": "cookie jar merge",
+          "rubric_coverage": 0.3333,
+          "rubric_matched": 1,
+          "rubric_terms": 3,
+          "source_files": [
+            "code/requests__cookies.py"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-m5",
+          "p50_ms": 11.269,
+          "p95_ms": 15.898,
+          "query_tokens": 375,
+          "question": "prepared request encoding mixin",
+          "rubric_coverage": 0.5,
+          "rubric_matched": 1,
+          "rubric_terms": 2,
+          "source_files": [
+            "code/requests__models.py"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 8,
+          "id": "q-m6",
+          "p50_ms": 5.873,
+          "p95_ms": 6.251,
+          "query_tokens": 316,
+          "question": "case insensitive dict lookup",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 2,
+          "rubric_terms": 2,
+          "source_files": [
+            "code/requests__structures.py"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-m7",
+          "p50_ms": 6.777,
+          "p95_ms": 7.185,
+          "query_tokens": 369,
+          "question": "ansi styles wrap assemble",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 2,
+          "rubric_terms": 2,
+          "source_files": [
+            "code/chalk__ansi-styles.js"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-m8",
+          "p50_ms": 7.514,
+          "p95_ms": 14.298,
+          "query_tokens": 382,
+          "question": "supports color translate level",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 2,
+          "rubric_terms": 2,
+          "source_files": [
+            "code/chalk__supports-color.js"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 7,
+          "id": "q-m9",
+          "p50_ms": 2.692,
+          "p95_ms": 4.133,
+          "query_tokens": 260,
+          "question": "grammar comma separated rule",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 2,
+          "rubric_terms": 2,
+          "source_files": [
+            "code/tree_sitter__grammar.js"
+          ]
+        },
+        {
+          "expect_hits": false,
+          "hits": 0,
+          "id": "q-m10",
+          "p50_ms": 17.127,
+          "p95_ms": 23.98,
+          "query_tokens": 17,
+          "question": "kubernetes pod autoscaler",
+          "rubric_coverage": null,
+          "rubric_matched": 0,
+          "rubric_terms": 0,
+          "source_files": []
+        }
+      ],
+      "raw_tokens": 62442,
+      "recall_hits": 9,
+      "recall_total": 9,
+      "reduction_ratio": 195.44,
+      "saving_pct": 99.49
+    },
+    "small": {
+      "bytes": 35749,
+      "files": 6,
+      "mean_query_tokens": 321.0,
+      "mean_rubric_coverage": 1.0,
+      "negatives_ok": true,
+      "questions": [
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-s1",
+          "p50_ms": 4.659,
+          "p95_ms": 15.079,
+          "query_tokens": 370,
+          "question": "requests api request get post",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 2,
+          "rubric_terms": 2,
+          "source_files": [
+            "code/requests__api.py"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-s2",
+          "p50_ms": 4.264,
+          "p95_ms": 6.266,
+          "query_tokens": 353,
+          "question": "invalid url schema exception",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 3,
+          "rubric_terms": 3,
+          "source_files": [
+            "code/requests__exceptions.py"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-s3",
+          "p50_ms": 4.15,
+          "p95_ms": 6.249,
+          "query_tokens": 365,
+          "question": "chalk factory create styler",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 3,
+          "rubric_terms": 3,
+          "source_files": [
+            "code/chalk__index.js"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-s4",
+          "p50_ms": 3.285,
+          "p95_ms": 3.976,
+          "query_tokens": 424,
+          "question": "external scanner serialize deserialize",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 2,
+          "rubric_terms": 2,
+          "source_files": [
+            "code/tree_sitter__scanner.c"
+          ]
+        },
+        {
+          "expect_hits": true,
+          "hits": 10,
+          "id": "q-s5",
+          "p50_ms": 4.489,
+          "p95_ms": 5.454,
+          "query_tokens": 397,
+          "question": "installing requests supported versions",
+          "rubric_coverage": 1.0,
+          "rubric_matched": 2,
+          "rubric_terms": 2,
+          "source_files": [
+            "docs/requests__README.md"
+          ]
+        },
+        {
+          "expect_hits": false,
+          "hits": 0,
+          "id": "q-s6",
+          "p50_ms": 3.754,
+          "p95_ms": 4.065,
+          "query_tokens": 17,
+          "question": "quantum entanglement zebra",
+          "rubric_coverage": null,
+          "rubric_matched": 0,
+          "rubric_terms": 0,
+          "source_files": []
+        }
+      ],
+      "raw_tokens": 8940,
+      "recall_hits": 5,
+      "recall_total": 5,
+      "reduction_ratio": 27.85,
+      "saving_pct": 96.41
+    }
+  },
+  "top_k": 10
+}

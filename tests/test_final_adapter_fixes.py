@@ -705,7 +705,8 @@ def test_mcp_tools_stay_free_of_relearn() -> None:
     extends the surface to fourteen with the four G1 retrieval verbs — relearn
     is still not among them. Contract v3 (addendum
     docs/contracts/ingestion-contract-v3.md, audit F2) adds exactly the two
-    ingestion verbs on top.
+    ingestion verbs on top; contract v4 (addendum
+    docs/contracts/extraction-contract-v4.md) adds exactly the extraction verb.
     """
-    assert len(mcp_server.EXPECTED_TOOLS) == 16
+    assert len(mcp_server.EXPECTED_TOOLS) == 17
     assert not any("relearn" in tool for tool in mcp_server.EXPECTED_TOOLS)

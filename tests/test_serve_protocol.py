@@ -216,10 +216,10 @@ class TestHandshake:
 
 
 class TestToolListing:
-    def test_sixteen_tools_sorted(self) -> None:
+    def test_seventeen_tools_sorted(self) -> None:
         result = protocol.tool_listing_result()
         names = [tool["name"] for tool in result["tools"]]
-        assert len(names) == 16
+        assert len(names) == 17  # 16 frozen-era tools + 1 contract-v4 extraction verb (SUB-106)
         assert names == sorted(names)
 
     def test_tool_entries_carry_name_description_schema(self) -> None:

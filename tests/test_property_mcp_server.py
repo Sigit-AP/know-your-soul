@@ -120,6 +120,17 @@ def _valid_arguments(tool: str) -> dict[str, Any]:
         # Contract v3 ingestion verbs (audit F2) — the confined path amendment.
         "knowledge_ingest_file": {"path": "src/a.py"},
         "knowledge_ingest_directory": {"path": "src"},
+        # Contract v4 extraction verb (extraction-contract-v4.md).
+        "knowledge_submit_extraction": {
+            "source_sha256": "a" * 64,
+            "payload": {
+                "text": "extracted text",
+                "nodes": [{"name": "n-1", "kind": "leaf", "domain": "P1"}],
+                "edges": [],
+            },
+            "method": {"agent": "agent-a", "extracted_at": "2026-10-30T12:00:00+00:00"},
+            "confidence": "0.5",
+        },
     }[tool]
     return dict(base)
 
@@ -127,17 +138,19 @@ def _valid_arguments(tool: str) -> dict[str, Any]:
 # ------------------------------------------------------------ schema surface
 
 
-def test_tool_surface_is_the_frozen_v2_operations_plus_the_v3_ingestion_verbs() -> None:
+def test_tool_surface_is_the_frozen_v2_operations_plus_the_v3_and_v4_verbs() -> None:
     """Contract v2 (operator ruling 2026-10-26; addendum
     docs/contracts/retrieval-verbs-v2.md): the frozen ten spec operations plus
     the four G1 retrieval verbs — fourteen tools, bijectively mapped; contract
     v3 (addendum docs/contracts/ingestion-contract-v3.md, audit F2) adds
-    exactly the two ingestion verbs."""
-    assert len(EXPECTED_TOOLS) == 16
+    exactly the two ingestion verbs; contract v4 (addendum
+    docs/contracts/extraction-contract-v4.md) adds exactly the extraction
+    verb."""
+    assert len(EXPECTED_TOOLS) == 17
     assert tuple(sorted(EXPECTED_TOOLS)) == EXPECTED_TOOLS
     assert set(EXPECTED_TOOLS) == set(_TOOL_TO_OPERATION)
     operations = set(_TOOL_TO_OPERATION.values())
-    assert len(operations) == 16  # the mapping is bijective
+    assert len(operations) == 17  # the mapping is bijective
     frozen = {
         "knowledge.query",
         "knowledge.get_node",
@@ -155,10 +168,10 @@ def test_tool_surface_is_the_frozen_v2_operations_plus_the_v3_ingestion_verbs() 
         "knowledge.god_nodes",
     }
     assert frozen <= operations  # the fourteen are unchanged
-    assert operations - frozen == {"knowledge.ingest_file", "knowledge.ingest_directory"}
+    assert operations - frozen == {"knowledge.ingest_file", "knowledge.ingest_directory", "knowledge.submit_extraction"}
 
 
-@given(index=st.integers(min_value=0, max_value=15))
+@given(index=st.integers(min_value=0, max_value=16))
 @settings(derandomize=True, max_examples=10, deadline=None)
 def test_every_tool_name_matches_the_mcp_constraint(index: int) -> None:
     assert _TOOL_NAME_RE.fullmatch(EXPECTED_TOOLS[index])
@@ -535,7 +548,7 @@ def test_an_internal_error_never_leaks_raw_exception_text() -> None:
 
 
 def test_required_sets_are_the_pinned_snapshot() -> None:
-    """Pinned required sets (contract v2: +4 G1 verbs — operator ruling 2026-10-26)."""
+    """Pinned required sets (v2: +4 G1 verbs — operator ruling 2026-10-26; v3: +2 ingestion; v4: +1 extraction)."""
     required = {tool: tuple(schema.get("required", ())) for tool, schema in _tool_schemas(_MAX).items()}
     assert required == {
         "knowledge_query": ("purpose", "token_budget"),
@@ -555,6 +568,8 @@ def test_required_sets_are_the_pinned_snapshot() -> None:
         # Contract v3 ingestion verbs (audit F2).
         "knowledge_ingest_file": ("path",),
         "knowledge_ingest_directory": ("path",),
+        # Contract v4 extraction verb (extraction-contract-v4.md).
+        "knowledge_submit_extraction": ("source_sha256", "payload", "method", "confidence"),
     }
 
 

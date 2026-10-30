@@ -35,6 +35,7 @@ Endpoints (all GET, JSON unless noted):
 * ``/api/analytics`` — centrality + communities + bridges.
 * ``/api/audit?limit=`` — newest audit events, payloads redacted.
 * ``/api/proposals`` — review-signal candidates (proposal-only; never writes).
+* ``/api/extractions`` — the contract-v4 extraction review queue (read-only).
 * ``/api/refs`` — unresolved-reference statistics.
 
 Determinism: every payload is a pure function of store state (sorted keys,
@@ -584,6 +585,46 @@ class WebviewApp:
             "signal_counts": report.get("signal_counts", {}),
         }
 
+    def extractions_payload(self) -> dict[str, Any]:
+        """The contract-v4 extraction review queue (read-only).
+
+        The queue lives in the extraction package's sidecar database; a store
+        whose sidecar was never created reports an empty queue, and this view
+        never writes (a missing sidecar is not created here).
+        """
+        from know_your_soul.extraction import ExtractionQueue, sidecar_path
+
+        path = sidecar_path(self._store.db_path)
+        if self._store.db_path == ":memory:" or not Path(path).is_file():
+            return {"schema_version": SCHEMA_VERSION, "count": 0, "queue_size": 0, "rows": []}
+        queue = ExtractionQueue(path)
+        try:
+            rows = queue.list()
+            return {
+                "schema_version": SCHEMA_VERSION,
+                "count": len(rows),
+                "queue_size": queue.count(),
+                "rows": [
+                    {
+                        "receipt_id": row.receipt_id,
+                        "status": row.status,
+                        "actor": row.actor,
+                        "source_sha256": row.source_sha256,
+                        "nodes": len(row.payload.get("nodes", [])),
+                        "edges": len(row.payload.get("edges", [])),
+                        "confidence_reported": row.confidence_reported,
+                        "confidence_effective": row.confidence_effective,
+                        "corroborators": row.corroborators,
+                        "contradictions": row.contradictions,
+                        "agent": str(row.method.get("agent", "")),
+                        "decided_by": row.decided_by,
+                    }
+                    for row in rows
+                ],
+            }
+        finally:
+            queue.close()
+
     def refs_payload(self) -> dict[str, Any]:
         with self._store.read() as conn:
             counts = {
@@ -864,6 +905,8 @@ class WebviewServer:
                         payload = app.audit_payload(limit=_int_param("limit", 50))
                     elif tail == "proposals":
                         payload = app.proposals_payload()
+                    elif tail == "extractions":
+                        payload = app.extractions_payload()
                     elif tail == "refs":
                         payload = app.refs_payload()
                     else:

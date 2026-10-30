@@ -27,7 +27,7 @@ from know_your_soul.domain import (
 from know_your_soul.projection import GraphProjector
 from know_your_soul.store import EventStore
 
-EXPECTED_TOOLS_16 = tuple(
+EXPECTED_TOOLS_ALL = tuple(
     sorted(
         (
             "knowledge_query",
@@ -46,6 +46,9 @@ EXPECTED_TOOLS_16 = tuple(
             "knowledge_god_nodes",
             "knowledge_ingest_file",
             "knowledge_ingest_directory",
+            # Contract v4 (extraction-contract-v4.md): the external-agent
+            # extraction verb joins the write lane.
+            "knowledge_submit_extraction",
         )
     )
 )

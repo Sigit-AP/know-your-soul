@@ -86,6 +86,7 @@ from know_your_soul.contracts import (
 )
 from know_your_soul.domain import Evidence, Node, RelationKind, canonical_json, new_id
 from know_your_soul.events import Invocation, InvocationOutcome
+from know_your_soul.extraction import ExtractionError
 from know_your_soul.ingest.pipeline import (
     ExtractorUnavailableError,
     IngestionBudget,
@@ -133,6 +134,7 @@ __all__ = [
     "dispatch",
     "dispatch_text",
     "error_envelope",
+    "run_extraction_verb",
     "run_ingest_verb",
     "serve",
     "status_for_error",
@@ -890,6 +892,92 @@ def _ingest_error_envelope(error: IngestionError | ExtractorUnavailableError) ->
     }
 
 
+# ------------------------------------------------- contract-v4 extraction verb
+#
+# The frozen adapter mapping of ``docs/contracts/extraction-contract-v4.md``:
+# ``submit_extraction`` is exposed on all three surfaces (CLI
+# ``submit-extraction``, HTTP ``POST /v1/knowledge/extraction``, MCP
+# ``knowledge_submit_extraction``) and every surface shares the one engine
+# (validation, provenance binding, idempotency, corroboration, audit). The
+# seventeen frozen operations are untouched: the extraction verb never joins
+# KNOWLEDGE_OPERATIONS.
+
+EXTRACTION_VERBS: tuple[str, ...] = ("submit_extraction",)
+
+# HTTP statuses for the engine's typed failure codes (the contract fixes the
+# codes; statuses follow the existing envelope conventions).
+_EXTRACTION_STATUS_BY_CODE: dict[str, int] = {
+    "PAYLOAD_SCHEMA": 400,
+    "METHOD_SCHEMA": 400,
+    "CONFIDENCE_NOT_DECIMAL": 400,
+    "CONFIDENCE_OUT_OF_RANGE": 400,
+    "PAYLOAD_TOO_LARGE": 413,
+    "SOURCE_HASH_MISMATCH": 409,
+    "SOURCE_PATH_OUTSIDE_ROOT": 400,
+    "SOURCE_NOT_FOUND": 404,
+    "EXTRACTION_DUPLICATE": 409,
+    "EXTRACTION_NOT_FOUND": 404,
+    "EXTRACTION_STATE": 409,
+    "EXTRACTION_QUEUE_FULL": 503,
+}
+
+
+def run_extraction_verb(
+    store: EventStore,
+    audit: AuditLog,
+    verb: str,
+    arguments: Any,
+    *,
+    actor: str,
+    extraction_root: str | Path,
+) -> dict[str, Any]:
+    """Run the contract-v4 ``submit_extraction`` verb through the engine.
+
+    *arguments* is the decoded payload (``source_sha256``, ``payload``,
+    ``method``, ``confidence``, optional ``source_path``). The extraction
+    root is fixed at startup by the calling surface (CLI: the process working
+    directory; HTTP: the stack's ops root; MCP: the startup graph root). The
+    engine journals exactly one final audit event per invocation; only the
+    not-a-mapping adapter rejection is journaled here.
+    """
+    from know_your_soul.extraction import ExtractionEngine
+
+    started = time.monotonic()
+    if verb not in EXTRACTION_VERBS:
+        raise ValueError(f"unknown extraction verb {verb!r}")  # adapter-internal misuse, never wired
+    if not isinstance(arguments, Mapping):
+        error = AdapterValidationError("payload must be a JSON object")
+        error.audit_event_id = _journal_ingest_rejection(audit, verb, arguments, "VALIDATION_ERROR", actor, started)
+        raise error
+    engine = ExtractionEngine(store, audit)
+    return engine.submit(arguments, actor=actor, extraction_root=extraction_root)
+
+
+def _extraction_error_envelope(error: ExtractionError) -> dict[str, Any]:
+    """The standard envelope for the engine's typed failures."""
+    return {
+        "error": {
+            "code": error.code,
+            "message": redact_text(str(error))[:_MAX_ERROR_MESSAGE],
+            "retryable": error.code == "EXTRACTION_QUEUE_FULL",
+            "audit_event_id": getattr(error, "audit_event_id", None),
+        }
+    }
+
+
+def _handle_extraction_sync(stack: LocalStack, verb: str, body: bytes, actor: str) -> dict[str, Any]:
+    """Decode, validate and run the extraction verb (contract v4)."""
+    try:
+        payload: Any = json.loads(body.decode("utf-8")) if body.strip() else {}
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        audit_event_id = _journal_ingest_rejection(stack.audit, verb, {}, "VALIDATION_ERROR", actor, time.monotonic())
+        raise AdapterValidationError(
+            f"request body is not valid JSON: {error}", audit_event_id=audit_event_id
+        ) from error
+    extraction_root = stack.ops_root if stack.ops_root is not None else Path(stack.store.db_path).resolve().parent
+    return run_extraction_verb(stack.store, stack.audit, verb, payload, actor=actor, extraction_root=extraction_root)
+
+
 def _handle_ingest_sync(stack: LocalStack, verb: str, body: bytes, actor: str) -> dict[str, Any]:
     """Decode, validate and run one ingestion verb (contract v3)."""
     try:
@@ -1505,10 +1593,16 @@ def create_app(
     async def ingest_directory(request: Request) -> Response:
         return await _handle_ingest(stack, "ingest_directory", request, max_body_bytes)
 
+    # Contract v4 extraction verb (addendum extraction-contract-v4.md): one
+    # fixed route, the same boundary discipline as the v3 ingestion routes.
+    async def submit_extraction(request: Request) -> Response:
+        return await _handle_extraction(stack, "submit_extraction", request, max_body_bytes)
+
     routes = [
         Route("/v1/health", health, methods=["GET"]),
         Route("/v1/knowledge/ingest/file", ingest_file, methods=["POST"]),
         Route("/v1/knowledge/ingest/directory", ingest_directory, methods=["POST"]),
+        Route("/v1/knowledge/extraction", submit_extraction, methods=["POST"]),
         Route("/v1/knowledge/{operation}", knowledge, methods=["POST"]),
         Route("/v1/ops/{operation}", ops, methods=["POST"]),
     ]
@@ -1566,6 +1660,40 @@ async def _handle(stack: LocalStack, operation: str, request: Request, max_body_
         # monitoring wired to the wrong verb must not see green when degraded.
         status = 200 if result.ok else 503
     return _json_response(to_jsonable(result), status=status)
+
+
+async def _handle_extraction(stack: LocalStack, verb: str, request: Request, max_body_bytes: int) -> Response:
+    """The contract-v4 extraction route: same body/CSRF discipline as _handle_ingest."""
+    content_type = request.headers.get("content-type")
+    media_type = content_type.split(";", 1)[0].strip().lower() if content_type else ""
+    if media_type != "application/json":
+        return _json_response(
+            error_envelope(UnsupportedMediaType("POST routes require Content-Type: application/json")),
+            status=415,
+        )
+    try:
+        body = await request.body()
+    except ClientDisconnect:
+        logger.info("client disconnected while reading the request body for knowledge.%s", verb)
+        return _json_response(
+            error_envelope(ClientDisconnected("the client disconnected before the request body arrived")),
+            status=400,
+        )
+    if len(body) > max_body_bytes:
+        return _json_response(error_envelope(PayloadTooLarge("request body exceeds the size cap")), status=413)
+    actor = request.headers.get("x-actor", "operator")
+    try:
+        result = await run_in_threadpool(_handle_extraction_sync, stack, verb, body, actor)
+    except ExtractionError as error:
+        # The engine journaled the invocation's single audit event itself.
+        return _json_response(_extraction_error_envelope(error), status=_EXTRACTION_STATUS_BY_CODE.get(error.code, 400))
+    except Exception as error:  # noqa: BLE001 - every failure uses the envelope
+        envelope = error_envelope(error)
+        if envelope["error"]["code"] == "INTERNAL":
+            logger.exception("unhandled internal error serving knowledge.%s", verb)
+            envelope["error"]["message"] = "internal error"
+        return _json_response(envelope, status=status_for_error(error))
+    return _json_response(to_jsonable(result), status=200)
 
 
 async def _handle_ingest(stack: LocalStack, verb: str, request: Request, max_body_bytes: int) -> Response:

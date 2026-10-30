@@ -51,6 +51,7 @@ EXPECTED_TOOLS = tuple(
             "knowledge_god_nodes",
             "knowledge_ingest_file",
             "knowledge_ingest_directory",
+            "knowledge_submit_extraction",
         )
     )
 )
@@ -169,7 +170,7 @@ def test_fresh_client_discovers_ten_tools(tmp_path: Path) -> None:
             assert set(advertised) == {"tools", "resources"}, advertised
             listed = await session.list_tools()
             assert tuple(sorted(tool.name for tool in listed.tools)) == EXPECTED_TOOLS
-            assert len(listed.tools) == 16  # contract v2 (ten v1 + four G1) + contract v3 (two ingestion, F2)
+            assert len(listed.tools) == 17  # v2 (ten v1 + four G1) + v3 (two ingestion, F2) + v4 (one extraction)
             for tool in listed.tools:
                 assert "project_path" not in tool.input_schema.get("properties", {}), tool.name
             resources = await session.list_resources()

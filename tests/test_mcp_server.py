@@ -64,6 +64,7 @@ EXPECTED_TOOLS = tuple(
             "knowledge_god_nodes",
             "knowledge_ingest_file",
             "knowledge_ingest_directory",
+            "knowledge_submit_extraction",
         )
     )
 )
@@ -198,8 +199,8 @@ def _error_payload(result: types.CallToolResult) -> dict[str, Any]:
 # ------------------------------------------------------------- discovery
 
 
-def test_sixteen_tools_with_strict_schemas(tmp_path: Path) -> None:
-    """The v1 pin was ten tools; contract v2 adds four; contract v3 (audit F2) adds two."""
+def test_seventeen_tools_with_strict_schemas(tmp_path: Path) -> None:
+    """The v1 pin was ten tools; contract v2 adds four; contract v3 (audit F2) adds two; contract v4 adds one."""
     _, _, server = _server(tmp_path)
 
     async def scenario() -> None:
@@ -207,7 +208,7 @@ def test_sixteen_tools_with_strict_schemas(tmp_path: Path) -> None:
             listed = await session.list_tools()
             names = tuple(sorted(tool.name for tool in listed.tools))
             assert names == EXPECTED_TOOLS
-            assert len(listed.tools) == 16
+            assert len(listed.tools) == 17  # + contract v4 extraction verb (extraction-contract-v4.md)
             for tool in listed.tools:
                 schema = tool.input_schema
                 assert schema.get("type") == "object", tool.name

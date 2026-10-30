@@ -280,7 +280,9 @@ def test_v1_v2_contracts_are_byte_identical(filename: str) -> None:
     )
 
 
-def test_v3_is_the_only_unpinned_document_in_the_contracts_directory() -> None:
+def test_only_the_addenda_are_unpinned_documents_in_the_contracts_directory() -> None:
+    # Contract v4 (extraction-contract-v4.md, SUB-106) joins v3 as a pinned
+    # addendum; its own digest lives in test_extraction_contract_v4_shape.py.
     on_disk = sorted(path.name for path in CONTRACTS.glob("*.md"))
-    expected = sorted([*FROZEN_CONTRACTS, "ingestion-contract-v3.md"])
+    expected = sorted([*FROZEN_CONTRACTS, "ingestion-contract-v3.md", "extraction-contract-v4.md"])
     assert on_disk == expected, on_disk

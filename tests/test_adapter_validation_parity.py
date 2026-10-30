@@ -345,8 +345,8 @@ def test_operation_inventories_match() -> None:
     mcp_ops = {operation.removeprefix("knowledge_") for operation in mcp_server._TOOL_TO_OPERATION}
     assert set(http_api.KNOWLEDGE_OPERATIONS) <= mcp_ops
     assert len(http_api.KNOWLEDGE_OPERATIONS) == 14
-    assert mcp_ops - set(http_api.KNOWLEDGE_OPERATIONS) == {"ingest_file", "ingest_directory"}
-    assert len(mcp_server.EXPECTED_TOOLS) == 16
+    assert mcp_ops - set(http_api.KNOWLEDGE_OPERATIONS) == {"ingest_file", "ingest_directory", "submit_extraction"}
+    assert len(mcp_server.EXPECTED_TOOLS) == 17
 
 
 def test_vocabulary_enums_match() -> None:

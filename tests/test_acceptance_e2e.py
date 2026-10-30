@@ -379,8 +379,10 @@ class TestAuditedTools:
         assert tuple(sorted(set(mcp_server.EXPECTED_TOOLS) - set(EXPECTED_TOOLS_V2))) == (
             "knowledge_ingest_directory",
             "knowledge_ingest_file",
+            # Contract v4 (addendum extraction-contract-v4.md, SUB-106).
+            "knowledge_submit_extraction",
         )
-        assert len(mcp_server.EXPECTED_TOOLS) == 16
+        assert len(mcp_server.EXPECTED_TOOLS) == 17
         for operation in KNOWLEDGE_OPERATIONS_V2:
             assert callable(getattr(KnowledgeService, operation)), operation
         # The CLI exposes exactly the same fourteen knowledge commands (plus
@@ -824,8 +826,9 @@ class TestMcpContract:
                 listed = await session.list_tools()
                 # Contract v2 (operator ruling 2026-10-26): the frozen ten
                 # plus the four G1 retrieval verbs; contract v3 (audit F2)
-                # adds the two ingestion verbs.
-                assert len(listed.tools) == 16
+                # adds the two ingestion verbs; contract v4 (SUB-106) adds
+                # the extraction verb.
+                assert len(listed.tools) == 17
                 for tool in listed.tools:
                     assert "project_path" not in tool.input_schema.get("properties", {}), tool.name
                     result = await _call_tool(session, tool.name, {"project_path": "/etc"})

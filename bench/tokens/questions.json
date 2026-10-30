@@ -1,0 +1,239 @@
+{
+  "version": 1,
+  "note": "Frozen question set per tier. Rubric terms are case-folded substrings the assembled context must carry for the answer to count as sufficient (symbol names, section headings, paths — the product returns identities + provenance, never raw bodies). Negative controls (expect_hits=false) must retrieve nothing and are INCLUDED in the mean query cost.",
+  "tiers": {
+    "small": [
+      {
+        "id": "q-s1",
+        "question": "requests api request get post",
+        "rubric_terms": ["request", "code/requests__api.py"],
+        "source_files": ["code/requests__api.py"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-s2",
+        "question": "invalid url schema exception",
+        "rubric_terms": ["InvalidURL", "InvalidSchema", "RequestException"],
+        "source_files": ["code/requests__exceptions.py"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-s3",
+        "question": "chalk factory create styler",
+        "rubric_terms": ["chalkFactory", "createStyler", "Chalk"],
+        "source_files": ["code/chalk__index.js"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-s4",
+        "question": "external scanner serialize deserialize",
+        "rubric_terms": [
+          "tree_sitter_python_external_scanner_serialize",
+          "tree_sitter_python_external_scanner_deserialize"
+        ],
+        "source_files": ["code/tree_sitter__scanner.c"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-s5",
+        "question": "installing requests supported versions",
+        "rubric_terms": ["Installing Requests and Supported Versions", "docs/requests__README.md"],
+        "source_files": ["docs/requests__README.md"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-s6",
+        "question": "quantum entanglement zebra",
+        "rubric_terms": [],
+        "source_files": [],
+        "expect_hits": false
+      }
+    ],
+    "medium": [
+      {
+        "id": "q-m1",
+        "question": "session redirect mixin",
+        "rubric_terms": ["SessionRedirectMixin", "get_redirect_target"],
+        "source_files": ["code/requests__sessions.py"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-m2",
+        "question": "http basic auth header",
+        "rubric_terms": ["HTTPBasicAuth", "_basic_auth_str"],
+        "source_files": ["code/requests__auth.py"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-m3",
+        "question": "digest auth build header",
+        "rubric_terms": ["HTTPDigestAuth", "build_digest_header"],
+        "source_files": ["code/requests__auth.py"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-m4",
+        "question": "cookie jar merge",
+        "rubric_terms": ["RequestsCookieJar", "merge_cookies", "cookiejar_from_dict"],
+        "source_files": ["code/requests__cookies.py"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-m5",
+        "question": "prepared request encoding mixin",
+        "rubric_terms": ["PreparedRequest", "RequestEncodingMixin"],
+        "source_files": ["code/requests__models.py"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-m6",
+        "question": "case insensitive dict lookup",
+        "rubric_terms": ["CaseInsensitiveDict", "LookupDict"],
+        "source_files": ["code/requests__structures.py"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-m7",
+        "question": "ansi styles wrap assemble",
+        "rubric_terms": ["wrapAnsi256", "assembleStyles"],
+        "source_files": ["code/chalk__ansi-styles.js"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-m8",
+        "question": "supports color translate level",
+        "rubric_terms": ["createSupportsColor", "translateLevel"],
+        "source_files": ["code/chalk__supports-color.js"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-m9",
+        "question": "grammar comma separated rule",
+        "rubric_terms": ["commaSep1", "code/tree_sitter__grammar.js"],
+        "source_files": ["code/tree_sitter__grammar.js"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-m10",
+        "question": "kubernetes pod autoscaler",
+        "rubric_terms": [],
+        "source_files": [],
+        "expect_hits": false
+      }
+    ],
+    "large": [
+      {
+        "id": "q-l1",
+        "question": "tls server socket consume",
+        "rubric_terms": ["TLSServer", "consume_socket_content"],
+        "source_files": ["code/requests__testserver_server.py"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-l2",
+        "question": "test parse header links",
+        "rubric_terms": ["test_parse_header_links"],
+        "source_files": ["code/requests__test_utils.py"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-l3",
+        "question": "digest auth 401 redirect test",
+        "rubric_terms": ["test_digestauth_401_count_reset_on_redirect"],
+        "source_files": ["code/requests__test_lowlevel.py"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-l4",
+        "question": "netrc auth from url",
+        "rubric_terms": ["get_netrc_auth", "get_auth_from_url"],
+        "source_files": ["code/requests__utils.py"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-l5",
+        "question": "grammar tests comprehension",
+        "rubric_terms": ["GrammarTests", "testComprehensionSpecials"],
+        "source_files": ["code/tree_sitter__python3_grammar.py"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-l6",
+        "question": "expressions corpus",
+        "rubric_terms": ["tree_sitter__expressions.txt"],
+        "source_files": ["text/tree_sitter__expressions.txt"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-l7",
+        "question": "requests history release notes",
+        "rubric_terms": ["docs/requests__HISTORY.md"],
+        "source_files": ["docs/requests__HISTORY.md"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-l8",
+        "question": "code of conduct enforcement",
+        "rubric_terms": ["Enforcement", "Contributor Covenant Code of Conduct"],
+        "source_files": ["docs/chalk__code-of-conduct.md"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-l9",
+        "question": "retrieval augmented generation notes",
+        "rubric_terms": ["rag-notes.pdf"],
+        "source_files": ["papers/rag-notes.pdf"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-l10",
+        "question": "quantization int8 scale notes",
+        "rubric_terms": ["quantization-notes.pdf"],
+        "source_files": ["papers/quantization-notes.pdf"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-l11",
+        "question": "tokenizer byte pair notes",
+        "rubric_terms": ["tokenizer-notes.pdf"],
+        "source_files": ["papers/tokenizer-notes.pdf"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-l12",
+        "question": "effort router",
+        "rubric_terms": ["SOUL 11 — Effort router L1-L4"],
+        "source_files": ["docs/soul__effort-router.md"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-l13",
+        "question": "query playbook",
+        "rubric_terms": ["SOUL 22 — Query playbook"],
+        "source_files": ["docs/soul__query-playbook.md"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-l14",
+        "question": "glossary bilingual",
+        "rubric_terms": ["SOUL 23 — Glossary bilingual"],
+        "source_files": ["docs/soul__glossary-bilingual.md"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-l15",
+        "question": "delimiter raw triple bytes",
+        "rubric_terms": ["new_delimiter", "is_raw", "is_triple"],
+        "source_files": ["code/tree_sitter__scanner.c"],
+        "expect_hits": true
+      },
+      {
+        "id": "q-l16",
+        "question": "blockchain merkle proof",
+        "rubric_terms": [],
+        "source_files": [],
+        "expect_hits": false
+      }
+    ]
+  }
+}

@@ -172,11 +172,11 @@ class TestLocalHandshake:
         assert via_proxy_init == via_reference_init
         assert via_proxy_tools == via_reference_tools
 
-    def test_tools_list_sixteen(self, seeded: tuple[Path, Path, DaemonConfig]) -> None:
+    def test_tools_list_seventeen(self, seeded: tuple[Path, Path, DaemonConfig]) -> None:
         _, db, _ = seeded
         with _RawProxy(db, seeded[0]) as proxy:
             result = proxy.request("tools/list")["result"]
-        assert len(result["tools"]) == 16
+        assert len(result["tools"]) == 17
 
     def test_unknown_method_forwarded_to_typed_rejection(self, seeded: tuple[Path, Path, DaemonConfig]) -> None:
         _, db, _ = seeded
@@ -276,7 +276,7 @@ class TestOfficialClient:
                     advertised = capabilities.model_dump(exclude_none=True)
                     assert set(advertised) == {"tools", "resources"}
                     listed = await session.list_tools()
-                    assert len(listed.tools) == 16
+                    assert len(listed.tools) == 17
                     result = await session.call_tool(
                         "knowledge_query",
                         {"purpose": "run the gates", "domain": "P1", "token_budget": 512},
