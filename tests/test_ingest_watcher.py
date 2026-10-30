@@ -456,8 +456,15 @@ class TestWatchPolicy:
         assert decision.source == "default"
 
     def test_darwin_fstype_probe_is_darwin_only(self, tmp_path):
-        # Off Darwin the probe refuses to call a foreign statfs layout.
-        assert _darwin_fstype_for(tmp_path) is None
+        # Off Darwin the probe refuses to call a foreign statfs layout; on a
+        # real Darwin host the probe runs and returns the actual fstype.
+        import platform
+
+        result = _darwin_fstype_for(tmp_path)
+        if platform.system() == "Darwin":
+            assert isinstance(result, str) and result
+        else:
+            assert result is None
         assert ctypes.sizeof(_DarwinStatfs) == 2168  # the pinned Darwin layout
 
     def test_unrelated_remote_mount_not_blocking(self):

@@ -401,7 +401,7 @@ def _darwin_fstype_for(path: Path) -> str | None:
     try:
         libc = ctypes.CDLL(None, use_errno=True)
         statfs = libc.statfs
-    except (OSError, AttributeError):
+    except OSError, AttributeError:
         return None
     statfs.restype = ctypes.c_int
     statfs.argtypes = [ctypes.c_char_p, ctypes.POINTER(_DarwinStatfs)]

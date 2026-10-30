@@ -460,9 +460,11 @@ def test_unlink_stale_socket_refuses_when_the_probe_cannot_answer(
 
 def test_bind_unix_socket_closes_the_socket_when_bind_fails(tmp_path: Path) -> None:
     # A missing parent makes bind itself fail (OSError) after the socket fd
-    # exists — the fd must be closed, not leaked.
+    # exists — the fd must be closed, not leaked. On macOS CI the tmp root
+    # exceeds the 103-byte AF_UNIX cap, so the typed pre-check fires first —
+    # either way the socket must not leak.
     missing_parent = tmp_path / "no-such-dir" / "s.sock"
-    with pytest.raises(OSError):
+    with pytest.raises((OSError, BindPolicyError)):
         _bind_unix_socket(missing_parent)
 
 

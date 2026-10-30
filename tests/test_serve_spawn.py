@@ -74,14 +74,14 @@ class TestDetachedSpawn:
         status = daemon_status(config)
         assert status["running"] is True
         assert status["pid"] == result.pid
-        stop_daemon(config)
+        stop_daemon(config, timeout_seconds=30.0)
 
     def test_second_spawn_returns_same_daemon(self, config: DaemonConfig) -> None:
         first = spawn_daemon(config)
         second = spawn_daemon(config)
         assert second.already_running is True
         assert second.pid == first.pid
-        stop_daemon(config)
+        stop_daemon(config, timeout_seconds=30.0)
 
     def test_double_spawn_race_single_survivor(self, config: DaemonConfig) -> None:
         """Eight concurrent spawns: exactly one daemon pid survives."""
@@ -103,7 +103,7 @@ class TestDetachedSpawn:
         pids = {result.pid for result in results}
         assert len(pids) == 1, f"expected one daemon, got pids {pids}"
         assert daemon_status(config)["running"] is True
-        stop_daemon(config)
+        stop_daemon(config, timeout_seconds=30.0)
 
     def test_sigkilled_daemon_leaves_recoverable_state(self, config: DaemonConfig) -> None:
         first = spawn_daemon(config)
@@ -115,7 +115,7 @@ class TestDetachedSpawn:
         assert daemon_status(config)["running"] is True
         with SocketClient(config.paths.socket) as client:
             assert client.request("ping")["result"] == {}
-        stop_daemon(config)
+        stop_daemon(config, timeout_seconds=30.0)
 
     def test_idle_daemon_exits_cleanly(self, tmp_path: Path) -> None:
         config = make_config(tmp_path, idle_timeout_seconds=1.0)
@@ -139,7 +139,7 @@ class TestDetachedSpawn:
         assert status["last_exit"]["reason"] == "operator"
 
     def test_stop_when_not_running_is_typed_not_error(self, config: DaemonConfig) -> None:
-        report = stop_daemon(config)
+        report = stop_daemon(config, timeout_seconds=30.0)
         assert report["stopped"] is False
         assert report["reason"] == "not running"
 
@@ -167,7 +167,7 @@ class TestDetachedSpawn:
             assert "result" in response
             assert not response["result"].get("isError"), response
         finally:
-            stop_daemon(config)
+            stop_daemon(config, timeout_seconds=30.0)
 
     def test_recursive_spawn_refused(self, config: DaemonConfig) -> None:
         """KNOW_YOUR_SOUL_DAEMON_INTERNAL blocks daemon-in-daemon spawning."""
