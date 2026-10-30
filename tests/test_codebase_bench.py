@@ -22,6 +22,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -154,11 +155,60 @@ class TestCorrectnessGate:
 @requires_dataset
 class TestRegressionGate:
     def test_baseline_gate(self, measured):
-        """Counts + failed-file list are STRICT; timings LOOSE (10x + slack)."""
+        """Counts + failed-file list are STRICT; timings LOOSE (10x + slack),
+        and advisory-only on shared CI runners (GITHUB_ACTIONS)."""
         baseline = cb.load_baseline()
         assert baseline is not None
         failures = cb.regression_failures(baseline, measured)
         assert failures == []
+
+    def test_timing_gate_is_local_only(self):
+        """The timing comparison is fatal locally, advisory under GITHUB_ACTIONS."""
+        assert cb.timing_gate_enabled({}) is True
+        assert cb.timing_gate_enabled({"GITHUB_ACTIONS": "true"}) is False
+        assert cb.timing_gate_enabled({"GITHUB_ACTIONS": "1"}) is False
+        assert cb.timing_gate_enabled({"GITHUB_ACTIONS": "false"}) is True
+
+    def _synthetic_result(self, walk_ms: float) -> Any:
+        ingest = {
+            "stats": {key: 1 for key in cb._STAT_KEYS},
+            "failed_files": [],
+            **{key: 1 for key in cb._COUNT_KEYS},
+            "walk_ms": walk_ms,
+            "resolve_ms": 1.0,
+            "extract_p50_ms": 1.0,
+            "extract_p95_ms": 1.0,
+        }
+        return SimpleNamespace(name="fixture", ingest=ingest)
+
+    def _baseline_for(self, result: Any, *, walk_ms: float = 1.0) -> dict[str, Any]:
+        ingest = result.ingest
+        entry = {
+            "stats": dict(ingest["stats"]),
+            "failed_files": list(ingest["failed_files"]),
+            **{key: ingest[key] for key in cb._COUNT_KEYS},
+            **{key: ingest[key] for key in ("walk_ms", "resolve_ms", "extract_p50_ms", "extract_p95_ms")},
+        }
+        # A quiet-machine baseline: the synthetic result's walk is far slower.
+        entry["walk_ms"] = walk_ms
+        return {"version": cb.BASELINE_VERSION, "targets": {"fixture": entry}}
+
+    def test_timing_gate_fatal_locally(self):
+        result = self._synthetic_result(walk_ms=100_000.0)
+        failures = cb.regression_failures(self._baseline_for(result), [result], timing_gate=True)
+        assert failures and "walk_ms" in failures[0]
+
+    def test_timing_gate_advisory_on_ci_but_truth_still_strict(self):
+        result = self._synthetic_result(walk_ms=100_000.0)
+        baseline = self._baseline_for(result)
+        # Timing overrun: advisory on CI (no failure)…
+        assert cb.regression_failures(baseline, [result], timing_gate=False) == []
+        # …while a truth drift still fails, timing gate or not.
+        result.ingest["stats"]["proposed"] = 2
+        failures = cb.regression_failures(baseline, [result], timing_gate=False)
+        assert failures == ["fixture: stats.proposed 2 != baseline 1"]
+        # And the advisory list still surfaces the timing overrun for the report.
+        assert any("walk_ms" in note for note in cb.timing_regressions(baseline, [result]))
 
     def test_known_extraction_failures_fixed(self, measured):
         """F-SUB94-1 is fixed (wave W5, SUB-95): `from . import x` no longer

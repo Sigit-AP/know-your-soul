@@ -27,7 +27,11 @@ policy (``research-codegraph/RESEARCH-OPS.md`` §1):
   message) on WSL Windows mounts (``/mnt/<letter>``) and on remote/virtual
   filesystems (nfs, cifs, sshfs, …), unless forced.
   ``KNOW_YOUR_SOUL_NO_WATCH=1`` always wins; ``KNOW_YOUR_SOUL_FORCE_WATCH=1``
-  overrides the WSL/remote heuristic only.
+  overrides the WSL/remote heuristic only. On Linux the mount table comes
+  from ``/proc/mounts``; macOS has no procfs (and the product never spawns a
+  process), so the watched path's own filesystem type is read from libc
+  ``statfs(2)`` instead — ``mounts_text`` injection accepts both the proc
+  and BSD ``mount`` formats.
 
 Determinism: every cycle produces a :class:`CycleReport` whose content is a
 pure function of the filesystem state and the injected clock; iteration
@@ -38,6 +42,7 @@ tables.
 
 from __future__ import annotations
 
+import ctypes
 import logging
 import os
 import platform
@@ -92,10 +97,32 @@ DEFAULT_MAX_CONSECUTIVE_FAILURES = 5
 DEFAULT_MAX_QUIET_ROUNDS = 4
 
 #: Filesystem types where polling is unreliable or needlessly expensive
-#: (codegraph watch-policy: WSL drvfs; network mounts).
+#: (codegraph watch-policy: WSL drvfs; network mounts). ``osxfuse``/``fusefs``
+#: and ``webdav`` cover the macOS side, where sshfs and friends mount through
+#: macFUSE and ``mount`` reports the fuse type rather than ``sshfs``.
 REMOTE_FS_TYPES: frozenset[str] = frozenset(
-    {"9p", "cifs", "drvfs", "nfs", "nfs4", "prl_fs", "smb3", "smbfs", "sshfs", "fuse.sshfs", "vboxsf"}
+    {
+        "9p",
+        "cifs",
+        "drvfs",
+        "fusefs",
+        "nfs",
+        "nfs4",
+        "osxfuse",
+        "prl_fs",
+        "smb3",
+        "smbfs",
+        "sshfs",
+        "fuse.sshfs",
+        "vboxsf",
+        "webdav",
+    }
 )
+
+#: BSD/macOS ``mount`` output: ``server:/share on /Volumes/My Share (nfs, …)``.
+#: Mount points may contain spaces (BSD mount does not escape them), so the
+#: point is captured greedily up to the `` (fstype`` tail.
+_BSD_MOUNT_RE = re.compile(r"^.+? on (?P<point>.+) \((?P<fstype>[^,\s)]+)")
 
 _WSL_MARKERS = ("microsoft", "wsl")
 _WSL_MNT_RE = re.compile(r"^/mnt/([a-z])(/|$)")
@@ -286,18 +313,34 @@ def _is_wsl_release(release: str) -> bool:
     return any(marker in lowered for marker in _WSL_MARKERS)
 
 
+def _iter_mounts(mounts_text: str) -> list[tuple[str, str]]:
+    """The ``(mount_point, fstype)`` pairs of a mount table, either format.
+
+    Accepts ``/proc/mounts`` (``dev point fstype opts dump pass``, spaces
+    escaped as ``\\040``) and BSD/macOS ``mount`` output
+    (``dev on point (fstype, opts, …)``, points unescaped).
+    """
+    pairs: list[tuple[str, str]] = []
+    for line in mounts_text.splitlines():
+        if not line.strip():
+            continue
+        bsd = _BSD_MOUNT_RE.match(line)
+        if bsd is not None:
+            pairs.append((bsd.group("point"), bsd.group("fstype")))
+            continue
+        fields = line.split()
+        if len(fields) >= 3:
+            pairs.append((fields[1].replace("\\040", " "), fields[2]))
+    return pairs
+
+
 def _remote_mount_for(resolved: Path, mounts_text: str) -> tuple[str, str] | None:
     """The (mount_point, fstype) of the longest remote mount covering the path."""
     best: tuple[str, str] | None = None
-    for line in mounts_text.splitlines():
-        fields = line.split()
-        if len(fields) < 3:
-            continue
-        mount_point = fields[1].replace("\\040", " ")
-        fstype = fields[2]
+    posix = resolved.as_posix()
+    for mount_point, fstype in _iter_mounts(mounts_text):
         if fstype not in REMOTE_FS_TYPES:
             continue
-        posix = resolved.as_posix()
         if posix == mount_point or posix.startswith(mount_point.rstrip("/") + "/"):
             if best is None or len(mount_point) > len(best[0]):
                 best = (mount_point, fstype)
@@ -309,6 +352,64 @@ def _read_proc_mounts() -> str | None:
         return Path("/proc/mounts").read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None
+
+
+class _DarwinStatfs(ctypes.Structure):
+    """Darwin's 64-bit ``struct statfs`` (2168 bytes), for ``statfs(2)``.
+
+    macOS has no procfs, and the product never spawns a process (the
+    runtime guard forbids it), so the mount *type* of one watched path is
+    read straight from libc instead of parsing ``mount`` output.
+    """
+
+    _fields_ = [
+        ("f_bsize", ctypes.c_uint32),
+        ("f_iosize", ctypes.c_int32),
+        ("f_blocks", ctypes.c_uint64),
+        ("f_bfree", ctypes.c_uint64),
+        ("f_bavail", ctypes.c_uint64),
+        ("f_files", ctypes.c_uint64),
+        ("f_ffree", ctypes.c_uint64),
+        ("f_fsid", ctypes.c_int32 * 2),
+        ("f_owner", ctypes.c_uint32),
+        ("f_type", ctypes.c_uint32),
+        ("f_flags", ctypes.c_uint32),
+        ("f_fssubtype", ctypes.c_uint32),
+        ("f_fstypename", ctypes.c_char * 16),
+        ("f_mntonname", ctypes.c_char * 1024),
+        ("f_mntfromname", ctypes.c_char * 1024),
+        ("f_flags_ext", ctypes.c_uint32),
+        ("f_reserved", ctypes.c_uint32 * 7),
+    ]
+
+
+_DARWIN_STATFS_SIZE = 2168
+
+
+def _darwin_fstype_for(path: Path) -> str | None:
+    """The filesystem type containing *path* on macOS, via libc ``statfs(2)``.
+
+    No process is spawned (the no-shell-out boundary holds). Any doubt —
+    off Darwin, a libc without ``statfs``, an unexpected struct size, a
+    failed call, an implausible name — is ``None``: the caller degrades to
+    "local filesystem" exactly as an unreadable mount table would.
+    """
+    if platform.system() != "Darwin":
+        return None
+    if ctypes.sizeof(_DarwinStatfs) != _DARWIN_STATFS_SIZE:
+        return None
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        statfs = libc.statfs
+    except (OSError, AttributeError):
+        return None
+    statfs.restype = ctypes.c_int
+    statfs.argtypes = [ctypes.c_char_p, ctypes.POINTER(_DarwinStatfs)]
+    info = _DarwinStatfs()
+    if statfs(os.fsencode(path), ctypes.byref(info)) != 0:
+        return None
+    name = info.f_fstypename.decode("utf-8", "replace").strip("\x00").strip()
+    return name if re.fullmatch(r"[A-Za-z0-9._-]+", name) else None
 
 
 def evaluate_watch_policy(
@@ -348,6 +449,18 @@ def evaluate_watch_policy(
             return WatchPolicyDecision(
                 False,
                 f"watched path is on remote/virtual filesystem {fstype} mounted at {mount_point}; "
+                f"polling disabled — set {ENV_FORCE_WATCH}=1 to override",
+                "remote-mount",
+            )
+    elif mounts_text is None:
+        # No procfs (macOS): probe the watched path's own mount type via
+        # libc statfs(2) — no process is spawned, the no-shell-out boundary
+        # holds.
+        fstype = _darwin_fstype_for(resolved)
+        if fstype is not None and fstype in REMOTE_FS_TYPES:
+            return WatchPolicyDecision(
+                False,
+                f"watched path is on remote/virtual filesystem {fstype}; "
                 f"polling disabled — set {ENV_FORCE_WATCH}=1 to override",
                 "remote-mount",
             )

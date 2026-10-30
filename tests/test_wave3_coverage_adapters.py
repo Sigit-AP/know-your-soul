@@ -458,9 +458,23 @@ def test_unlink_stale_socket_refuses_when_the_probe_cannot_answer(
     assert sock_path.exists()  # never unlinked
 
 
-def test_bind_unix_socket_closes_the_socket_when_listen_fails(tmp_path: Path) -> None:
-    overlong = tmp_path / ("x" * 200 + ".sock")
+def test_bind_unix_socket_closes_the_socket_when_bind_fails(tmp_path: Path) -> None:
+    # A missing parent makes bind itself fail (OSError) after the socket fd
+    # exists — the fd must be closed, not leaked.
+    missing_parent = tmp_path / "no-such-dir" / "s.sock"
     with pytest.raises(OSError):
+        _bind_unix_socket(missing_parent)
+
+
+def test_bind_unix_socket_rejects_overlong_path_typed(tmp_path: Path) -> None:
+    """A path beyond the platform AF_UNIX cap fails typed (macOS: 103 bytes).
+
+    Pre-checked instead of letting bind raise a bare
+    ``OSError('AF_UNIX path too long')`` so the CLI can print an actionable
+    error — the macOS CI tmp root is longer than the macOS cap.
+    """
+    overlong = tmp_path / ("x" * 200 + ".sock")
+    with pytest.raises(BindPolicyError, match="AF_UNIX cap"):
         _bind_unix_socket(overlong)
 
 

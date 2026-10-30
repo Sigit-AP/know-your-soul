@@ -499,6 +499,29 @@ class TestHttpIngestionRoutes:
         finally:
             stack.close()
 
+    def test_cut_payload_always_fits_the_budget(self, tmp_path: Path) -> None:
+        """The tail-first cut must budget for the ``truncated: true`` flag it
+        adds — the flag is part of the returned payload. (Regression: the flag
+        was appended after the loop converged, so the response could overshoot
+        by its own ~19 bytes; macOS's longer tmp root landed exactly there.)
+
+        The envelope itself never truncates, so a payload may exceed the
+        budget only when ``files`` is already empty.
+        """
+        corpus = tmp_path / "corpus"
+        _write_corpus(corpus, WIDE_CORPUS)
+        stack = build_stack(tmp_path / "soul.sqlite3", tmp_path / "out")
+        try:
+            app = create_app(stack)
+            for budget in (256, 300, 320, 340, 360, 384, 420):
+                status, out = _post(app, "/v1/knowledge/ingest/directory", {"path": "corpus", "token_budget": budget})
+                assert status == 200, (budget, out)
+                if out["files"]:
+                    assert estimated_tokens_of_payload(out) <= budget, (budget, out["files"])
+                assert out["truncated"] is (len(out["files"]) < len(WIDE_CORPUS))
+        finally:
+            stack.close()
+
 
 # -------------------------------------------------------------------- CLI
 

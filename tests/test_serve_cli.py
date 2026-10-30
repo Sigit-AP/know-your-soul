@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -159,14 +161,21 @@ class TestOperatorCli:
     def test_serve_without_superpower_flags_still_requires_transport(self, seeded: tuple[Path, Path]) -> None:
         """The pre-existing HTTP/socket API surface is untouched: no flag = default socket serve."""
         graph_root, db = seeded
+        # AF_UNIX paths are capped (103 usable bytes on macOS, 107 on Linux);
+        # pytest's tmp_path alone exceeds the macOS cap there, so the socket
+        # lives in a dedicated short directory — the serve behavior under
+        # test (bind + socket file appears) is identical.
+        sock_dir = Path(tempfile.mkdtemp(prefix="kys-sock-", dir="/tmp"))
+        socket_path = sock_dir / "classic.sock"
         # Start the classic socket server briefly and prove it binds.
         process = subprocess.Popen(
-            _operator_cli(db, graph_root, "serve", "--socket", str(seeded[0].parent / "classic.sock")),
+            _operator_cli(db, graph_root, "serve", "--socket", str(socket_path)),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
         try:
-            assert wait_for(lambda: (seeded[0].parent / "classic.sock").exists(), timeout=20)
+            assert wait_for(lambda: socket_path.exists(), timeout=20)
         finally:
             process.terminate()
             process.wait(timeout=10)
+            shutil.rmtree(sock_dir, ignore_errors=True)

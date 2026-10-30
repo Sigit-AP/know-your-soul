@@ -9,6 +9,7 @@ and no test ever sleeps for real.
 
 from __future__ import annotations
 
+import ctypes
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -34,6 +35,9 @@ from know_your_soul.ingest.watcher import (
     WatcherConfig,
     WatcherRootError,
     WatchPolicyDecision,
+    _darwin_fstype_for,
+    _DarwinStatfs,
+    _remote_mount_for,
     diff_snapshots,
     evaluate_watch_policy,
     scan_stat_snapshot,
@@ -395,12 +399,66 @@ class TestWatchPolicy:
         assert decision.enabled is False
         assert "nfs" in decision.reason
 
-    def test_escaped_space_mount_point(self):
+    def test_escaped_space_mount_point(self, tmp_path):
+        # A mount *point* containing a space is reported as ``\040`` in
+        # /proc/mounts; the parser must unescape it before prefix-matching.
+        # The share lives under tmp_path (already realpath'd by pytest) so
+        # the match never depends on how the host resolves a foreign path
+        # like /home/... — macOS resolves those through its automounter and
+        # the prefix test silently missed.
+        share = tmp_path / "My Share"
+        (share / "docs").mkdir(parents=True)
+        escaped = os.path.realpath(share).replace(" ", "\\040")
         decision = evaluate_watch_policy(
-            "/home/user/My Share/docs", env={}, platform_release="6.1.0-generic", mounts_text=MOUNTS
+            share / "docs",
+            env={},
+            platform_release="6.1.0-generic",
+            mounts_text=f"host {escaped} sshfs rw 0 0\n",
         )
         assert decision.enabled is False
         assert "sshfs" in decision.reason
+
+    def test_bsd_mount_format_with_space_in_point(self):
+        # macOS has no /proc/mounts: the `mount` command lists
+        # ``server:/s on /Volumes/My Share (nfs, …)`` — space unescaped,
+        # fstype the first token inside the parentheses.
+        mounts = "server:/s on /Volumes/My Share (nfs, nodev, nosuid)\n"
+        assert _remote_mount_for(Path("/Volumes/My Share/docs"), mounts) == ("/Volumes/My Share", "nfs")
+
+    def test_bsd_mount_format_fuse_type_blocks(self):
+        # sshfs on macOS rides macFUSE, so `mount` reports osxfuse/fusefs.
+        mounts = "osxfuse on /Volumes/ssh (osxfuse, nodev, nosuid, synchronous)\n"
+        assert _remote_mount_for(Path("/Volumes/ssh/repo"), mounts) == ("/Volumes/ssh", "osxfuse")
+
+    def test_macos_statfs_probe_blocks_remote_mount(self, monkeypatch, tmp_path):
+        # No /proc/mounts and on Darwin: the policy asks libc statfs(2) for
+        # the watched path's filesystem type (never spawning `mount`).
+        import know_your_soul.ingest.watcher as watcher_module
+
+        remote = tmp_path / "remote"
+        remote.mkdir()
+        monkeypatch.setattr(watcher_module, "_read_proc_mounts", lambda: None)
+        monkeypatch.setattr(watcher_module.platform, "system", lambda: "Darwin")
+        monkeypatch.setattr(watcher_module, "_darwin_fstype_for", lambda path: "nfs")
+        decision = evaluate_watch_policy(remote, env={}, platform_release="23.4.0")
+        assert decision.enabled is False
+        assert decision.source == "remote-mount"
+        assert "nfs" in decision.reason
+
+    def test_macos_statfs_probe_allows_local_fs(self, monkeypatch, tmp_path):
+        import know_your_soul.ingest.watcher as watcher_module
+
+        monkeypatch.setattr(watcher_module, "_read_proc_mounts", lambda: None)
+        monkeypatch.setattr(watcher_module.platform, "system", lambda: "Darwin")
+        monkeypatch.setattr(watcher_module, "_darwin_fstype_for", lambda path: "apfs")
+        decision = evaluate_watch_policy(tmp_path, env={}, platform_release="23.4.0")
+        assert decision.enabled is True
+        assert decision.source == "default"
+
+    def test_darwin_fstype_probe_is_darwin_only(self, tmp_path):
+        # Off Darwin the probe refuses to call a foreign statfs layout.
+        assert _darwin_fstype_for(tmp_path) is None
+        assert ctypes.sizeof(_DarwinStatfs) == 2168  # the pinned Darwin layout
 
     def test_unrelated_remote_mount_not_blocking(self):
         decision = evaluate_watch_policy("/home/dev/repo", env={}, platform_release="6.1.0-generic", mounts_text=MOUNTS)
@@ -505,11 +563,15 @@ class TestPollOnce:
         assert len(spy.calls) == 3
 
     def test_quick_path_ingests_in_bytewise_order(self, tmp_path):
-        for name in ("b.py", "A.py", "a.py"):
+        # Names differ by more than case alone: case-insensitive filesystems
+        # (default APFS on macOS) collapse "A.py"/"a.py" into one file, so a
+        # same-letter pair is not portable. Upper-vs-lowercase ordering is
+        # still exercised ("A.py" sorts before the lowercase names bytewise).
+        for name in ("b.py", "A.py", "c.py"):
             (tmp_path / name).write_bytes(b"x")
         spy = SpyPipeline()
         make_watcher(tmp_path, spy).poll_once()
-        expected = sorted(("A.py", "a.py", "b.py"), key=str.encode)
+        expected = sorted(("A.py", "b.py", "c.py"), key=str.encode)
         assert spy.calls == [str(tmp_path / name) for name in expected]
 
     def test_cycle_report_counts_aggregated(self, tmp_path):

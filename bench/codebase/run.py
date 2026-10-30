@@ -34,7 +34,10 @@ Gates (``run`` exits 0 only when all hold):
 * regression vs baseline.json: node/edge/ref/resolved counts must match the
   stored baseline exactly (truth is strict); timings must stay within a
   loose factor (TIMING_TOLERANCE, default 10x + 250ms slack) of baseline —
-  perf regressions are surfaced, machine jitter is tolerated.
+  perf regressions are surfaced, machine jitter is tolerated. On shared CI
+  runners (``GITHUB_ACTIONS``) the timing comparison is advisory only: it is
+  reported, never fatal — jitter on a noisy runner is not a regression,
+  while counts and failed-file lists stay STRICT there too.
 
 No network is used outside ``fetch``; ``verify``/``check``/``run`` are fully
 offline.
@@ -47,6 +50,7 @@ import gzip
 import hashlib
 import io
 import json
+import os
 import sys
 import tarfile
 import tempfile
@@ -76,6 +80,25 @@ BASELINE_VERSION = 1
 #: fail the gate, a real order-of-magnitude slowdown must.
 TIMING_TOLERANCE = 10.0
 TIMING_SLACK_MS = 250.0
+
+
+def _truthy(value: str | None) -> bool:
+    return value is not None and value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def timing_gate_enabled(env: dict[str, str] | None = None) -> bool:
+    """Whether the LOOSE timing comparison may fail the gate.
+
+    Shared CI runners (``GITHUB_ACTIONS``) are noisy neighbours: the
+    10x + 250ms window was measured against a quiet machine and wall-clock
+    jitter alone blows past it (walk_ms 891ms vs a 762ms window, observed on
+    both ubuntu and macos jobs). On CI the timing comparison is therefore
+    advisory — violations are printed, never fatal. The truth gates (counts,
+    failed-file lists, determinism) stay STRICT on every platform.
+    """
+    environ = os.environ if env is None else env
+    return not _truthy(environ.get("GITHUB_ACTIONS"))
+
 
 DEFAULT_REPEATS = 20
 LOOKUP_TOP_K = 10
@@ -612,8 +635,36 @@ _COUNT_KEYS = ("nodes", "edges", "refs_total", "refs_resolved", "refs_pending", 
 _STAT_KEYS = ("proposed", "failed", "skipped", "scanned")
 
 
-def regression_failures(baseline: dict[str, Any], results: list[TargetResult]) -> list[str]:
-    """Baseline gate: counts strict, timing loose (TIMING_TOLERANCE + slack)."""
+def timing_regressions(baseline: dict[str, Any], results: list[TargetResult]) -> list[str]:
+    """LOOSE timing comparisons (advisory on CI, fatal locally)."""
+    failures: list[str] = []
+    base_targets = baseline["targets"]
+    for result in results:
+        base = base_targets.get(result.name)
+        if base is None:
+            continue
+        for key in ("walk_ms", "resolve_ms", "extract_p50_ms", "extract_p95_ms"):
+            actual = result.ingest[key]
+            base_value = base[key]
+            if actual is None or base_value is None:
+                continue
+            if actual > base_value * TIMING_TOLERANCE + TIMING_SLACK_MS:
+                failures.append(
+                    f"{result.name}: {key} {actual:.1f}ms > tolerance({TIMING_TOLERANCE}x "
+                    f"{base_value:.1f}ms + {TIMING_SLACK_MS}ms)"
+                )
+    return failures
+
+
+def regression_failures(
+    baseline: dict[str, Any], results: list[TargetResult], *, timing_gate: bool | None = None
+) -> list[str]:
+    """Baseline gate: counts strict, timing loose (TIMING_TOLERANCE + slack).
+
+    ``timing_gate=None`` auto-detects the environment: the timing comparison
+    is fatal locally, advisory on ``GITHUB_ACTIONS`` runners (see
+    :func:`timing_gate_enabled`). Truth checks are never relaxed.
+    """
     failures: list[str] = []
     base_targets = baseline["targets"]
     for result in results:
@@ -635,16 +686,9 @@ def regression_failures(baseline: dict[str, Any], results: list[TargetResult]) -
             actual = result.ingest[key]
             if actual != base[key]:
                 failures.append(f"{result.name}: {key} {actual} != baseline {base[key]}")
-        for key in ("walk_ms", "resolve_ms", "extract_p50_ms", "extract_p95_ms"):
-            actual = result.ingest[key]
-            base_value = base[key]
-            if actual is None or base_value is None:
-                continue
-            if actual > base_value * TIMING_TOLERANCE + TIMING_SLACK_MS:
-                failures.append(
-                    f"{result.name}: {key} {actual:.1f}ms > tolerance({TIMING_TOLERANCE}x "
-                    f"{base_value:.1f}ms + {TIMING_SLACK_MS}ms)"
-                )
+    gate_on = timing_gate_enabled() if timing_gate is None else timing_gate
+    if gate_on:
+        failures.extend(timing_regressions(baseline, results))
     return failures
 
 
@@ -756,6 +800,8 @@ def render_markdown(stamp: str, results: list[TargetResult], summary: dict[str, 
     ]
     for failure in gate["failures"]:
         lines.append(f"  - {failure}")
+    for warning in gate.get("timing_advisory", []):
+        lines.append(f"  - WARN (timing, advisory on CI): {warning}")
     return "\n".join(lines) + ("\n" if not lines[-1].endswith("\n") else "")
 
 
@@ -770,8 +816,13 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     baseline = load_baseline()
     regression: list[str] = []
+    timing_warnings: list[str] = []
     if baseline is not None and not args.no_baseline:
         regression = regression_failures(baseline, results)
+        if not timing_gate_enabled():
+            # Shared CI runner: timings are advisory — printed and recorded,
+            # never fatal (the strict truth checks above still fail the run).
+            timing_warnings = timing_regressions(baseline, results)
     all_failures.extend(regression)
 
     gate = {
@@ -783,6 +834,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         "regression": "PASS" if not regression else f"FAIL ({len(regression)} violations)",
         "ok": not all_failures,
         "failures": all_failures,
+        # Advisory-only timing overruns (CI runners): reported, never fatal.
+        "timing_advisory": timing_warnings,
     }
 
     stamp = utc_stamp()
@@ -815,6 +868,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         f"gate: correctness {'PASS' if gate['correctness_ok'] else 'FAIL'}, "
         f"regression {gate['regression']}, overall {'PASS' if gate['ok'] else 'FAIL'}"
     )
+    for warning in timing_warnings:
+        print(f"  WARN (timing, advisory on CI): {warning}", file=sys.stderr)
     for failure in all_failures:
         print(f"  FAIL: {failure}", file=sys.stderr)
     return 0 if not all_failures else 1

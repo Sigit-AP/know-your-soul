@@ -46,6 +46,7 @@ import hmac
 import json
 import logging
 import os
+import platform
 import socket
 import stat
 import threading
@@ -859,14 +860,21 @@ def run_ingest_verb(
         return payload
     # The directory payload truncates the ``files`` list tail-first under
     # budget pressure; the envelope (input/stats/guards_hit) never truncates.
+    # The ``truncated`` flag is part of the returned payload, so the budget
+    # check must measure with the flag's space reserved (``false`` is one
+    # byte longer than ``true`` — conservative): adding the key only after
+    # the loop converged let the final payload overshoot the budget by the
+    # flag's own ~19 bytes (surfaced on macOS CI, where tmp roots are longer
+    # and the numbers land exactly on the boundary).
     files = list(payload["files"])
     truncated = False
-    while files and estimated_tokens_of_payload(payload) > token_budget:
+    probed = {**payload, "truncated": False}
+    while files and estimated_tokens_of_payload(probed) > token_budget:
         files.pop()
         truncated = True
-        payload = {**payload, "files": files}
+        probed = {**probed, "files": files}
     if truncated:
-        payload["truncated"] = True
+        payload = {**payload, "files": files, "truncated": True}
     return payload
 
 
@@ -1632,6 +1640,17 @@ def _unlink_stale_socket(path: Path) -> None:
         probe.close()
 
 
+def _unix_socket_path_limit() -> int:
+    """Usable ``sun_path`` capacity in bytes (NUL terminator excluded).
+
+    107 on Linux (108-byte ``sun_path``), 103 on macOS/the BSDs (104-byte
+    ``sun_path``). Beyond the cap ``bind`` fails with a bare
+    ``OSError("AF_UNIX path too long")`` — checked up front so the caller
+    gets a typed, actionable error instead.
+    """
+    return 103 if platform.system() == "Darwin" else 107
+
+
 def _bind_unix_socket(socket_path: str | Path, *, backlog: int = 2048) -> socket.socket:
     """Bind a unix socket, created owner-only (``0o600``) atomically, restartable.
 
@@ -1642,9 +1661,17 @@ def _bind_unix_socket(socket_path: str | Path, *, backlog: int = 2048) -> socket
     the umask is the only honest option). A stale socket file from a
     previous run is unlinked first — after verifying it is a socket and no
     listener answers (:func:`_unlink_stale_socket`, final-audit S-3) — so
-    restarts never die on ``EADDRINUSE``.
+    restarts never die on ``EADDRINUSE``. Paths beyond the platform's
+    AF_UNIX cap are rejected typed (the default deep-tmp paths on macOS
+    runners exceed its 103-byte limit where Linux's 107 still fits).
     """
     path = Path(socket_path)
+    limit = _unix_socket_path_limit()
+    if len(os.fsencode(path)) > limit:
+        raise BindPolicyError(
+            f"unix socket path {str(path)!r} is {len(os.fsencode(path))} bytes, beyond this platform's "
+            f"AF_UNIX cap of {limit} bytes — pass a shorter --socket path (or use --http)"
+        )
     _unlink_stale_socket(path)
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     previous_umask = os.umask(0o177)
