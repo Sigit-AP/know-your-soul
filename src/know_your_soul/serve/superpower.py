@@ -1947,7 +1947,14 @@ def daemon_status(config: DaemonConfig) -> dict[str, Any]:
 
 
 def stop_daemon(config: DaemonConfig, *, timeout_seconds: float = 10.0, force: bool = False) -> dict[str, Any]:
-    """Ask the daemon to shut down and wait for its clean exit."""
+    """Ask the daemon to shut down and wait for its clean exit.
+
+    Escalation ladder (operator stop must always work): graceful drain for the
+    first half of the budget, forced shutdown for the next quarter, then a
+    direct SIGKILL on the pidfile's process plus stale-artifact recovery. A
+    daemon that ignores a graceful shutdown (wedged drain, race residue) is
+    still stopped — never left answering the socket.
+    """
     paths = config.paths
     if not _socket_live(paths.socket):
         report: dict[str, Any] = {"stopped": False, "reason": "not running", "db_path": str(config.db_path)}
@@ -1956,12 +1963,47 @@ def stop_daemon(config: DaemonConfig, *, timeout_seconds: float = 10.0, force: b
             report["pid"] = pid
             report["pid_alive"] = _pid_alive(pid)
         return report
+
+    def _stopped() -> bool:
+        return not paths.lock.exists() and not _socket_live(paths.socket)
+
     pid = _read_pid(paths)
     _admin_roundtrip(paths.socket, "daemon.shutdown", {"force": force})
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        if not paths.lock.exists() and not _socket_live(paths.socket):
-            return {"stopped": True, "pid": pid, "db_path": str(config.db_path)}
+    graceful_deadline = time.monotonic() + (timeout_seconds * 0.5 if not force else 0.0)
+    while time.monotonic() < graceful_deadline:
+        if _stopped():
+            return {"stopped": True, "pid": pid, "escalation": "graceful", "db_path": str(config.db_path)}
+        time.sleep(0.05)
+
+    if not force:
+        _admin_roundtrip(paths.socket, "daemon.shutdown", {"force": True})
+        force_deadline = time.monotonic() + timeout_seconds * 0.25
+        while time.monotonic() < force_deadline:
+            if _stopped():
+                return {"stopped": True, "pid": pid, "escalation": "force", "db_path": str(config.db_path)}
+            time.sleep(0.05)
+
+    # Last resort: SIGKILL the pidfile process, then remove its stale
+    # artifacts ourselves (a killed daemon cannot clean up its own lock).
+    if pid is not None and _pid_alive(pid):
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+        death_deadline = time.monotonic() + 5.0
+        while _pid_alive(pid) and time.monotonic() < death_deadline:
+            time.sleep(0.05)
+    kill_deadline = time.monotonic() + timeout_seconds * 0.25
+    while time.monotonic() < kill_deadline:
+        if _stopped():
+            return {"stopped": True, "pid": pid, "escalation": "sigkill", "db_path": str(config.db_path)}
+        if pid is not None and not _pid_alive(pid):
+            # Process dead but artifacts remain (SIGKILL skips cleanup).
+            for artifact in (paths.lock, paths.pid, paths.ready, paths.socket):
+                try:
+                    artifact.unlink(missing_ok=True)
+                except OSError:
+                    pass
         time.sleep(0.05)
     raise DaemonUnavailable(f"daemon did not stop within {timeout_seconds}s")
 
